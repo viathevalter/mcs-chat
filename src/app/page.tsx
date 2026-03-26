@@ -49,7 +49,7 @@ export default function LoginPage() {
                <Building2 className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-5xl font-black mb-6 leading-[1.1] tracking-tight">
-               O hub de comunicação do RH Mastercorp.
+               O hub de comunicação GESTAOLOGINPRO.
             </h1>
             <p className="text-indigo-100 text-lg leading-relaxed font-medium">
                Gerencie múltiplos provedores de WhatsApp, converse com seus colaboradores em tempo real e orquestre o atendimento com o AI Capitão.
@@ -75,7 +75,7 @@ export default function LoginPage() {
                   <Building2 className="w-7 h-7 text-white" />
                </div>
                <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Bem-vindo de volta</h2>
-               <p className="text-slate-500 dark:text-slate-400 font-medium">Faça login com sua conta Mastercorp para acessar o Inbox.</p>
+               <p className="text-slate-500 dark:text-slate-400 font-medium">Faça login com sua conta GESTAOLOGINPRO para acessar o Inbox.</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
@@ -138,7 +138,7 @@ export default function LoginPage() {
                </div>
                
                <p className="text-center text-sm text-slate-500 dark:text-slate-400 font-medium mt-8">
-                  Sistema de uso restrito da HR Mastercorp.
+                  Sistema de uso restrito da GESTAOLOGINPRO.
                </p>
             </form>
          </div>

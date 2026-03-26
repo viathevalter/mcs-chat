@@ -75,19 +75,19 @@ export default function ChannelsAdminPage() {
        
        <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Canais de Atendimento</h2>
-            <p className="text-slate-500 text-sm mt-1">Configure suas integrações de WhatsApp API (Provedores) para o Inbox.</p>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Canais de Atendimento</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Configure suas integrações de WhatsApp API (Provedores) para o Inbox.</p>
           </div>
        </div>
 
        {/* Lista de Canais */}
        <div className="space-y-4 mb-12">
           {loading ? (
-            <p className="text-slate-400 text-sm">Carregando canais...</p>
+            <p className="text-slate-400 dark:text-slate-500 text-sm">Carregando canais...</p>
           ) : channels.length === 0 ? (
-            <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center">
-               <p className="text-slate-500 font-medium">Nenhuma integração de API configurada.</p>
-               <p className="text-slate-400 text-sm mt-1">Adicione seu primeiro provedor abaixo.</p>
+            <div className="p-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-center">
+               <p className="text-slate-500 dark:text-slate-400 font-medium">Nenhuma integração de API configurada.</p>
+               <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Adicione seu primeiro provedor abaixo.</p>
             </div>
           ) : (
             channels.map(channel => {
@@ -130,22 +130,22 @@ export default function ChannelsAdminPage() {
        </div>
 
        {/* Formulario Nova Conexão */}
-       <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 mb-8">
+       <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-8 mb-8">
           <div className="flex items-center gap-3 mb-6">
-             <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+             <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                 <Plus className="w-5 h-5" />
              </div>
-             <h3 className="font-bold text-slate-800 text-lg">Nova Conexão Multi-Provedor</h3>
+             <h3 className="font-bold text-slate-800 dark:text-white text-lg">Nova Conexão Multi-Provedor</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
              {/* Provider */}
              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 mb-2 block">Provedor de API</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1 mb-2 block">Provedor de API</label>
                 <select 
                    value={provider}
                    onChange={e => setProvider(e.target.value)}
-                   className="w-full p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-bold text-slate-800 transition-all appearance-none cursor-pointer"
+                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-bold text-slate-800 dark:text-white transition-all appearance-none cursor-pointer"
                 >
                    <option value="uazapi">UAZ API (Recomendado)</option>
                    <option value="evolution">Evolution API</option>
@@ -156,24 +156,24 @@ export default function ChannelsAdminPage() {
              
              {/* Name */}
              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 mb-2 block">Nome da Instância</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1 mb-2 block">Nome da Instância</label>
                 <input 
                    value={name}
                    onChange={e => setName(e.target.value)}
-                   className="w-full p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800"
+                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                    placeholder="Ex: uaz_rh_principal"
                 />
              </div>
 
              {/* Phone */}
              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 mb-2 block">Número do WhatsApp</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1 mb-2 block">Número do WhatsApp</label>
                 <div className="relative">
-                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                    <input 
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="5511999999999"
                    />
                 </div>
@@ -181,13 +181,13 @@ export default function ChannelsAdminPage() {
 
              {/* API URL */}
              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 mb-2 block">URL Base da API</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1 mb-2 block">URL Base da API</label>
                 <div className="relative">
-                   <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                   <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                    <input 
                       value={apiUrl}
                       onChange={e => setApiUrl(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="https://sua-api.com"
                    />
                 </div>
@@ -195,21 +195,21 @@ export default function ChannelsAdminPage() {
              
              {/* Token */}
              <div className="md:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 mb-2 block">API Token / Global Key</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1 mb-2 block">API Token / Global Key</label>
                 <div className="relative">
-                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                    <input 
                       type="password"
                       value={apiToken}
                       onChange={e => setApiToken(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="Cole o token administrativo de integração..."
                    />
                 </div>
              </div>
           </div>
 
-          <div className="flex justify-end pt-2 border-t border-slate-200/60 mt-6">
+          <div className="flex justify-end pt-2 border-t border-slate-200/60 dark:border-slate-700/60 mt-6">
              <button 
                 onClick={handleCreateChannel}
                 disabled={isCreating}

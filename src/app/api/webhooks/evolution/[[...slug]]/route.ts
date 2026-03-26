@@ -1,0 +1,287 @@
+import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+export const maxDuration = 60 // Extending timeout for Whisper STT and Media Uploads
+
+export async function POST(req: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
+  try {
+    const rawBody = await req.text()
+    const body = JSON.parse(rawBody)
+    const { slug } = await params
+    
+    const eventType = body.event || body.EventType
+    if (!eventType) {
+      return NextResponse.json({ success: true, message: 'No event type' })
+    }
+
+    const supabase = createAdminClient()
+
+    // Process New Messages (Ingestion)
+    if (eventType === 'messages.upsert' || eventType === 'messages.update' || eventType === 'messages') {
+      const isUaz = !!body.EventType
+      const messageData = isUaz ? body.message : body.data
+      const instanceName = body.instance || body.instanceName || body.sender
+
+      if (!messageData) {
+        return NextResponse.json({ success: true, message: 'Invalid payload structure' })
+      }
+
+      // 1. Find the active channel
+      const { data: channel, error: channelError } = await supabase
+        .from('chat_channels')
+        .select('*')
+        .eq('name', instanceName)
+        .eq('is_active', true)
+        .single()
+
+      if (!channel || channelError) {
+        console.warn(`[Webhook] Channel ${instanceName} not found or inactive.`)
+        return NextResponse.json({ success: true, message: 'Channel not configured' })
+      }
+
+      // Extract Sender Info universally
+      let uazSender = null;
+      if (body.chat?.wa_chatid) uazSender = body.chat.wa_chatid
+      if (!uazSender) uazSender = messageData?.key?.participant || messageData?.key?.remoteJID || messageData?.sender || messageData?.chatid
+      
+      const remoteJid = isUaz ? uazSender : messageData?.key?.remoteJid
+      const isFromMe = isUaz ? (messageData?.fromMe || messageData?.key?.fromMe) : messageData?.key?.fromMe
+      const externalId = isUaz ? messageData?.id : messageData?.key?.id
+      
+      // Evolution PushName fallback to UAZ Chat Name
+      const senderName = isUaz ? (body.chat?.name || body.chat?.wa_name || 'Desconhecido') : (body.pushName || 'Desconhecido')
+
+      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') {
+        return NextResponse.json({ success: true, message: 'Ignored group or status' })
+      }
+
+      // Prevent processing Echo messages if we just sent them ourselves via CRM
+      if (isFromMe && eventType !== 'messages.update') {
+         // return NextResponse.json({ success: true, message: 'Ignored fromMe' }) 
+         // For now we allow fromMe to sync messages sent natively from WhatsApp Web
+      }
+
+      const phone = remoteJid.replace(/@.*$/, '')
+
+      // 2. Extract Data & Handle Media (UAZ & Evolution)
+      let textContent = ''
+      let mediaUrl = null
+      let messageTypeDb = 'text'
+      let mediaTranscription = null
+
+      if (isUaz) {
+         const chatLastMsgType = body?.chat?.wa_lastMessageType || ''
+         const msgType = messageData?.messageType || messageData?.mediaType || chatLastMsgType || ''
+         const mimeType = messageData?.content?.mimetype || ''
+
+         const isAudio = msgType.toLowerCase().includes('audio') || msgType === 'ptt' || mimeType.includes('audio')
+         const isImage = msgType.toLowerCase().includes('image') || mimeType.includes('image')
+         const isVideo = msgType.toLowerCase().includes('video') || mimeType.includes('video')
+         const isDocument = msgType.toLowerCase().includes('document') || mimeType.includes('pdf')
+
+         if (isAudio) messageTypeDb = 'audio'
+         else if (isImage) messageTypeDb = 'image'
+         else if (isVideo) messageTypeDb = 'video'
+         else if (isDocument) messageTypeDb = 'document'
+         else if (msgType) messageTypeDb = msgType
+
+         // Fallbacks
+         if (typeof messageData?.content === 'string') {
+            textContent = messageData.content
+         } else if (typeof messageData?.content === 'object' && messageData.content !== null) {
+            textContent = messageData.content.text || messageData.content.caption || messageData.message?.conversation || '[Mídia UAZ]'
+         } else {
+            textContent = '[Formato Complexo]'
+         }
+
+         // UAZ Media Download process implementation
+         if ((isAudio || isImage || isVideo || isDocument) && channel.provider === 'uazapi' && channel.api_url && channel.api_token) {
+            const API_URL = channel.api_url
+            const ADMIN_TOKEN = channel.api_token
+            let pureId = messageData?.id || ''
+            if (pureId.includes(':')) pureId = pureId.split(':')[1]
+
+            // Here we assume the channel's API key is the global admin token. We fetch instance token first.
+            try {
+               const instancesUrl = `${API_URL}/instance/all`
+               const activeInstancesReq = await fetch(instancesUrl, {
+                  method: "GET", headers: { "admintoken": ADMIN_TOKEN },
+               })
+
+               if (activeInstancesReq.ok) {
+                  const uazInstancesList = await activeInstancesReq.json()
+                  const targetInstance = (Array.isArray(uazInstancesList) ? uazInstancesList : []).find((i: any) => i.name === instanceName)
+
+                  if (targetInstance?.token) {
+                     const downloadReq = await fetch(`${API_URL}/message/download`, {
+                        method: "POST",
+                        headers: { "token": targetInstance.token, "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: pureId, return_base64: true, return_link: true, ...(isAudio ? { generate_mp3: true } : {}) })
+                     })
+
+                     if (downloadReq.ok) {
+                        const downloadRes = await downloadReq.json()
+                        const finalBase64 = downloadRes.base64 || downloadRes.base64Data || downloadRes.data
+                        let resolvedUrl = downloadRes.url || downloadRes.link || null
+
+                        // If UAZ returns base64, we can upload it to Supabase Storage
+                        if (!resolvedUrl && finalBase64) {
+                           let finalMime = mimeType || 'application/octet-stream'
+                           if (isAudio) finalMime = 'audio/mp3'
+                           else if (isImage) finalMime = 'image/jpeg'
+                           // TODO: Put to Supabase Storage if you want
+                           resolvedUrl = `data:${finalMime};base64,${finalBase64.replace(/\\s/g, '')}`
+                           
+                           // PROTOTYPE TRANSCRIPTION (Phase 8) - OpenAI Whisper
+                           if (isAudio && process.env.OPENAI_API_KEY) {
+                               const audioBuffer = Buffer.from(finalBase64.replace(/\\s/g, ''), 'base64')
+                               const blob = new Blob([audioBuffer], { type: 'audio/mp3' })
+                               const formData = new FormData()
+                               formData.append('file', blob, 'audio.mp3')
+                               formData.append('model', 'whisper-1')
+
+                               const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                                  body: formData
+                               })
+                               if (whisperRes.ok) {
+                                  const wJson = await whisperRes.json()
+                                  mediaTranscription = wJson.text
+                               }
+                           }
+                        }
+                        mediaUrl = resolvedUrl
+                     }
+                  }
+               }
+            } catch(e) {
+               console.error("Failed to download media for UAZ:", e)
+            }
+         }
+      } else {
+         // EVOLUTION API Base handler
+         const msgType = messageData?.messageType
+         if (msgType === 'conversation') {
+            textContent = messageData?.message?.conversation || ''
+         } else if (msgType === 'extendedTextMessage') {
+            textContent = messageData?.message?.extendedTextMessage?.text || ''
+         } else if (['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage', 'ptvMessage'].includes(msgType)) {
+            const msgBlock = messageData?.message?.[msgType]
+            textContent = msgBlock?.caption || `[Mídia: ${msgType}]`
+            messageTypeDb = msgType.replace('Message', '')
+            if (messageData.message?.base64) {
+               mediaUrl = messageData.message.base64
+            }
+         } else {
+            textContent = `[Sistema: ${msgType}]`
+         }
+      }
+
+      // Check Duplicate
+      const { data: existingMsg } = await supabase
+         .from('chat_messages')
+         .select('id')
+         .eq('external_id', externalId)
+         .single()
+
+      if (existingMsg) {
+         return NextResponse.json({ success: true, message: 'Duplicate ignored' })
+      }
+
+      // 3. Find/Create Worker & Conversation
+      let { data: conversation } = await supabase
+        .from('chat_conversations')
+        .select('*')
+        .eq('channel_id', channel.id)
+        .eq('contact_phone', phone)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!conversation) {
+         // Attempt to find worker by phone (very basic matching)
+         let worker = null
+         try {
+            const { data: workers } = await supabase
+              .schema('core_personal')
+              .from('workers')
+              .select('id, nome, cpf, rg')
+              .or(`movil.ilike.%${phone.substring(2)}%,telefono2.ilike.%${phone.substring(2)}%`)
+              .limit(1)
+            if (workers && workers.length > 0) worker = workers[0]
+         } catch(e) {} // Failsafe if Schema not found
+
+         const { data: newConv, error: convError } = await supabase
+           .from('chat_conversations')
+           .insert({
+             channel_id: channel.id,
+             contact_phone: phone,
+             contact_name: worker ? worker.nome : senderName,
+             worker_id: worker?.id || null,
+             status: 'open'
+           })
+           .select()
+           .single()
+         
+         if (convError) throw convError
+         conversation = newConv
+      } else {
+         if (conversation.status === 'closed' && !isFromMe) {
+           await supabase
+             .from('chat_conversations')
+             .update({ status: 'open' })
+             .eq('id', conversation.id)
+         }
+      }
+
+      if (conversation) {
+         // Insert message
+         const { error: msgErr } = await supabase.from('chat_messages').insert({
+           conversation_id: conversation.id,
+           external_id: externalId,
+           direction: isFromMe ? 'outbound' : 'inbound',
+           content: textContent,
+           message_type: messageTypeDb,
+           sender_name: isFromMe ? 'Sistema' : senderName,
+           media_url: mediaUrl,
+           status: 'delivered'
+         })
+         
+         if (msgErr) console.error('[Webhook] Error inserting message:', msgErr)
+
+         // If we grabbed an AI Audio Transcription from Whisper, inject it!
+         if (mediaTranscription) {
+            await supabase.from('chat_messages').insert({
+               conversation_id: conversation.id,
+               external_id: externalId + "_transcript",
+               direction: 'inbound',
+               content: `📝 Transcrição (IA): ${mediaTranscription}`,
+               message_type: 'text',
+               sender_name: senderName,
+               status: 'delivered'
+            })
+         }
+
+         // Update unread_count and last_message_at
+         if (!isFromMe) {
+           await supabase.from('chat_conversations').update({
+             unread_count: (conversation.unread_count || 0) + 1,
+             last_message_at: new Date().toISOString()
+           }).eq('id', conversation.id)
+         } else {
+           await supabase.from('chat_conversations').update({
+             last_message_at: new Date().toISOString()
+           }).eq('id', conversation.id)
+         }
+      }
+
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ success: true, message: 'Event ignored' })
+  } catch (err: any) {
+    console.error('[Universal Webhook] Critical Error:', err)
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+  }
+}

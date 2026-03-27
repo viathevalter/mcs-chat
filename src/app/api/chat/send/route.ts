@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     // Get conversation details to send via WhatsApp
     const { data: conv, error: convError } = await supabase
       .from('chat_conversations')
-      .select('*, channel:chat_channels(name, api_url, api_token)')
+      .select('*, channel:chat_channels(name, api_url, api_token, provider)')
       .eq('id', conversationId)
       .single()
 
@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       const instanceName = channelData?.name
       const apiUrl = channelData?.api_url
       const apiToken = channelData?.api_token
+      const provider = channelData?.provider || 'evolution'
 
       if (!apiUrl || !apiToken || !instanceName) {
         throw new Error('Channel API credentials (URL or Token) are missing in the database.')
@@ -45,7 +46,8 @@ export async function POST(req: Request) {
           fileName: `audio_${Date.now()}.webm`,
           instanceName,
           apiUrl,
-          apiToken
+          apiToken,
+          provider
         })
       } else {
         // Send via Evolution API (Dynamic Multi-Tenant)
@@ -54,7 +56,8 @@ export async function POST(req: Request) {
           text,
           instanceName,
           apiUrl,
-          apiToken
+          apiToken,
+          provider
         })
       }
     }

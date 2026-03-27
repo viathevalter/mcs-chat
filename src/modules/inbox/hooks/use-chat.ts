@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 export interface Message {
   id: string
   conversation_id: string
-  direction: 'inbound' | 'outbound'
+  direction: 'inbound' | 'outbound' | 'internal'
   content: string
   media_url?: string
   message_type: string
@@ -53,12 +53,12 @@ export function useChat(conversationId: string) {
     setLoading(false)
   }
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, messageType: string = 'text') => {
     // Optimistic UI update could be added here
     await fetch('/api/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId, text })
+      body: JSON.stringify({ conversationId, text, messageType })
     })
   }
 

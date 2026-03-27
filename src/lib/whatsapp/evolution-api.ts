@@ -2,6 +2,8 @@ export interface SendTextProps {
   number: string;
   text: string;
   instanceName: string;
+  apiUrl: string;
+  apiToken: string;
 }
 
 export interface SendMediaProps {
@@ -11,26 +13,29 @@ export interface SendMediaProps {
   fileName?: string;
   caption?: string;
   instanceName: string;
+  apiUrl: string;
+  apiToken: string;
 }
 
-const API_URL = process.env.EVOLUTION_API_URL;
-const API_KEY = process.env.EVOLUTION_API_KEY;
-
-const getHeaders = () => {
-  if (!API_KEY) throw new Error('EVOLUTION_API_KEY is not set');
+const getHeaders = (token: string) => {
+  if (!token) throw new Error('API Token is required');
   return {
     'Content-Type': 'application/json',
-    apikey: API_KEY,
+    apikey: token,
   };
 };
 
 export const evolutionApi = {
-  async sendText({ number, text, instanceName }: SendTextProps) {
-    if (!API_URL) throw new Error('EVOLUTION_API_URL is not set');
-    const url = `${API_URL}/message/sendText/${instanceName}`;
+  async sendText({ number, text, instanceName, apiUrl, apiToken }: SendTextProps) {
+    if (!apiUrl) throw new Error('API URL is required');
+    
+    // Clean URL trailing slashes for safety
+    const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+    const url = `${cleanUrl}/message/sendText/${instanceName}`;
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(apiToken),
       body: JSON.stringify({ number, text: text }),
       cache: 'no-store'
     });
@@ -43,16 +48,19 @@ export const evolutionApi = {
     return response.json();
   },
 
-  async sendMedia({ number, mediaUrl, mediaType, fileName, caption, instanceName }: SendMediaProps) {
-    if (!API_URL) throw new Error('EVOLUTION_API_URL is not set');
-    const url = `${API_URL}/message/sendMedia/${instanceName}`;
+  async sendMedia({ number, mediaUrl, mediaType, fileName, caption, instanceName, apiUrl, apiToken }: SendMediaProps) {
+    if (!apiUrl) throw new Error('API URL is required');
+    
+    const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+    const url = `${cleanUrl}/message/sendMedia/${instanceName}`;
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(apiToken),
       body: JSON.stringify({
         number,
         mediatype: mediaType,
-        mimetype: mediaType === 'document' ? 'application/pdf' : undefined, // simplify assumption
+        mimetype: mediaType === 'document' ? 'application/pdf' : undefined,
         media: mediaUrl,
         fileName: fileName || 'file',
         caption: caption || ''

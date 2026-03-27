@@ -3,11 +3,13 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2 } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { format } from 'date-fns'
+import { AudioRecorder } from './audio-recorder'
 
 export default function ChatArea({ conversationId }: { conversationId: string }) {
   const { messages, loading, sendMessage } = useChat(conversationId)
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -18,8 +20,18 @@ export default function ChatArea({ conversationId }: { conversationId: string })
     if (!text.trim() || isSending) return
     setIsSending(true)
     try {
-      await sendMessage(text)
+      await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text')
       setText('')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleSendAudio = async (base64Audio: string) => {
+    if (isSending) return
+    setIsSending(true)
+    try {
+      await sendMessage(base64Audio, 'audio')
     } finally {
       setIsSending(false)
     }
@@ -63,25 +75,34 @@ export default function ChatArea({ conversationId }: { conversationId: string })
         )}
         
         {messages.map((msg) => {
-          const isOutbound = msg.direction === 'outbound'
+          const isOutbound = msg.direction === 'outbound' || msg.direction === 'internal'
+          const isNote = msg.message_type === 'internal_note'
           const time = msg.created_at ? format(new Date(msg.created_at), 'HH:mm') : ''
           
           return (
-            <div key={msg.id} className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[75%] ${isOutbound ? 'ml-auto' : ''}`}>
-              <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
-                {isOutbound ? 'RH' : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
+            <div key={msg.id} className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
+              <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600') : 'bg-slate-200 text-slate-500'}`}>
+                {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
               </div>
-              <div className={`px-5 py-3 shadow-sm ${isOutbound ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl rounded-br-sm shadow-indigo-200/50' : 'bg-white border border-slate-200/80 rounded-3xl rounded-bl-sm text-slate-700'}`}>
-                {msg.media_url && (
+              <div className={`px-5 py-3 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl rounded-br-sm shadow-indigo-200/50') : 'bg-white border border-slate-200/80 rounded-3xl rounded-bl-sm text-slate-700'}`}>
+                
+                {msg.media_url && msg.message_type !== 'audio' && (
                   <div className="mb-2 max-w-sm rounded overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded" />
                   </div>
                 )}
+                
+                {msg.media_url && msg.message_type === 'audio' && (
+                  <div className="mb-2">
+                    <audio controls src={msg.media_url} className={`h-10 ${isOutbound && !isNote ? 'invert grayscale opacity-90' : ''}`}></audio>
+                  </div>
+                )}
+
                 <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{msg.content}</p>
-                <div className={`flex justify-end gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? 'text-indigo-200' : 'text-slate-400'}`}>
-                   <span className="text-[10px] font-medium">{time}</span>
-                   {isOutbound && <CheckCircle2 className="w-3.5 h-3.5" />}
+                <div className={`flex justify-end gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-indigo-200') : 'text-slate-400'}`}>
+                   <span className="text-[10px] font-medium">{time} {isNote && '• Nota Interna'}</span>
+                   {isOutbound && !isNote && <CheckCircle2 className="w-3.5 h-3.5" />}
                 </div>
               </div>
             </div>
@@ -94,17 +115,23 @@ export default function ChatArea({ conversationId }: { conversationId: string })
         <div className="max-w-5xl mx-auto flex flex-col gap-2">
            {/* Tabs Responder / Privada */}
            <div className="flex items-center gap-6 px-2 text-[13px] font-semibold text-slate-500">
-              <button className="text-slate-800 border-b border-slate-800 pb-1 flex items-center gap-1.5">
+              <button 
+                onClick={() => setActiveTab('reply')}
+                className={`${activeTab === 'reply' ? 'text-slate-800 border-indigo-600' : 'hover:text-slate-800 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
+              >
                  Responder
               </button>
-              <button className="hover:text-amber-600 transition-colors pb-1 flex items-center gap-1.5 opacity-60 hover:opacity-100">
+              <button 
+                onClick={() => setActiveTab('note')}
+                className={`${activeTab === 'note' ? 'text-amber-600 border-amber-600' : 'hover:text-amber-600 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
+              >
                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                  Mensagem Privada
               </button>
            </div>
            
            {/* Input Box */}
-           <div className="flex items-end gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm focus-within:shadow-md focus-within:border-indigo-300 transition-all">
+           <div className={`flex items-end gap-3 p-2 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-white border-slate-200 focus-within:border-indigo-300'}`}>
              <button className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0">
                <Paperclip className="w-5 h-5" />
              </button>
@@ -116,18 +143,24 @@ export default function ChatArea({ conversationId }: { conversationId: string })
                  onKeyDown={(e) => {
                    if (e.key === 'Enter' && !e.shiftKey) {
                      e.preventDefault()
-                     handleSend()
+                     if (text.trim()) {
+                       handleSend()
+                     }
                    }
                  }}
                  className="w-full bg-transparent px-2 py-3 max-h-32 resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
-                 placeholder="Digite uma mensagem..."
+                 placeholder={activeTab === 'note' ? "Digite uma nota interna (apenas sua equipe verá)..." : "Digite uma mensagem..."}
                  rows={1}
                />
              </div>
              
-             <button onClick={handleSend} disabled={isSending} className="px-5 py-3 bg-slate-500 text-white shadow-sm hover:shadow-md rounded-xl hover:bg-slate-600 transition-all shrink-0 disabled:opacity-50 text-sm font-bold flex items-center gap-2">
-               Enviar <span className="text-[10px] opacity-70 border border-white/20 px-1 rounded shadow-sm relative top-[1px]">⏎</span>
-             </button>
+             {text.trim().length > 0 || activeTab === 'note' ? (
+               <button onClick={handleSend} disabled={isSending || !text.trim()} className={`px-5 py-3 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-50 text-sm font-bold flex items-center gap-2 ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-500 hover:bg-slate-600'}`}>
+                 {activeTab === 'note' ? 'Salvar' : 'Enviar'} <span className="text-[10px] opacity-70 border border-white/20 px-1 rounded shadow-sm relative top-[1px]">⏎</span>
+               </button>
+             ) : (
+               <AudioRecorder onSend={handleSendAudio} disabled={isSending} />
+             )}
            </div>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { evolutionApi } from '@/lib/whatsapp/evolution-api'
 
 export async function POST(req: Request) {
   try {
-    const { conversationId, text } = await req.json()
+    const { conversationId, text, messageType = 'text' } = await req.json()
     if (!conversationId || !text) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
@@ -14,36 +14,65 @@ export async function POST(req: Request) {
     // Get conversation details to send via WhatsApp
     const { data: conv, error: convError } = await supabase
       .from('chat_conversations')
-      .select('*, channel:chat_channels(name)')
+      .select('*, channel:chat_channels(name, api_url, api_token)')
       .eq('id', conversationId)
       .single()
 
     if (convError || !conv) throw new Error('Conversation not found')
 
-    const instanceName = (conv.channel as any)?.name || 'instancia_dev'
-    let cleanedPhone = conv.contact_phone.replace(/\D/g, '')
-    if (!cleanedPhone.startsWith('55')) cleanedPhone = '55' + cleanedPhone
+    const isInternalNote = messageType === 'internal_note'
 
-    // Send via Evolution API
-    await evolutionApi.sendText({
-      number: cleanedPhone,
-      text,
-      instanceName
-    })
+    // Only hit UAZ API if it's not an internal note
+    if (!isInternalNote) {
+      const channelData = conv.channel as any
+      const instanceName = channelData?.name
+      const apiUrl = channelData?.api_url
+      const apiToken = channelData?.api_token
+
+      if (!apiUrl || !apiToken || !instanceName) {
+        throw new Error('Channel API credentials (URL or Token) are missing in the database.')
+      }
+
+      let cleanedPhone = conv.contact_phone.replace(/\D/g, '')
+      if (!cleanedPhone.startsWith('55')) cleanedPhone = '55' + cleanedPhone
+
+      if (messageType === 'audio') {
+        // text contains the base64 string
+        await evolutionApi.sendMedia({
+          number: cleanedPhone,
+          mediaUrl: `data:audio/webm;base64,${text}`,
+          mediaType: 'audio',
+          fileName: `audio_${Date.now()}.webm`,
+          instanceName,
+          apiUrl,
+          apiToken
+        })
+      } else {
+        // Send via Evolution API (Dynamic Multi-Tenant)
+        await evolutionApi.sendText({
+          number: cleanedPhone,
+          text,
+          instanceName,
+          apiUrl,
+          apiToken
+        })
+      }
+    }
 
     // Insert into DB
     const { error: msgError } = await supabase.from('chat_messages').insert({
       conversation_id: conversationId,
-      direction: 'outbound',
-      content: text,
-      message_type: 'text',
-      sender_name: 'RH (Atendente)',
-      status: 'sent'
+      direction: isInternalNote ? 'internal' : 'outbound',
+      content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
+      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : null,
+      message_type: isInternalNote ? 'internal_note' : messageType,
+      sender_name: isInternalNote ? 'RH (Nota Interna)' : 'RH (Atendente)',
+      status: isInternalNote ? 'delivered' : 'sent'
     })
 
     if (msgError) throw msgError
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, isInternalNote })
 
   } catch (err: any) {
     console.error('Send message error:', err)

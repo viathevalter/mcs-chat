@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const maxDuration = 60 // Extending timeout for Whisper STT and Media Uploads
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
   try {

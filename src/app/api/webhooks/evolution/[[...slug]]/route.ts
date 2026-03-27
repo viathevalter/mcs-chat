@@ -27,12 +27,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       }
 
       // 1. Find the active channel
-      const { data: channel, error: channelError } = await supabase
+      const { data: channels, error: channelError } = await supabase
         .from('chat_channels')
         .select('*')
-        .eq('name', instanceName)
+        .ilike('name', instanceName.trim())
         .eq('is_active', true)
-        .single()
+        .limit(1)
+
+      const channel = channels?.[0]
 
       if (!channel || channelError) {
         console.warn(`[Webhook] Channel ${instanceName} not found or inactive.`)

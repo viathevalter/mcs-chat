@@ -39,7 +39,6 @@ export async function GET(req: Request) {
 
        // Clean phone for WhatsApp (e.g. 551199999999)
        let cleanedPhone = rawPhone.replace(/\D/g, '')
-       if (!cleanedPhone.startsWith('55')) cleanedPhone = '55' + cleanedPhone
 
        try {
          if (msg.media_url) {

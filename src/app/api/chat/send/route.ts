@@ -35,7 +35,6 @@ export async function POST(req: Request) {
       }
 
       let cleanedPhone = conv.contact_phone.replace(/\D/g, '')
-      if (!cleanedPhone.startsWith('55')) cleanedPhone = '55' + cleanedPhone
 
       if (messageType === 'audio') {
         // text contains the base64 string

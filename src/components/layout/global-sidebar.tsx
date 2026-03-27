@@ -109,7 +109,7 @@ export function GlobalSidebar() {
           </div>
           {!collapsed && (
             <button
-              onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+              onClick={() => supabase.auth.signOut().then(() => router.push('/'))}
               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors"
               title={t('sidebar', 'logout')}
             >
@@ -121,7 +121,7 @@ export function GlobalSidebar() {
         {/* Collapsed Logout */}
         {collapsed && (
           <button
-            onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+            onClick={() => supabase.auth.signOut().then(() => router.push('/'))}
             className="flex items-center justify-center w-10 h-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-red-300 hover:text-red-500 transition-colors group"
             title={t('sidebar', 'logout')}
           >

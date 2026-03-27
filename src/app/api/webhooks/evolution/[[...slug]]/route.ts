@@ -262,7 +262,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
            status: 'delivered'
          })
          
-         if (msgErr) console.error('[Webhook] Error inserting message:', msgErr)
+         if (msgErr) {
+            if (msgErr.code === '23505') {
+               console.log(`[Webhook INFO] Message ${externalId} already processed (duplicate webhook request).`)
+            } else {
+               console.error('[Webhook ERROR] Error inserting message:', msgErr)
+            }
+         }
 
          // If we grabbed an AI Audio Transcription from Whisper, inject it!
          if (mediaTranscription) {

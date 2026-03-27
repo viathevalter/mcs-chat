@@ -39,7 +39,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       const channel = channels?.[0]
 
       if (!channel || channelError) {
-        // [DEBUG LOG INJECTION] Fetch everything to understand why it failed
+        // [DEBUG LOG INJECTION] Validate the true identity of the running key
+        const srKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+        console.warn(`[DEBUG AUDIT] SR Key loaded in Vercel ends in: ...${srKey.slice(-15)}`)
+
         const { data: all } = await supabase.from('chat_channels').select('*')
         console.warn(`[Webhook DEBUG] Total channels in DB visible to service_role:`, all?.length)
         if (all && all.length > 0) {

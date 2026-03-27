@@ -37,6 +37,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       const channel = channels?.[0]
 
       if (!channel || channelError) {
+        // [DEBUG LOG INJECTION] Fetch everything to understand why it failed
+        const { data: all } = await supabase.from('chat_channels').select('*')
+        console.warn(`[Webhook DEBUG] Total channels in DB visible to service_role:`, all?.length)
+        if (all && all.length > 0) {
+           console.warn(`[Webhook DEBUG] First 3 channels found in DB:`, all.slice(0, 3).map(c => ({ id: c.id, name: c.name, is_active: c.is_active })))
+        }
+        
         console.warn(`[Webhook] Channel ${instanceName} not found or inactive.`)
         return NextResponse.json({ success: true, message: 'Channel not configured' })
       }

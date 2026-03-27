@@ -48,13 +48,17 @@ export async function GET(req: Request) {
              mediaUrl: msg.media_url,
              mediaType: 'image', // MVP default
              caption: msg.content,
-             instanceName: 'instancia_dev' // Should come from config in v2
+             instanceName: 'instancia_dev', // Should come from config in v2
+             apiUrl: '', // TODO: Fetch from chat_channels in v2
+             apiToken: '' // TODO: Fetch from chat_channels in v2
            })
          } else {
            await evolutionApi.sendText({
              number: cleanedPhone,
              text: msg.content,
-             instanceName: 'instancia_dev' 
+             instanceName: 'instancia_dev',
+             apiUrl: '', // TODO: Fetch from chat_channels in v2
+             apiToken: '' // TODO: Fetch from chat_channels in v2
            })
          }
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Play, Pause, FastForward } from 'lucide-react'
+import { Play, Pause, FastForward, User2 } from 'lucide-react'
 
-export function CustomAudioPlayer({ src, isOutbound }: { src: string, isOutbound: boolean }) {
+export function CustomAudioPlayer({ src, isOutbound, senderInitials }: { src: string, isOutbound: boolean, senderInitials?: string }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -55,7 +55,7 @@ export function CustomAudioPlayer({ src, isOutbound }: { src: string, isOutbound
   }
 
   return (
-    <div className={`flex items-center gap-2 p-2 rounded-xl mb-2 min-w-[200px] ${isOutbound ? 'bg-white/20' : 'bg-slate-100'}`}>
+    <div className={`flex items-center gap-2 mb-1 min-w-[240px]`}>
       <audio 
         ref={audioRef} 
         src={src} 
@@ -65,11 +65,20 @@ export function CustomAudioPlayer({ src, isOutbound }: { src: string, isOutbound
         className="hidden"
       />
       
+      {/* Sender Avatar mimicking native Whatsapp/Other App */}
+      <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center overflow-hidden border-2 ${isOutbound ? 'bg-indigo-400 border-indigo-300 text-white' : 'bg-slate-200 border-slate-100 text-slate-500'}`}>
+         {senderInitials ? (
+           <span className="text-[14px] font-bold">{senderInitials}</span>
+         ) : (
+           <User2 className="w-5 h-5 opacity-50" />
+         )}
+      </div>
+
       <button 
         onClick={togglePlay}
-        className={`w-10 h-10 flex shrink-0 items-center justify-center rounded-full transition-colors ${isOutbound ? 'bg-white text-indigo-600 hover:bg-white/90' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+        className={`w-10 h-10 flex shrink-0 items-center justify-center rounded-full transition-colors ${isOutbound ? 'text-white hover:text-indigo-200' : 'text-indigo-600 hover:text-indigo-800'}`}
       >
-        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-1" />}
+        {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" fill="currentColor" />}
       </button>
       
       <div className="flex-1 flex flex-col justify-center px-1">
@@ -81,7 +90,7 @@ export function CustomAudioPlayer({ src, isOutbound }: { src: string, isOutbound
           onChange={handleSeek}
           className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer ${isOutbound ? 'bg-white/40 [&::-webkit-slider-thumb]:bg-white' : 'bg-slate-300 [&::-webkit-slider-thumb]:bg-indigo-600'} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full`}
         />
-        <div className={`text-[10px] mt-1 font-medium flex justify-between ${isOutbound ? 'text-indigo-100' : 'text-slate-500'}`}>
+        <div className={`text-[11px] mt-1 font-medium flex justify-between ${isOutbound ? 'text-indigo-100' : 'text-slate-500'}`}>
           <span>{formatTime(audioRef.current?.currentTime || 0)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -89,7 +98,7 @@ export function CustomAudioPlayer({ src, isOutbound }: { src: string, isOutbound
 
       <button 
         onClick={toggleSpeed}
-        className={`px-2 h-7 rounded-md text-[11px] font-bold flex shrink-0 items-center gap-1 transition-colors ${isOutbound ? 'bg-indigo-500/50 hover:bg-indigo-500/70 text-white' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'}`}
+        className={`px-1.5 h-6 rounded-md text-[10px] font-bold flex shrink-0 items-center gap-1 transition-colors ${isOutbound ? 'bg-indigo-500/30 hover:bg-indigo-500/50 text-white' : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'}`}
       >
         {speed}x
       </button>

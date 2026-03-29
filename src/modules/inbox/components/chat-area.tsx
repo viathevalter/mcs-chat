@@ -155,21 +155,27 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600') : 'bg-slate-200 text-slate-500'}`}>
                 {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
               </div>
-              <div className={`px-5 py-3 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl rounded-br-sm shadow-indigo-200/50') : 'bg-white border border-slate-200/80 rounded-3xl rounded-bl-sm text-slate-700'}`}>
+              <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl rounded-br-sm shadow-indigo-200/50') : 'bg-white border border-slate-200/80 rounded-3xl rounded-bl-sm text-slate-700'}`}>
                 
                 {msg.media_url && msg.message_type !== 'audio' && (
-                  <div className="mb-2 max-w-sm rounded overflow-hidden">
+                  <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded" />
+                    <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
                   </div>
                 )}
                 
                 {msg.media_url && msg.message_type === 'audio' && (
-                  <CustomAudioPlayer src={msg.media_url} isOutbound={isOutbound && !isNote} />
+                  <CustomAudioPlayer 
+                     src={msg.media_url} 
+                     isOutbound={isOutbound && !isNote} 
+                     senderInitials={isOutbound ? 'RH' : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
+                  />
                 )}
 
-                <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{msg.content}</p>
-                <div className={`flex justify-end gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-indigo-200') : 'text-slate-400'}`}>
+                {msg.content && msg.content !== '[Mídia UAZ]' && (
+                   <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
+                )}
+                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-indigo-200') : 'text-slate-400'}`}>
                    <span className="text-[10px] font-medium">{time} {isNote && '• Nota Interna'}</span>
                    {isOutbound && !isNote && <CheckCircle2 className="w-3.5 h-3.5" />}
                 </div>

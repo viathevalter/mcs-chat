@@ -65,23 +65,16 @@ export function GlobalSidebar() {
       </button>
 
       {/* Navigation Links */}
-      <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto">
+      <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-hide">
         {links.map((link) => {
           const isActive = link.exact ? pathname === link.href : pathname?.startsWith(link.href)
           const Icon = link.icon
           const translatedLabel = t('sidebar', link.labelKey)
           return (
-            <Link key={link.href} href={link.href}>
+            <Link key={link.href} href={link.href} title={collapsed ? translatedLabel : undefined}>
               <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl cursor-pointer transition-colors group relative ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                 <Icon className={`w-5 h-5 shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
                 {!collapsed && <span className="ml-3 text-[14px] whitespace-nowrap">{translatedLabel}</span>}
-                
-                {/* Tooltip for collapsed mode */}
-                {collapsed && (
-                   <div className="absolute left-full ml-4 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
-                     {translatedLabel}
-                   </div>
-                )}
               </div>
             </Link>
           )

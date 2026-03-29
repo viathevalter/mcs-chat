@@ -4,7 +4,7 @@ import ChatArea from './chat-area'
 import ChatContextPanel from './chat-context-panel'
 
 export default function ConversationView({ conversationId }: { conversationId: string }) {
-  const [isPanelOpen, setIsPanelOpen] = useState(true)
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
 
   return (
     <div className="flex-1 flex w-full h-full min-w-0 transition-all duration-300">

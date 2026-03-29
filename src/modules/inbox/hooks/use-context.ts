@@ -28,7 +28,7 @@ export function useConversationContext(conversationId: string) {
       let workerData = null
       let companyData = null
 
-      // 2. Fetch Worker if exists
+      // 2. Fetch Worker if exists or by phone
       if (conv.worker_id) {
         const { data: wrk, error: wrkErr } = await supabase
           .schema('core_personal')
@@ -41,6 +41,24 @@ export function useConversationContext(conversationId: string) {
 
         // Atualmente não temos clareza do schema 'empresas', vamos pular fetch extra para MVP e mostrar mock
         companyData = { nome: 'Construtora Exemplo' }
+      } else if (conv.contact_phone) {
+        // Fallback: search by phone number (last 8 digits)
+        const last8 = conv.contact_phone.slice(-8)
+        if (last8.length === 8) {
+          const { data: wrks } = await supabase
+            .schema('core_personal')
+            .from('workers')
+            .select('id, nome, apelido, estatus, movil, ocupacao')
+            .ilike('movil', `%${last8}%`)
+            .limit(1)
+          
+          if (wrks && wrks.length > 0) {
+            workerData = wrks[0]
+            companyData = { nome: 'Construtora Exemplo' }
+            // Auto link
+            supabase.from('chat_conversations').update({ worker_id: workerData.id }).eq('id', conv.id).then()
+          }
+        }
       }
 
       setContext({

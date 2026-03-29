@@ -33,7 +33,11 @@ export function useChat(conversationId: string) {
         table: 'chat_messages',
         filter: `conversation_id=eq.${conversationId}`
       }, (payload) => {
-        setMessages(prev => [...prev, payload.new as Message])
+        const newMessage = payload.new as Message
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMessage.id)) return prev
+          return [...prev, newMessage]
+        })
       })
       .subscribe()
 
@@ -54,12 +58,46 @@ export function useChat(conversationId: string) {
   }
 
   const sendMessage = async (text: string, messageType: string = 'text') => {
-    // Optimistic UI update could be added here
-    await fetch('/api/chat/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId, text, messageType })
-    })
+    // Generate optimistic ID
+    const optId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    
+    // Optimistic UI update
+    const optimisticMessage: Message = {
+      id: optId,
+      conversation_id: conversationId,
+      direction: messageType === 'internal_note' ? 'internal' : 'outbound',
+      content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
+      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : undefined,
+      message_type: messageType,
+      status: 'sending',
+      created_at: new Date().toISOString(),
+      sender_name: messageType === 'internal_note' ? 'RH (Nota Interna)' : 'RH (Atendente)'
+    }
+    
+    setMessages(prev => [...prev, optimisticMessage])
+
+    try {
+      await fetch('/api/chat/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, text, messageType })
+      })
+      
+      // Update local state to delivered/sent (temporarily until realtime sync)
+      setMessages(prev => prev.map(msg => 
+        msg.id === optId 
+          ? { ...msg, status: messageType === 'internal_note' ? 'delivered' : 'sent' } 
+          : msg
+      ))
+      
+      // Assure sync with backend (fetches latest state, ignoring duplicate realtime events by ID soon if we use a Set or handle duplicates, but Supabase Realtime just appends. 
+      // Actually, if we fetchMessages, it will replace all messages, overriding the optimistic one with the real DB one containing the real ID.)
+      await fetchMessages()
+    } catch (err) {
+      console.error('Error sending message:', err)
+      // Remove optimistic message on fail
+      setMessages(prev => prev.filter(msg => msg.id !== optId))
+    }
   }
 
   return { messages, loading, sendMessage }

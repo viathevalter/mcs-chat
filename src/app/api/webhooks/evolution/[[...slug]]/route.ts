@@ -257,11 +257,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
 
       if (conversation) {
          // Insert message
+         const finalContentToInsert = mediaTranscription ? mediaTranscription : textContent;
+
          const { error: msgErr } = await supabase.from('chat_messages').insert({
            conversation_id: conversation.id,
            external_id: externalId,
            direction: isFromMe ? 'outbound' : 'inbound',
-           content: textContent,
+           content: finalContentToInsert,
            message_type: messageTypeDb,
            sender_name: isFromMe ? 'Sistema' : senderName,
            media_url: mediaUrl,
@@ -276,18 +278,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             }
          }
 
-         // If we grabbed an AI Audio Transcription from Whisper, inject it!
-         if (mediaTranscription) {
-            await supabase.from('chat_messages').insert({
-               conversation_id: conversation.id,
-               external_id: externalId + "_transcript",
-               direction: 'inbound',
-               content: `📝 Transcrição (IA): ${mediaTranscription}`,
-               message_type: 'text',
-               sender_name: senderName,
-               status: 'delivered'
-            })
-         }
+         // The transcription is now successfully merged into the audio message's content directly.
 
          // Update unread_count and last_message_at
          if (!isFromMe) {

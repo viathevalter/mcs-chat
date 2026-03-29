@@ -5,6 +5,7 @@ import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
 import { AudioRecorder } from './audio-recorder'
+import { CustomAudioPlayer } from './custom-audio-player'
 import { supabase } from '@/lib/supabase/client'
 
 interface ChatAreaProps {
@@ -164,9 +165,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 )}
                 
                 {msg.media_url && msg.message_type === 'audio' && (
-                  <div className="mb-2">
-                    <audio controls src={msg.media_url} className={`h-10 ${isOutbound && !isNote ? 'invert grayscale opacity-90' : ''}`}></audio>
-                  </div>
+                  <CustomAudioPlayer src={msg.media_url} isOutbound={isOutbound && !isNote} />
                 )}
 
                 <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{msg.content}</p>

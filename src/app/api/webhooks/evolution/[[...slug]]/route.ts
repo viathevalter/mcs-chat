@@ -143,8 +143,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
                            let finalMime = mimeType || 'application/octet-stream'
                            if (isAudio) finalMime = 'audio/mp3'
                            else if (isImage) finalMime = 'image/jpeg'
-                           // TODO: Put to Supabase Storage if you want
-                           resolvedUrl = `data:${finalMime};base64,${finalBase64.replace(/\\s/g, '')}`
+                           // Upload to Supabase Storage to prevent massive DB bloat which breaks Realtime
+                           try {
+                               const ext = finalMime.split('/')[1] || 'bin'
+                               const cleanB64 = finalBase64.replace(/\s/g, '')
+                               const buffer = Buffer.from(cleanB64, 'base64')
+                               const filename = `m${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`
+                               
+                               const { error: uploadErr } = await supabase.storage
+                                 .from('chat-media')
+                                 .upload(filename, buffer, { contentType: finalMime, upsert: true })
+                               
+                               if (!uploadErr) {
+                                 const { data: publicUrlData } = supabase.storage.from('chat-media').getPublicUrl(filename)
+                                 resolvedUrl = publicUrlData.publicUrl
+                               } else {
+                                 resolvedUrl = `data:${finalMime};base64,${cleanB64}` // fallback
+                               }
+                           } catch (uploadCrash) {
+                               resolvedUrl = `data:${finalMime};base64,${finalBase64.replace(/\s/g, '')}`
+                           }
                            
                            // PROTOTYPE TRANSCRIPTION (Phase 8) - OpenAI Whisper
                            if (isAudio && process.env.OPENAI_API_KEY) {

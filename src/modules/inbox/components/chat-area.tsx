@@ -1,6 +1,6 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
@@ -177,7 +177,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 )}
                 <div className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-indigo-200') : 'text-slate-400'}`}>
                    <span className="text-[10px] font-medium">{time} {isNote && '• Nota Interna'}</span>
-                   {isOutbound && !isNote && <CheckCircle2 className="w-3.5 h-3.5" />}
+                   {isOutbound && !isNote && (
+                      msg.status === 'error' ? <span className="text-[10px] text-red-400">Erro</span> :
+                      msg.status === 'read' ? <CheckCheck className="w-4 h-4 text-blue-300" /> :
+                      msg.status === 'delivered' ? <CheckCheck className="w-4 h-4" /> :
+                      msg.status === 'sending' ? <Clock className="w-3.5 h-3.5" /> :
+                      <Check className="w-4 h-4" />
+                   )}
                 </div>
               </div>
             </div>

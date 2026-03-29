@@ -28,16 +28,20 @@ export function useChat(conversationId: string) {
     const subscription = supabase
       .channel(`chat_room_${conversationId}`)
       .on('postgres_changes', { 
-        event: 'INSERT', 
+        event: '*', 
         schema: 'public', 
         table: 'chat_messages'
       }, (payload) => {
         const newMessage = payload.new as Message
-        if (newMessage.conversation_id === conversationId) {
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMessage.id)) return prev
-            return [...prev, newMessage]
-          })
+        if (newMessage && newMessage.conversation_id === conversationId) {
+          if (payload.eventType === 'INSERT') {
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMessage.id)) return prev
+              return [...prev, newMessage]
+            })
+          } else if (payload.eventType === 'UPDATE') {
+            setMessages(prev => prev.map(m => m.id === newMessage.id ? newMessage : m))
+          }
         }
       })
       .subscribe()

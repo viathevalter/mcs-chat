@@ -9,6 +9,7 @@ export interface Conversation {
   unread_count: number
   last_message_at: string
   channel_id: string
+  assigned_to?: string | null
   worker_id?: string
   channel?: { name: string; provider: string } | null
 }
@@ -16,6 +17,8 @@ export interface Conversation {
 export function useInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchConversations()
@@ -37,6 +40,8 @@ export function useInbox() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData?.user?.id
       if (!userId) return
+
+      setCurrentUserId(userId)
 
       // Fetch user role
       const { data: mcsUser } = await supabase.from('mcs_users').select('role').eq('id', userId).single()
@@ -71,5 +76,5 @@ export function useInbox() {
     }
   }
 
-  return { conversations, loading }
+  return { conversations, loading, currentUserId }
 }

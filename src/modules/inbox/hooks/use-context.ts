@@ -39,10 +39,8 @@ export function useConversationContext(conversationId: string) {
         
         if (!wrkErr) workerData = wrk
 
-        // Atualmente não temos clareza do schema 'empresas', vamos pular fetch extra para MVP e mostrar mock
         companyData = { nome: 'Construtora Exemplo' }
       } else if (conv.contact_phone) {
-        // Fallback: search by phone number (last 8 digits)
         const last8 = conv.contact_phone.slice(-8)
         if (last8.length === 8) {
           const { data: wrks } = await supabase
@@ -55,22 +53,40 @@ export function useConversationContext(conversationId: string) {
           if (wrks && wrks.length > 0) {
             workerData = wrks[0]
             companyData = { nome: 'Construtora Exemplo' }
-            // Auto link
             supabase.from('chat_conversations').update({ worker_id: workerData.id }).eq('id', conv.id).then()
           }
         }
       }
 
-      setContext({
-        conversation: conv,
-        worker: workerData,
-        company: companyData,
-        worksite: { nome: 'Projeto X' }
-      })
+      setContext(prev => ({
+        ...prev,
+        ...({
+          conversation: conv,
+          worker: workerData,
+          company: companyData,
+          worksite: { nome: 'Projeto X' }
+        })
+      }))
       setLoading(false)
     }
 
     load()
+
+    const subscription = supabase
+      .channel(`public:chat_conversations:${conversationId}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'chat_conversations',
+        filter: `id=eq.${conversationId}`
+      }, () => {
+        load()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subscription)
+    }
   }, [conversationId])
 
   return { context, loading }

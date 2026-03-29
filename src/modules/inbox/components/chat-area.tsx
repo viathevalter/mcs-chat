@@ -1,10 +1,11 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
 import { AudioRecorder } from './audio-recorder'
+import { supabase } from '@/lib/supabase/client'
 
 interface ChatAreaProps {
   conversationId: string
@@ -17,8 +18,15 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const { context } = useConversationContext(conversationId)
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [isAssigning, setIsAssigning] = useState(false)
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
   const bottomRef = useRef<HTMLDivElement>(null)
+  
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null))
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -45,6 +53,30 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
   }
 
+  const handleAssign = async () => {
+    if (!currentUserId || isAssigning) return
+    setIsAssigning(true)
+    try {
+      await supabase.from('chat_conversations').update({ assigned_to: currentUserId, status: 'open' }).eq('id', conversationId)
+    } finally {
+      setIsAssigning(false)
+    }
+  }
+
+  const handleClose = async () => {
+    if (isAssigning) return
+    setIsAssigning(true)
+    try {
+      await supabase.from('chat_conversations').update({ status: 'closed' }).eq('id', conversationId)
+    } finally {
+      setIsAssigning(false)
+    }
+  }
+
+  const conversation = context?.conversation
+  const isMine = conversation?.assigned_to === currentUserId
+  const isClosed = conversation?.status === 'closed'
+
   return (
     <div className="flex flex-col h-full bg-slate-50/50 relative">
       <div className="h-20 flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0">
@@ -68,9 +100,23 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 transition-colors">
-             Assumir Atendimento
-          </button>
+          {isClosed ? (
+            <span className="px-4 py-2 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-2">
+               <LockKeyhole className="w-3.5 h-3.5" />
+               Ticket Fechado
+            </span>
+          ) : isMine ? (
+            <button onClick={handleClose} disabled={isAssigning} className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+               <CheckCircle2 className="w-3.5 h-3.5" />
+               Encerrar Atendimento
+            </button>
+          ) : (
+            <button onClick={handleAssign} disabled={isAssigning} className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+               <LockOpen className="w-3.5 h-3.5" />
+               Assumir Atendimento
+            </button>
+          )}
+
           <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Resumir com IA">
              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
           </button>
@@ -78,7 +124,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           {togglePanel && (
             <button 
               onClick={togglePanel}
-              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-transparent hover:border-indigo-100" 
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-transparent hover:border-indigo-100 flex items-center justify-center shrink-0" 
               title={isPanelOpen ? "Esconder detalhes" : "Mostrar detalhes"}
             >
                {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}

@@ -3,11 +3,11 @@ import { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, Save, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
-import 'react-quill/dist/quill.snow.css'
+import 'react-quill-new/dist/quill.snow.css'
 
 // We use react-quill-new if it installs correctly, or react-quill. 
 // I'll assume react-quill works with legacy peer deps.
-const ReactQuill = dynamic(() => import('react-quill'), { 
+const ReactQuill = dynamic(() => import('react-quill-new'), { 
   ssr: false, 
   loading: () => <div className="h-32 bg-slate-50 animate-pulse rounded-lg border border-slate-200"></div> 
 })

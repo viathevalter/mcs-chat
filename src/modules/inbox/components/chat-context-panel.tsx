@@ -29,7 +29,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
   if (loading) {
      return (
-       <aside className="w-[340px] flex-shrink-0 bg-white flex flex-col items-center justify-center h-full border-l border-slate-200 hidden lg:flex">
+       <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col items-center justify-center h-full border-l border-slate-200 hidden lg:flex">
           <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
           <p className="text-sm text-slate-500">Carregando contexto HR...</p>
        </aside>
@@ -38,7 +38,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
   if (!context) {
      return (
-       <aside className="w-[340px] flex-shrink-0 bg-white flex flex-col items-center p-8 text-center h-full border-l border-slate-200 hidden lg:flex">
+       <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col items-center p-8 text-center h-full border-l border-slate-200 hidden lg:flex">
           <p className="text-sm text-slate-500">Contexto não disponível.</p>
        </aside>
      )
@@ -47,7 +47,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   const { worker, conversation } = context
 
   return (
-    <aside className="w-[340px] flex-shrink-0 bg-white flex flex-col h-full overflow-hidden hidden lg:flex border-l border-slate-200">
+    <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col h-full overflow-hidden hidden lg:flex border-l border-slate-200">
       
       {/* Profile Header */}
       <div className="p-8 pb-4 flex flex-col items-center bg-gradient-to-b from-slate-50 to-white">

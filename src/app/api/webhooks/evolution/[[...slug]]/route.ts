@@ -115,30 +115,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             let pureId = messageData?.id || ''
             if (pureId.includes(':')) pureId = pureId.split(':')[1]
 
-            // Here we assume the channel's API key is the global admin token. We fetch instance token first.
+            // As the user inserted the Instance Token directly into api_token, we skip fetching /instance/all
             try {
-               const instancesUrl = `${API_URL}/instance/all`
-               const activeInstancesReq = await fetch(instancesUrl, {
-                  method: "GET", headers: { "admintoken": ADMIN_TOKEN },
+               const downloadReq = await fetch(`${API_URL}/message/download`, {
+                  method: "POST",
+                  headers: { "token": ADMIN_TOKEN, "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: pureId, return_base64: true, return_link: true, ...(isAudio ? { generate_mp3: true } : {}) })
                })
 
-               if (activeInstancesReq.ok) {
-                  const uazInstancesList = await activeInstancesReq.json()
-                  const targetInstance = (Array.isArray(uazInstancesList) ? uazInstancesList : []).find((i: any) => i.name === instanceName)
+               if (downloadReq.ok) {
+                  const downloadRes = await downloadReq.json()
+                  const finalBase64 = downloadRes.base64 || downloadRes.base64Data || downloadRes.data
+                  let resolvedUrl = downloadRes.url || downloadRes.link || null
 
-                  if (targetInstance?.token) {
-                     const downloadReq = await fetch(`${API_URL}/message/download`, {
-                        method: "POST",
-                        headers: { "token": targetInstance.token, "Content-Type": "application/json" },
-                        body: JSON.stringify({ id: pureId, return_base64: true, return_link: true, ...(isAudio ? { generate_mp3: true } : {}) })
-                     })
-
-                     if (downloadReq.ok) {
-                        const downloadRes = await downloadReq.json()
-                        const finalBase64 = downloadRes.base64 || downloadRes.base64Data || downloadRes.data
-                        let resolvedUrl = downloadRes.url || downloadRes.link || null
-
-                        // If UAZ returns base64, we can upload it to Supabase Storage
+                  // If UAZ returns base64, we can upload it to Supabase Storage
                         if (!resolvedUrl && finalBase64) {
                            let finalMime = mimeType || 'application/octet-stream'
                            if (isAudio) finalMime = 'audio/mp3'
@@ -181,12 +171,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
                                   const wJson = await whisperRes.json()
                                   mediaTranscription = wJson.text
                                }
-                           }
-                        }
-                        mediaUrl = resolvedUrl
+                            }
+                         }
+                         mediaUrl = resolvedUrl
                      }
-                  }
-               }
             } catch(e) {
                console.error("Failed to download media for UAZ:", e)
             }

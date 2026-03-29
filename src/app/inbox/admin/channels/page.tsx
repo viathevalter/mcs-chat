@@ -1,12 +1,17 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Plus, Server, CheckCircle2, AlertCircle, Phone, Globe, Key, Trash2 } from 'lucide-react'
+import { Plus, Server, CheckCircle2, AlertCircle, Phone, Globe, Key, Trash2, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { MembersModal } from './members-modal'
 
 export default function ChannelsAdminPage() {
   const [channels, setChannels] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
+
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false)
+  const [selectedChannelId, setSelectedChannelId] = useState('')
+  const [selectedChannelName, setSelectedChannelName] = useState('')
 
   const [provider, setProvider] = useState('uazapi')
   const [name, setName] = useState('')
@@ -115,11 +120,22 @@ export default function ChannelsAdminPage() {
                           </div>
                        </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                       <span className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 uppercase tracking-widest">
+                    <div className="flex items-center gap-2">
+                       <span className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 uppercase tracking-widest mr-2">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Active
                        </span>
-                       <button onClick={() => handleDelete(channel.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                       <button 
+                         onClick={() => {
+                           setSelectedChannelId(channel.id)
+                           setSelectedChannelName(channel.name)
+                           setIsMembersModalOpen(true)
+                         }} 
+                         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors border border-transparent hover:border-indigo-100 dark:hover:border-slate-700/60 shadow-sm shadow-transparent hover:shadow-indigo-100 flex items-center justify-center gap-1.5"
+                         title="Gerenciar Equipe"
+                       >
+                         <Users className="w-4 h-4" />
+                       </button>
+                       <button onClick={() => handleDelete(channel.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors" title="Remover Provedor">
                           <Trash2 className="w-4 h-4" />
                        </button>
                     </div>
@@ -218,8 +234,14 @@ export default function ChannelsAdminPage() {
                 {isCreating ? 'Conectando...' : 'Adicionar Provedor'}
              </button>
           </div>
-       </div>
+        </div>
 
+        <MembersModal 
+          isOpen={isMembersModalOpen} 
+          onClose={() => setIsMembersModalOpen(false)}
+          channelId={selectedChannelId}
+          channelName={selectedChannelName}
+        />
     </div>
   )
 }

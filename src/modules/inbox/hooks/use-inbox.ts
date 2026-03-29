@@ -10,6 +10,7 @@ export interface Conversation {
   last_message_at: string
   channel_id: string
   worker_id?: string
+  channel?: { name: string; provider: string } | null
 }
 
 export function useInbox() {
@@ -32,13 +33,42 @@ export function useInbox() {
   }, [])
 
   const fetchConversations = async () => {
-    const { data, error } = await supabase
-      .from('chat_conversations')
-      .select('*')
-      .order('last_message_at', { ascending: false })
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
+      if (!userId) return
 
-    if (data) setConversations(data)
-    setLoading(false)
+      // Fetch user role
+      const { data: mcsUser } = await supabase.from('mcs_users').select('role').eq('id', userId).single()
+      const isAdmin = mcsUser?.role === 'super_admin' || mcsUser?.role === 'admin' || mcsUser?.role === 'manager'
+
+      // Fetch allowed channels if not admin
+      let allowedChannels: string[] = []
+      if (!isAdmin) {
+         const { data: memberData } = await supabase.from('chat_channel_members').select('channel_id').eq('user_id', userId)
+         allowedChannels = memberData?.map(m => m.channel_id) || []
+      }
+
+      let query = supabase
+        .from('chat_conversations')
+        .select('*, channel:chat_channels(name, provider)')
+        .order('last_message_at', { ascending: false })
+
+      if (!isAdmin && allowedChannels.length > 0) {
+        query = query.in('channel_id', allowedChannels)
+      } else if (!isAdmin && allowedChannels.length === 0) {
+        setConversations([])
+        setLoading(false)
+        return
+      }
+
+      const { data, error } = await query
+      if (data) setConversations(data)
+    } catch(err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return { conversations, loading }

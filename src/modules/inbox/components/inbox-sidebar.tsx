@@ -72,9 +72,16 @@ export default function InboxSidebar() {
                    </span>
                  </div>
                  <div className="flex justify-between items-center">
-                   <p className="text-xs text-slate-500 truncate pr-4">{conv.contact_phone}</p>
+                   <div className="flex items-center gap-2">
+                     <p className="text-xs text-slate-500 truncate">{conv.contact_phone}</p>
+                     {conv.channel && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 max-w-[80px] truncate uppercase" title={`Via ${conv.channel.name}`}>
+                           {conv.channel.name}
+                        </span>
+                     )}
+                   </div>
                    {conv.unread_count > 0 && (
-                     <div className="w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
+                     <div className="w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
                         {conv.unread_count}
                      </div>
                    )}

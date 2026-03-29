@@ -1,12 +1,20 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2 } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
+import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
 import { AudioRecorder } from './audio-recorder'
 
-export default function ChatArea({ conversationId }: { conversationId: string }) {
+interface ChatAreaProps {
+  conversationId: string
+  togglePanel?: () => void
+  isPanelOpen?: boolean
+}
+
+export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: ChatAreaProps) {
   const { messages, loading, sendMessage } = useChat(conversationId)
+  const { context } = useConversationContext(conversationId)
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
@@ -48,9 +56,14 @@ export default function ChatArea({ conversationId }: { conversationId: string })
              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white"></div>
           </div>
           <div>
-            <h2 className="font-bold text-slate-800 text-lg tracking-tight leading-tight">Painel de Atendimento</h2>
+            <h2 className="font-bold text-slate-800 text-lg tracking-tight leading-tight">
+              {context?.worker?.nome || context?.conversation?.contact_name || context?.conversation?.contact_phone || 'Painel de Atendimento'}
+            </h2>
             <div className="flex items-center gap-2 mt-0.5">
                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 tracking-wider uppercase border border-slate-200">WhatsApp</span>
+               {context?.conversation?.contact_phone && (
+                 <span className="text-xs font-medium text-slate-500">{context.conversation.contact_phone}</span>
+               )}
             </div>
           </div>
         </div>
@@ -61,6 +74,17 @@ export default function ChatArea({ conversationId }: { conversationId: string })
           <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Resumir com IA">
              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
           </button>
+          
+          {togglePanel && (
+            <button 
+              onClick={togglePanel}
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-transparent hover:border-indigo-100" 
+              title={isPanelOpen ? "Esconder detalhes" : "Mostrar detalhes"}
+            >
+               {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+            </button>
+          )}
+
           <div className="w-px h-6 bg-slate-200 mx-1"></div>
           <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
             <MoreVertical className="w-5 h-5" />

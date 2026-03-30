@@ -1,9 +1,10 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
-import { format } from 'date-fns'
+import { format, isToday, isYesterday, isSameDay } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { AudioRecorder } from './audio-recorder'
 import { CustomAudioPlayer } from './custom-audio-player'
 import { supabase } from '@/lib/supabase/client'
@@ -145,13 +146,44 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           <div className="text-center text-slate-400 text-sm mt-10">Nenhuma mensagem neste chat ainda.</div>
         )}
         
-        {messages.map((msg) => {
+        {messages.map((msg, index) => {
           const isOutbound = msg.direction === 'outbound' || msg.direction === 'internal'
           const isNote = msg.message_type === 'internal_note'
-          const time = msg.created_at ? format(new Date(msg.created_at), 'HH:mm') : ''
+          const messageDate = msg.created_at ? new Date(msg.created_at) : null
+          const time = messageDate ? format(messageDate, 'HH:mm') : ''
+          
+          let showDateSeparator = false
+          let dateLabel = ''
+          
+          if (messageDate) {
+            if (index === 0) {
+              showDateSeparator = true
+            } else {
+              const prevDate = messages[index - 1].created_at ? new Date(messages[index - 1].created_at!) : null
+              if (prevDate && !isSameDay(messageDate, prevDate)) {
+                showDateSeparator = true
+              }
+            }
+            
+            if (showDateSeparator) {
+              if (isToday(messageDate)) {
+                dateLabel = 'Hoje'
+              } else if (isYesterday(messageDate)) {
+                dateLabel = 'Ontem'
+              } else {
+                dateLabel = format(messageDate, "EEE, d 'DE' MMM.", { locale: ptBR }).toUpperCase()
+              }
+            }
+          }
           
           return (
-            <div key={msg.id} className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
+            <div key={msg.id} className="flex flex-col gap-4">
+              {showDateSeparator && (
+                <div className="flex justify-center my-4">
+                  <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">{dateLabel}</span>
+                </div>
+              )}
+              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
               <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600') : 'bg-slate-200 text-slate-500'}`}>
                 {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
               </div>
@@ -187,6 +219,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </div>
               </div>
             </div>
+            </div>
           )
         })}
         <div ref={bottomRef} />
@@ -212,12 +245,25 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
            </div>
            
            {/* Input Box */}
-           <div className={`flex items-end gap-3 p-2 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-white border-slate-200 focus-within:border-indigo-300'}`}>
-             <button className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0">
-               <Paperclip className="w-5 h-5" />
-             </button>
+           <div className={`flex items-end gap-2 p-1.5 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-white border-slate-200 focus-within:border-indigo-300'}`}>
              
-             <div className="flex-1 flex overflow-hidden self-center">
+             {/* Ações Rápidas (Esquerda) */}
+             <div className="flex items-center gap-0.5 shrink-0 self-end mb-1">
+               <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Respostas Rápidas (/)">
+                 <Zap className="w-5 h-5" />
+               </button>
+               <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Emoji">
+                 <Smile className="w-5 h-5" />
+               </button>
+               <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Anexar">
+                 <Paperclip className="w-5 h-5" />
+               </button>
+               <div className="flex items-center justify-center -ml-1">
+                  <AudioRecorder onSend={handleSendAudio} disabled={isSending} />
+               </div>
+             </div>
+             
+             <div className="flex-1 flex overflow-hidden self-center border-l border-slate-200/60 pl-2 ml-1">
                <textarea 
                  value={text}
                  onChange={(e) => setText(e.target.value)}
@@ -229,19 +275,23 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                      }
                    }
                  }}
-                 className="w-full bg-transparent px-2 py-3 max-h-32 resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
-                 placeholder={activeTab === 'note' ? "Digite uma nota interna (apenas sua equipe verá)..." : "Digite uma mensagem..."}
+                 className="w-full bg-transparent px-2 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
+                 placeholder={activeTab === 'note' ? "Nota interna..." : "Digite uma mensagem..."}
                  rows={1}
                />
              </div>
              
-             {text.trim().length > 0 || activeTab === 'note' ? (
-               <button onClick={handleSend} disabled={isSending || !text.trim()} className={`px-5 py-3 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-50 text-sm font-bold flex items-center gap-2 ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-500 hover:bg-slate-600'}`}>
-                 {activeTab === 'note' ? 'Salvar' : 'Enviar'} <span className="text-[10px] opacity-70 border border-white/20 px-1 rounded shadow-sm relative top-[1px]">⏎</span>
+             {/* Botão Enviar (Direita) */}
+             <div className="shrink-0 self-end mb-1 mr-1">
+               <button 
+                 onClick={handleSend} 
+                 disabled={isSending || text.trim() === ''} 
+                 className={`p-2.5 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center justify-center ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-800'}`}
+                 title={activeTab === 'note' ? 'Salvar' : 'Enviar'}
+               >
+                 <Send className="w-5 h-5 ml-0.5" />
                </button>
-             ) : (
-               <AudioRecorder onSend={handleSendAudio} disabled={isSending} />
-             )}
+             </div>
            </div>
         </div>
       </div>

@@ -256,6 +256,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       }
 
       if (conversation) {
+         // Transform CRM Echo into an UPDATE instead of a duplicate INSERT
+         if (isFromMe && eventType !== 'messages.update') {
+            const { data: recentCrmMsg } = await supabase
+              .from('chat_messages')
+              .select('id')
+              .eq('conversation_id', conversation.id)
+              .eq('direction', 'outbound')
+              .is('external_id', null)
+              .gte('created_at', new Date(Date.now() - 120000).toISOString()) // 2 minutes window
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single()
+
+            if (recentCrmMsg) {
+               await supabase.from('chat_messages').update({
+                  external_id: externalId,
+                  status: 'delivered'
+               }).eq('id', recentCrmMsg.id)
+
+               await supabase.from('chat_conversations').update({
+                 last_message_at: new Date().toISOString()
+               }).eq('id', conversation.id)
+
+               return NextResponse.json({ success: true, message: 'Updated CRM echo message' })
+            }
+         }
+
          // Insert message
          const finalContentToInsert = mediaTranscription ? mediaTranscription : textContent;
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 export interface Conversation {
@@ -19,40 +19,44 @@ export function useInbox() {
   const [loading, setLoading] = useState(true)
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  
+  // Cache user permissions to prevent expensive refetches on every realtime event
+  const userAccess = useRef<{ isAdmin: boolean; allowedChannels: string[], isReady: boolean }>({
+     isAdmin: false,
+     allowedChannels: [],
+     isReady: false
+  })
 
-  useEffect(() => {
-    fetchConversations()
+  const loadUserPermissions = async () => {
+     try {
+       const { data: userData } = await supabase.auth.getUser()
+       const userId = userData?.user?.id
+       if (!userId) return false
+ 
+       setCurrentUserId(userId)
+ 
+       const { data: mcsUser } = await supabase.from('mcs_users').select('role').eq('id', userId).single()
+       const isAdmin = mcsUser?.role === 'super_admin' || mcsUser?.role === 'admin' || mcsUser?.role === 'manager'
+ 
+       let allowedChannels: string[] = []
+       if (!isAdmin) {
+          const { data: memberData } = await supabase.from('chat_channel_members').select('channel_id').eq('user_id', userId)
+          allowedChannels = memberData?.map(m => m.channel_id) || []
+       }
+       
+       userAccess.current = { isAdmin, allowedChannels, isReady: true }
+       return true
+     } catch(e) {
+       console.error(e)
+       return false
+     }
+  }
 
-    const subscription = supabase
-      .channel('public:chat_conversations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' }, () => {
-        fetchConversations()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(subscription)
-    }
-  }, [])
-
-  const fetchConversations = async () => {
+  const fetchConversationsList = async () => {
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData?.user?.id
-      if (!userId) return
+      if (!userAccess.current.isReady) return
 
-      setCurrentUserId(userId)
-
-      // Fetch user role
-      const { data: mcsUser } = await supabase.from('mcs_users').select('role').eq('id', userId).single()
-      const isAdmin = mcsUser?.role === 'super_admin' || mcsUser?.role === 'admin' || mcsUser?.role === 'manager'
-
-      // Fetch allowed channels if not admin
-      let allowedChannels: string[] = []
-      if (!isAdmin) {
-         const { data: memberData } = await supabase.from('chat_channel_members').select('channel_id').eq('user_id', userId)
-         allowedChannels = memberData?.map(m => m.channel_id) || []
-      }
+      const { isAdmin, allowedChannels } = userAccess.current
 
       let query = supabase
         .from('chat_conversations')
@@ -75,6 +79,23 @@ export function useInbox() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadUserPermissions().then((ready) => {
+       if (ready) fetchConversationsList()
+    })
+
+    const subscription = supabase
+      .channel('public:chat_conversations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' }, () => {
+        fetchConversationsList()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subscription)
+    }
+  }, [])
 
   return { conversations, loading, currentUserId }
 }

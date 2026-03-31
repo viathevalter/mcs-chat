@@ -62,6 +62,9 @@ export const translations = {
       mine: 'Meus',
       closed: 'Fechados',
       all: 'Todos',
+      agenda: 'Agenda',
+      channel: 'Canal:',
+      allChannels: 'Todos os Canais',
       loading: 'Carregando...',
       noConversations: 'Nenhuma conversa encontrada.'
     },
@@ -81,7 +84,9 @@ export const translations = {
       quickReplies: 'Mensagens Prontas',
       channels: 'Canais de Atendimento',
       gateways: 'Gateways e Chaves',
-      audit: 'Registro de Auditoria'
+      audit: 'Registro de Auditoria',
+      generalSettingsTitle: 'Configurações Gerais',
+      generalSettingsDesc: 'Gerencie a configuração da sua empresa, equipe e conectores técnicos (Integrações Multi-API).'
     },
     quickReplies: {
       title: 'Mensagens Prontas',
@@ -169,6 +174,9 @@ export const translations = {
       mine: 'Mine',
       closed: 'Closed',
       all: 'All',
+      agenda: 'Schedule',
+      channel: 'Channel:',
+      allChannels: 'All Channels',
       loading: 'Loading...',
       noConversations: 'No conversations found.'
     },
@@ -188,7 +196,9 @@ export const translations = {
       quickReplies: 'Quick Replies',
       channels: 'Support Channels',
       gateways: 'Gateways & Keys',
-      audit: 'Audit Log'
+      audit: 'Audit Log',
+      generalSettingsTitle: 'General Settings',
+      generalSettingsDesc: 'Manage your company configuration, team and technical connectors (Multi-API Integrations).'
     },
     quickReplies: {
       title: 'Quick Replies',
@@ -276,6 +286,9 @@ export const translations = {
       mine: 'Míos',
       closed: 'Cerrados',
       all: 'Todos',
+      agenda: 'Agenda',
+      channel: 'Canal:',
+      allChannels: 'Todos los Canales',
       loading: 'Cargando...',
       noConversations: 'No se encontraron conversaciones.'
     },
@@ -295,7 +308,9 @@ export const translations = {
       quickReplies: 'Avisos y Respuestas',
       channels: 'Canales de Atención',
       gateways: 'Gateways y Llaves',
-      audit: 'Registro de Auditoría'
+      audit: 'Registro de Auditoría',
+      generalSettingsTitle: 'Configuraciones Generales',
+      generalSettingsDesc: 'Administra la configuración de tu empresa, equipo y conectores técnicos (Integraciones Multi-API).'
     },
     quickReplies: {
       title: 'Respuestas Rápidas',

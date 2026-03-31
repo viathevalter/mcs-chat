@@ -79,7 +79,7 @@ export default function InboxSidebar() {
            <ThemeSwitcher />
            <Link href="/inbox/agenda" className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
-              Agenda
+              {t('inboxSidebar', 'agenda')}
            </Link>
            <button onClick={() => setIsModalOpen(true)} className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none rounded-lg transition-colors flex items-center justify-center relative group" title={t('inboxSidebar', 'newChat')}>
              <Plus className="w-4 h-4" />
@@ -101,13 +101,13 @@ export default function InboxSidebar() {
         </div>
         {availableChannels.length > 0 && (
           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg text-sm px-2 focus-within:ring-2 focus-within:ring-emerald-500/50">
-             <span className="text-[10px] uppercase font-bold text-slate-400 select-none mr-2">Canal:</span>
+             <span className="text-[10px] uppercase font-bold text-slate-400 select-none mr-2">{t('inboxSidebar', 'channel')}</span>
              <select 
                value={channelFilter} 
                onChange={(e) => setChannelFilter(e.target.value)}
                className="w-full py-1.5 bg-transparent border-none focus:outline-none text-slate-700 font-medium text-[13px] cursor-pointer"
              >
-                <option value="all">Todos os Canais</option>
+                <option value="all">{t('inboxSidebar', 'allChannels')}</option>
                 {availableChannels.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}

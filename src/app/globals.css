@@ -1,9 +1,28 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
+@custom-variant sunset (&:is(.sunset *));
+@custom-variant ocean (&:is(.ocean *));
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Theme: Light (Classic) */
+  --chat-surface-bg: var(--color-white);
+  --chat-area-bg: var(--color-slate-50);
+  
+  --chat-outbound-bg-start: var(--color-indigo-500);
+  --chat-outbound-bg-end: var(--color-violet-600);
+  --chat-outbound-border: var(--color-indigo-400);
+  --chat-outbound-fg: var(--color-white);
+  --chat-outbound-shadow: var(--color-indigo-200);
+  
+  --chat-inbound-bg: var(--color-white);
+  --chat-inbound-border: var(--color-slate-200);
+  --chat-inbound-fg: var(--color-slate-700);
+  
+  --chat-icon-bg: var(--color-indigo-100);
+  --chat-icon-text: var(--color-indigo-600);
 }
 
 @theme inline {
@@ -11,6 +30,22 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  --color-chat-surface-bg: var(--chat-surface-bg);
+  --color-chat-area-bg: var(--chat-area-bg);
+  
+  --color-chat-outbound-bg-start: var(--chat-outbound-bg-start);
+  --color-chat-outbound-bg-end: var(--chat-outbound-bg-end);
+  --color-chat-outbound-border: var(--chat-outbound-border);
+  --color-chat-outbound-fg: var(--chat-outbound-fg);
+  --color-chat-outbound-shadow: var(--chat-outbound-shadow);
+
+  --color-chat-inbound-bg: var(--chat-inbound-bg);
+  --color-chat-inbound-border: var(--chat-inbound-border);
+  --color-chat-inbound-fg: var(--chat-inbound-fg);
+  
+  --color-chat-icon-bg: var(--chat-icon-bg);
+  --color-chat-icon-text: var(--chat-icon-text);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,6 +53,69 @@
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  
+  --chat-surface-bg: var(--color-slate-900);
+  --chat-area-bg: var(--color-slate-900);
+  
+  --chat-outbound-bg-start: var(--color-indigo-600);
+  --chat-outbound-bg-end: var(--color-indigo-800);
+  --chat-outbound-border: var(--color-indigo-500);
+  --chat-outbound-fg: var(--color-slate-50);
+  --chat-outbound-shadow: transparent;
+  
+  --chat-inbound-bg: var(--color-slate-800);
+  --chat-inbound-border: var(--color-slate-700);
+  --chat-inbound-fg: var(--color-slate-200);
+
+  --chat-icon-bg: var(--color-slate-800);
+  --chat-icon-text: var(--color-indigo-400);
+}
+
+.sunset {
+  --background: #fffdf9;
+  --foreground: #2d1b19;
+
+  --chat-surface-bg: #fffdf9;
+  --chat-area-bg: #ffede6;
+  
+  --chat-outbound-bg-start: #ff758c;
+  --chat-outbound-bg-end: #ff7eb3;
+  --chat-outbound-border: #ff758c;
+  --chat-outbound-fg: #ffffff;
+  --chat-outbound-shadow: #ffb8c6;
+  
+  --chat-inbound-bg: rgba(255, 255, 255, 0.85);
+  --chat-inbound-border: #ffd5d9;
+  --chat-inbound-fg: #5e2a32;
+  
+  --chat-icon-bg: #ffe4e8;
+  --chat-icon-text: #e11d48;
+}
+
+.ocean {
+  --background: #f0fdfa;
+  --foreground: #042f2e;
+
+  --chat-surface-bg: #f8fafc;
+  --chat-area-bg: #e0f2fe;
+  
+  --chat-outbound-bg-start: #0ea5e9;
+  --chat-outbound-bg-end: #3b82f6;
+  --chat-outbound-border: #0284c7;
+  --chat-outbound-fg: #ffffff;
+  --chat-outbound-shadow: #bae6fd;
+  
+  --chat-inbound-bg: rgba(255, 255, 255, 0.9);
+  --chat-inbound-border: #bae6fd;
+  --chat-inbound-fg: #082f49;
+  
+  --chat-icon-bg: #e0f2fe;
+  --chat-icon-text: #0284c7;
 }
 
 body {

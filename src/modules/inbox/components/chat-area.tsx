@@ -80,8 +80,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const isClosed = conversation?.status === 'closed'
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 relative">
-      <div className="h-20 flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0">
+    <div className="flex flex-col h-full bg-chat-area-bg relative transition-colors duration-300">
+      <div className="h-20 flex-shrink-0 bg-chat-surface-bg/80 backdrop-blur-md border-b border-chat-inbound-border px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
         <div className="flex items-center gap-4">
           <div className="relative">
              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-indigo-200 rotate-3 hover:rotate-0 transition-all duration-300">
@@ -184,10 +184,10 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </div>
               )}
               <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
-              <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600') : 'bg-slate-200 text-slate-500'}`}>
+              <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`}>
                 {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
               </div>
-              <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl rounded-br-sm shadow-indigo-200/50') : 'bg-white border border-slate-200/80 rounded-3xl rounded-bl-sm text-slate-700'}`}>
+              <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
                 
                 {msg.media_url && msg.message_type !== 'audio' && (
                   <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
@@ -207,7 +207,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 {msg.content && msg.content !== '[Mídia UAZ]' && (
                    <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
                 )}
-                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-indigo-200') : 'text-slate-400'}`}>
+                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-chat-outbound-fg opacity-80') : 'text-chat-inbound-fg opacity-60'}`}>
                    <span className="text-[10px] font-medium">{time} {isNote && '• Nota Interna'}</span>
                    {isOutbound && !isNote && (
                       msg.status === 'error' ? <span className="text-[10px] text-red-400">Erro</span> :
@@ -225,7 +225,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 bg-slate-50/80 backdrop-blur-xl border-t border-slate-200/60 sticky bottom-0">
+      <div className="p-4 bg-chat-surface-bg/80 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300">
         <div className="max-w-5xl mx-auto flex flex-col gap-2">
            {/* Tabs Responder / Privada */}
            <div className="flex items-center gap-6 px-2 text-[13px] font-semibold text-slate-500">
@@ -245,7 +245,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
            </div>
            
            {/* Input Box */}
-           <div className={`flex items-end gap-2 p-1.5 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-white border-slate-200 focus-within:border-indigo-300'}`}>
+           <div className={`flex items-end gap-2 p-1.5 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-chat-inbound-bg border-chat-inbound-border focus-within:border-chat-outbound-border'}`}>
              
              {/* Ações Rápidas (Esquerda) */}
              <div className="flex items-center gap-0.5 shrink-0 self-end mb-1">

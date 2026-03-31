@@ -92,15 +92,12 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <table className="w-full text-left text-sm">
+      <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto shadow-sm">
+        <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="px-6 py-4 font-bold text-slate-800">
                 {t("adminUsers", "tableUser")}
-              </th>
-              <th className="px-6 py-4 font-bold text-slate-800">
-                {t("adminUsers", "tableEmail")}
               </th>
               <th className="px-6 py-4 font-bold text-slate-800">
                 {t("adminUsers", "tableRole")}
@@ -112,9 +109,9 @@ export default function AdminUsersPage() {
           </thead>
           <tbody className="divide-y divide-slate-200">
             {loading ? (
-              <tr>
-                <td
-                  colSpan={4}
+               <tr>
+                 <td
+                   colSpan={3}
                   className="px-6 py-12 text-center text-slate-500 font-medium"
                 >
                   <div className="flex flex-col items-center justify-center gap-2">
@@ -126,7 +123,7 @@ export default function AdminUsersPage() {
             ) : users.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={3}
                   className="px-6 py-12 text-center text-slate-500 font-medium"
                 >
                   {t("adminUsers", "empty")}
@@ -138,24 +135,24 @@ export default function AdminUsersPage() {
                   key={user.id}
                   className="hover:bg-slate-50 transition-colors"
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 pr-12">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200">
                         {user.display_name
                           ? user.display_name.charAt(0).toUpperCase()
                           : user.email.charAt(0).toUpperCase()}
                       </div>
-                      <span className="font-bold text-slate-800">
-                        {user.display_name || "Sem Nome"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <Mail className="h-4 w-4 shrink-0" />
-                      <span className="truncate max-w-[200px] font-medium">
-                        {user.email}
-                      </span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-slate-800 truncate">
+                          {user.display_name || "Sem Nome"}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-slate-500 mt-0.5">
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="text-xs truncate font-medium">
+                            {user.email}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">

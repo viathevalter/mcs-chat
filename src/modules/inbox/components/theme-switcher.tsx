@@ -53,8 +53,8 @@ export function ThemeSwitcher() {
         <Palette className="w-5 h-5" />
       </button>
       
-      {/* Dropdown via group-hover ou foco. Usando uma abordagem CSS pura para aparecer quando hover no container pai */}
-      <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-50 overflow-hidden">
+      {/* Dropdown via group-hover ou foco. Abrindo para baixo (top-full mt-2) e alinhado à direita (right-0) */}
+      <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 -translate-y-1 group-hover:translate-y-0 z-50 overflow-hidden">
         <div className="p-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
           Temas do Chat
         </div>

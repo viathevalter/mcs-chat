@@ -111,6 +111,22 @@ export const translations = {
       cancel: 'Cancelar',
       save: 'Salvar Mensagem',
       noShortcutFound: 'Nenhum atalho encontrado'
+    },
+    adminUsers: {
+      title: 'Membros da Equipe',
+      subtitle: 'Gerencie os usuários da plataforma e defina seus níveis de acesso administrativos.',
+      tableUser: 'Usuário / Nome',
+      tableEmail: 'E-mail',
+      tableRole: 'Permissão (Recursos)',
+      tableStatus: 'Status Conta',
+      roleSuperAdmin: 'Super Admin',
+      roleAdmin: 'Administrador',
+      roleManager: 'Gerente',
+      roleAgent: 'Atendente',
+      statusActive: 'Ativo',
+      statusInactive: 'Inativo',
+      loading: 'Carregando usuários...',
+      empty: 'Nenhum usuário encontrado na plataforma.'
     }
   },
   EN: {
@@ -223,6 +239,22 @@ export const translations = {
       cancel: 'Cancel',
       save: 'Save Message',
       noShortcutFound: 'No shortcut found'
+    },
+    adminUsers: {
+      title: 'Team Members',
+      subtitle: 'Manage platform users and define their administrative access levels.',
+      tableUser: 'User / Name',
+      tableEmail: 'Email',
+      tableRole: 'Access Role',
+      tableStatus: 'Account Status',
+      roleSuperAdmin: 'Super Admin',
+      roleAdmin: 'Administrator',
+      roleManager: 'Manager',
+      roleAgent: 'Agent / Attendant',
+      statusActive: 'Active',
+      statusInactive: 'Inactive',
+      loading: 'Loading users...',
+      empty: 'No users found on the platform.'
     }
   },
   ES: {
@@ -335,6 +367,22 @@ export const translations = {
       cancel: 'Cancelar',
       save: 'Guardar Respuesta',
       noShortcutFound: 'No se encontraron atajos.'
+    },
+    adminUsers: {
+      title: 'Miembros del Equipo',
+      subtitle: 'Administra los usuarios de la plataforma y define sus niveles de acceso.',
+      tableUser: 'Usuario / Nombre',
+      tableEmail: 'Correo Electrónico',
+      tableRole: 'Nivel de Acceso',
+      tableStatus: 'Estado de la Cuenta',
+      roleSuperAdmin: 'Súper Admin',
+      roleAdmin: 'Administrador',
+      roleManager: 'Gerente',
+      roleAgent: 'Asesor / Agente',
+      statusActive: 'Activo',
+      statusInactive: 'Inactivo',
+      loading: 'Cargando usuarios...',
+      empty: 'No se encontraron usuarios en la plataforma.'
     }
   }
 } as const;

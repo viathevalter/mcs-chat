@@ -38,7 +38,7 @@ export default function AutomationsPage() {
         
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg shadow-violet-200">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg shadow-teal-200">
              <Megaphone className="w-8 h-8" />
           </div>
           <div>
@@ -59,33 +59,33 @@ export default function AutomationsPage() {
                  </h3>
                  
                  <div className="space-y-3">
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'all' ? 'border-violet-500 bg-violet-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'all' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
                       <input type="radio" name="target" checked={targetType === 'all'} onChange={() => setTargetType('all')} className="mt-1" />
                       <div>
-                        <p className={`font-bold ${targetType === 'all' ? 'text-violet-900' : 'text-slate-700'}`}>Todos Colaboradores</p>
+                        <p className={`font-bold ${targetType === 'all' ? 'text-teal-900' : 'text-slate-700'}`}>Todos Colaboradores</p>
                         <p className="text-xs text-slate-500 mt-1">Dispara para toda a base ativa.</p>
                       </div>
                     </label>
 
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'company' ? 'border-violet-500 bg-violet-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'company' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
                       <input type="radio" name="target" checked={targetType === 'company'} onChange={() => setTargetType('company')} className="mt-1" />
                       <div>
-                        <p className={`font-bold ${targetType === 'company' ? 'text-violet-900' : 'text-slate-700'}`}>Por Empresa</p>
+                        <p className={`font-bold ${targetType === 'company' ? 'text-teal-900' : 'text-slate-700'}`}>Por Empresa</p>
                         <p className="text-xs text-slate-500 mt-1">Em breve: seleção de CNPJ.</p>
                       </div>
                     </label>
 
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'worksite' ? 'border-violet-500 bg-violet-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'worksite' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
                       <input type="radio" name="target" checked={targetType === 'worksite'} onChange={() => setTargetType('worksite')} className="mt-1" />
                       <div>
-                        <p className={`font-bold ${targetType === 'worksite' ? 'text-violet-900' : 'text-slate-700'}`}>Por Obra / Alocação</p>
+                        <p className={`font-bold ${targetType === 'worksite' ? 'text-teal-900' : 'text-slate-700'}`}>Por Obra / Alocação</p>
                         <p className="text-xs text-slate-500 mt-1">Em breve: seleção de Pedido.</p>
                       </div>
                     </label>
                  </div>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl p-6 border border-blue-100 shadow-sm">
+              <div className="bg-gradient-to-br from-blue-50 to-emerald-50 rounded-3xl p-6 border border-blue-100 shadow-sm">
                  <h3 className="text-sm font-bold uppercase tracking-widest text-blue-500 mb-2 flex items-center gap-2">
                     <Building2 className="w-4 h-4" /> Alerta de Rate Limit
                  </h3>
@@ -109,7 +109,7 @@ export default function AutomationsPage() {
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
                       placeholder="Olá, *[Nome]*! Este é um lembrete oficial do RH..."
-                      className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-violet-500/20 focus:border-violet-400 focus:bg-white transition-all text-slate-700 text-base leading-relaxed resize-none"
+                      className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/20 focus:border-teal-400 focus:bg-white transition-all text-slate-700 text-base leading-relaxed resize-none"
                     ></textarea>
 
                     <p className="text-xs text-slate-400 mt-3 font-medium flex justify-end">
@@ -133,7 +133,7 @@ export default function AutomationsPage() {
                     <button 
                       onClick={handleDispatch}
                       disabled={loading || !content.trim()}
-                      className="px-8 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold rounded-xl shadow-lg shadow-violet-200 hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+                      className="px-8 py-3.5 bg-gradient-to-r from-teal-600 to-fuchsia-600 text-white font-bold rounded-xl shadow-lg shadow-teal-200 hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
                     >
                       {loading ? 'Processando...' : 'Agendar Campanha'}
                       {!loading && <Send className="w-4 h-4 ml-1" />}

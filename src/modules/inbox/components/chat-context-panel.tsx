@@ -30,7 +30,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   if (loading) {
      return (
        <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col items-center justify-center h-full border-l border-slate-200 hidden lg:flex">
-          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
+          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-4" />
           <p className="text-sm text-slate-500">Carregando contexto HR...</p>
        </aside>
      )
@@ -52,7 +52,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
       {/* Profile Header */}
       <div className="p-8 pb-4 flex flex-col items-center bg-gradient-to-b from-slate-50 to-white">
         <div className="relative mb-4">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-50 flex items-center justify-center text-indigo-500 shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300">
+          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center text-emerald-500 shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300">
             <User className="w-12 h-12" />
           </div>
           <div className="absolute -bottom-2 -right-2 bg-emerald-500 rounded-full p-1 shadow-md border-2 border-white">
@@ -72,13 +72,13 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
       <div className="px-6 flex items-center border-b border-slate-100 uppercase tracking-widest text-[11px] font-bold">
          <button 
            onClick={() => setActiveTab('info')}
-           className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'info' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+           className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'info' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
          >
            Visão Geral
          </button>
          <button 
            onClick={() => setActiveTab('agenda')}
-           className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'agenda' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+           className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'agenda' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
          >
            Agenda
          </button>
@@ -97,7 +97,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
               <div className="bg-white rounded-2xl p-4 border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow space-y-3">
                 <div>
                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Empresa Oficial</p>
-                   <p className="text-sm font-semibold text-slate-800">Mastercorp S.A.</p>
+                   <p className="text-sm font-semibold text-slate-800">MCS-Chat</p>
                 </div>
                 <div className="h-px w-full bg-slate-100"></div>
                 <div>
@@ -114,15 +114,15 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
                 <Briefcase className="w-3.5 h-3.5" /> Detalhes da Linha
               </h3>
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 rounded-2xl p-4 border border-blue-100 shadow-sm hover:shadow-md transition-shadow space-y-3">
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 rounded-2xl p-4 border border-emerald-100 shadow-sm hover:shadow-md transition-shadow space-y-3">
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-blue-500/80 font-bold mb-1">Status do Ticket</p>
-                   <p className="text-sm font-bold text-blue-900 uppercase">{conversation?.status}</p>
+                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">Status do Ticket</p>
+                   <p className="text-sm font-bold text-emerald-900 uppercase">{conversation?.status}</p>
                 </div>
-                <div className="h-px w-full bg-blue-100/50"></div>
+                <div className="h-px w-full bg-emerald-100/50"></div>
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-blue-500/80 font-bold mb-1">Telefone Vinculado</p>
-                   <p className="text-sm font-semibold text-blue-800">{conversation?.contact_phone}</p>
+                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">Telefone Vinculado</p>
+                   <p className="text-sm font-semibold text-emerald-800">{conversation?.contact_phone}</p>
                 </div>
               </div>
             </div>

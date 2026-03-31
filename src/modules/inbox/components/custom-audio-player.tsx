@@ -66,7 +66,7 @@ export function CustomAudioPlayer({ src, isOutbound, senderInitials }: { src: st
       />
       
       {/* Sender Avatar mimicking native Whatsapp/Other App */}
-      <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center overflow-hidden border-2 ${isOutbound ? 'bg-indigo-400 border-indigo-300 text-white' : 'bg-slate-200 border-slate-100 text-slate-500'}`}>
+      <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center overflow-hidden border-2 ${isOutbound ? 'bg-emerald-400 border-emerald-300 text-white' : 'bg-slate-200 border-slate-100 text-slate-500'}`}>
          {senderInitials ? (
            <span className="text-[14px] font-bold">{senderInitials}</span>
          ) : (
@@ -76,7 +76,7 @@ export function CustomAudioPlayer({ src, isOutbound, senderInitials }: { src: st
 
       <button 
         onClick={togglePlay}
-        className={`w-10 h-10 flex shrink-0 items-center justify-center rounded-full transition-colors ${isOutbound ? 'text-white hover:text-indigo-200' : 'text-indigo-600 hover:text-indigo-800'}`}
+        className={`w-10 h-10 flex shrink-0 items-center justify-center rounded-full transition-colors ${isOutbound ? 'text-white hover:text-emerald-200' : 'text-emerald-600 hover:text-emerald-800'}`}
       >
         {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" fill="currentColor" />}
       </button>
@@ -88,9 +88,9 @@ export function CustomAudioPlayer({ src, isOutbound, senderInitials }: { src: st
           max="100" 
           value={progress} 
           onChange={handleSeek}
-          className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer ${isOutbound ? 'bg-white/40 [&::-webkit-slider-thumb]:bg-white' : 'bg-slate-300 [&::-webkit-slider-thumb]:bg-indigo-600'} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full`}
+          className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer ${isOutbound ? 'bg-white/40 [&::-webkit-slider-thumb]:bg-white' : 'bg-slate-300 [&::-webkit-slider-thumb]:bg-emerald-600'} [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full`}
         />
-        <div className={`text-[11px] mt-1 font-medium flex justify-between ${isOutbound ? 'text-indigo-100' : 'text-slate-500'}`}>
+        <div className={`text-[11px] mt-1 font-medium flex justify-between ${isOutbound ? 'text-emerald-100' : 'text-slate-500'}`}>
           <span>{formatTime(audioRef.current?.currentTime || 0)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -98,7 +98,7 @@ export function CustomAudioPlayer({ src, isOutbound, senderInitials }: { src: st
 
       <button 
         onClick={toggleSpeed}
-        className={`px-1.5 h-6 rounded-md text-[10px] font-bold flex shrink-0 items-center gap-1 transition-colors ${isOutbound ? 'bg-indigo-500/30 hover:bg-indigo-500/50 text-white' : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'}`}
+        className={`px-1.5 h-6 rounded-md text-[10px] font-bold flex shrink-0 items-center gap-1 transition-colors ${isOutbound ? 'bg-emerald-500/30 hover:bg-emerald-500/50 text-white' : 'bg-slate-200/50 hover:bg-slate-200 text-slate-600'}`}
       >
         {speed}x
       </button>

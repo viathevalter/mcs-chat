@@ -79,7 +79,7 @@ export default function AgendaForm({ conversationId, onSuccess }: AgendaFormProp
              value={title}
              onChange={e => setTitle(e.target.value)}
              placeholder="Ex: Ligar para confirmar..." 
-             className="w-full text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+             className="w-full text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
            />
         </div>
 
@@ -92,7 +92,7 @@ export default function AgendaForm({ conversationId, onSuccess }: AgendaFormProp
                   type="date"
                   value={date}
                   onChange={e => setDate(e.target.value)}
-                  className="w-full pl-9 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  className="w-full pl-9 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
              </div>
            </div>
@@ -104,7 +104,7 @@ export default function AgendaForm({ conversationId, onSuccess }: AgendaFormProp
                   type="time"
                   value={time}
                   onChange={e => setTime(e.target.value)}
-                  className="w-full pl-9 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  className="w-full pl-9 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
              </div>
            </div>

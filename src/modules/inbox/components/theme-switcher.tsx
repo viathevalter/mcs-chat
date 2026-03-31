@@ -24,13 +24,13 @@ export function ThemeSwitcher() {
     { 
       id: 'light', 
       name: 'Classico (Claro)', 
-      color1: '#6366f1', // indigo-500
+      color1: '#6366f1', // emerald-500
       color2: '#f8fafc', // bg
     },
     { 
       id: 'dark', 
       name: 'Modo Escuro', 
-      color1: '#4f46e5', // indigo-600
+      color1: '#4f46e5', // emerald-600
       color2: '#0f172a', // bg
     },
     { 
@@ -49,7 +49,7 @@ export function ThemeSwitcher() {
 
   return (
     <div className="relative group">
-      <button className="p-2 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" title="Mudar Tema">
+      <button className="p-2 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" title="Mudar Tema">
         <Palette className="w-5 h-5" />
       </button>
       
@@ -72,7 +72,7 @@ export function ThemeSwitcher() {
                 <div style={{ backgroundColor: t.color2, width: '50%', height: '100%' }} />
               </div>
               <span className="flex-1">{t.name}</span>
-              {theme === t.id && <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
+              {theme === t.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
             </button>
           ))}
         </div>

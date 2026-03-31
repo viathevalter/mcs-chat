@@ -125,7 +125,7 @@ export function AudioRecorder({ onSend, disabled }: AudioRecorderProps) {
     <button 
       onClick={startRecording}
       disabled={disabled}
-      className={`p-3 rounded-xl transition-colors shrink-0 ${disabled ? 'text-slate-300' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
+      className={`p-3 rounded-xl transition-colors shrink-0 ${disabled ? 'text-slate-300' : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-50'}`}
       title="Gravar Áudio"
     >
       <Mic className="w-5 h-5" />

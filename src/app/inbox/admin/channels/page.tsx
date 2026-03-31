@@ -98,7 +98,7 @@ export default function ChannelsAdminPage() {
             channels.map(channel => {
                const pIcon = getProviderIcon(channel.provider || 'evolution')
                return (
-                 <div key={channel.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-200 bg-white hover:border-indigo-200 transition-colors shadow-sm group">
+                 <div key={channel.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-200 bg-white hover:border-emerald-200 transition-colors shadow-sm group">
                     <div className="flex items-center gap-4">
                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black tracking-tighter text-sm ${pIcon.color}`}>
                           {pIcon.text}
@@ -130,7 +130,7 @@ export default function ChannelsAdminPage() {
                            setSelectedChannelName(channel.name)
                            setIsMembersModalOpen(true)
                          }} 
-                         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors border border-transparent hover:border-indigo-100 dark:hover:border-slate-700/60 shadow-sm shadow-transparent hover:shadow-indigo-100 flex items-center justify-center gap-1.5"
+                         className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors border border-transparent hover:border-emerald-100 dark:hover:border-slate-700/60 shadow-sm shadow-transparent hover:shadow-emerald-100 flex items-center justify-center gap-1.5"
                          title="Gerenciar Equipe"
                        >
                          <Users className="w-4 h-4" />
@@ -148,7 +148,7 @@ export default function ChannelsAdminPage() {
        {/* Formulario Nova Conexão */}
        <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-8 mb-8">
           <div className="flex items-center gap-3 mb-6">
-             <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+             <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <Plus className="w-5 h-5" />
              </div>
              <h3 className="font-bold text-slate-800 dark:text-white text-lg">Nova Conexão Multi-Provedor</h3>
@@ -161,7 +161,7 @@ export default function ChannelsAdminPage() {
                 <select 
                    value={provider}
                    onChange={e => setProvider(e.target.value)}
-                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-bold text-slate-800 dark:text-white transition-all appearance-none cursor-pointer"
+                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 outline-none text-[15px] font-bold text-slate-800 dark:text-white transition-all appearance-none cursor-pointer"
                 >
                    <option value="uazapi">UAZ API (Recomendado)</option>
                    <option value="evolution">Evolution API</option>
@@ -176,7 +176,7 @@ export default function ChannelsAdminPage() {
                 <input 
                    value={name}
                    onChange={e => setName(e.target.value)}
-                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
+                   className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                    placeholder="Ex: uaz_rh_principal"
                 />
              </div>
@@ -189,7 +189,7 @@ export default function ChannelsAdminPage() {
                    <input 
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="5511999999999"
                    />
                 </div>
@@ -203,7 +203,7 @@ export default function ChannelsAdminPage() {
                    <input 
                       value={apiUrl}
                       onChange={e => setApiUrl(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="https://sua-api.com"
                    />
                 </div>
@@ -218,7 +218,7 @@ export default function ChannelsAdminPage() {
                       type="password"
                       value={apiToken}
                       onChange={e => setApiToken(e.target.value)}
-                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
+                      className="w-full py-3.5 pl-11 pr-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-white"
                       placeholder="Cole o token administrativo de integração..."
                    />
                 </div>
@@ -229,7 +229,7 @@ export default function ChannelsAdminPage() {
              <button 
                 onClick={handleCreateChannel}
                 disabled={isCreating}
-                className="px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-xl shadow-md shadow-indigo-200 hover:bg-indigo-700 hover:shadow-lg transition-all disabled:opacity-50"
+                className="px-8 py-3.5 bg-emerald-600 text-white font-bold rounded-xl shadow-md shadow-emerald-200 hover:bg-emerald-700 hover:shadow-lg transition-all disabled:opacity-50"
              >
                 {isCreating ? 'Conectando...' : 'Adicionar Provedor'}
              </button>

@@ -128,14 +128,14 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                  placeholder="Buscar por nome ou celular..."
                  value={query}
                  onChange={e => setQuery(e.target.value)}
-                 className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 transition-all font-medium text-slate-700"
+                 className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
                />
             </div>
          </div>
 
          {/* Results */}
          <div className="flex-1 max-h-[300px] overflow-y-auto p-2">
-            {loading && <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-indigo-500 animate-spin" /></div>}
+            {loading && <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /></div>}
             
             {!loading && query.length > 0 && query.length < 3 && (
                <p className="text-center text-sm text-slate-400 p-8">Digite pelo menos 3 caracteres...</p>
@@ -148,7 +148,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
             {!loading && workers.map(worker => (
                <div key={worker.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-xl group transition-all cursor-pointer border border-transparent hover:border-slate-100 mb-1" onClick={() => handleStartChat(worker)}>
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                     <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
                         <User className="w-5 h-5" />
                      </div>
                      <div>
@@ -156,7 +156,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                         <p className="text-xs text-slate-500 font-medium">{worker.movil || 'Sem número'}</p>
                      </div>
                   </div>
-                  <button disabled={startingId === worker.id} className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-full group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 shadow-sm transition-all disabled:opacity-50">
+                  <button disabled={startingId === worker.id} className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-full group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 shadow-sm transition-all disabled:opacity-50">
                      {startingId === worker.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                   </button>
                </div>

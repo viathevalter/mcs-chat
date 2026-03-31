@@ -97,7 +97,7 @@ export default function AgendaPage() {
                               </span>
                             </div>
                             
-                            <Link href={`/inbox/${app.conversation_id}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-bold transition-colors">
+                            <Link href={`/inbox/${app.conversation_id}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-colors">
                                <MessageCircle className="w-3.5 h-3.5" />
                                Abrir Chat
                             </Link>

@@ -50,16 +50,16 @@ export function GlobalSidebar() {
     <nav className={`flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 transition-all duration-300 ${collapsed ? 'w-20' : 'w-[240px]'} h-full shrink-0 relative z-50`}>
       {/* Logo Area */}
       <div className="h-20 flex items-center justify-center border-b border-slate-100 dark:border-slate-800 shrink-0">
-         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
            M
          </div>
-         {!collapsed && <span className="ml-3 font-bold text-slate-800 dark:text-slate-100 text-lg tracking-tight shrink-0 whitespace-nowrap">Mastercorp</span>}
+         {!collapsed && <span className="ml-3 font-bold text-slate-800 dark:text-slate-100 text-lg tracking-tight shrink-0 whitespace-nowrap">MCS-Chat</span>}
       </div>
 
       {/* Collapse Button */}
       <button 
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-24 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors shadow-sm z-50"
+        className="absolute -right-3 top-24 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-500 hover:text-emerald-600 transition-colors shadow-sm z-50"
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>
@@ -72,8 +72,8 @@ export function GlobalSidebar() {
           const translatedLabel = t('sidebar', link.labelKey)
           return (
             <Link key={link.href} href={link.href} title={collapsed ? translatedLabel : undefined}>
-              <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl cursor-pointer transition-colors group relative ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-                <Icon className={`w-5 h-5 shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
+              <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl cursor-pointer transition-colors group relative ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                <Icon className={`w-5 h-5 shrink-0 transition-colors ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
                 {!collapsed && <span className="ml-3 text-[14px] whitespace-nowrap">{translatedLabel}</span>}
               </div>
             </Link>
@@ -86,7 +86,7 @@ export function GlobalSidebar() {
         {/* User Profile */}
         <div className={`w-full flex items-center ${collapsed ? 'justify-center' : 'justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2`}>
           <div className="flex items-center gap-2 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex flex-shrink-0 items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex flex-shrink-0 items-center justify-center text-emerald-600 dark:text-emerald-400">
               <UserIcon className="w-4 h-4" />
             </div>
             {!collapsed && (
@@ -122,12 +122,12 @@ export function GlobalSidebar() {
           </button>
         )}
 
-        <button onClick={toggleLanguage} className={`flex items-center ${collapsed ? 'justify-center w-10 h-10' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-indigo-300 transition-colors group`} title={t('sidebar', 'language')}>
+        <button onClick={toggleLanguage} className={`flex items-center ${collapsed ? 'justify-center w-10 h-10' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-emerald-300 transition-colors group`} title={t('sidebar', 'language')}>
            {collapsed ? (
              <span className="text-xs font-bold leading-none">{lang}</span>
            ) : (
              <>
-               <span className="text-xs font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" /> {t('sidebar', 'language')}</span>
+               <span className="text-xs font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" /> {t('sidebar', 'language')}</span>
                <span className="text-xs font-bold bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-200 dark:border-slate-700">{lang}</span>
              </>
            )}
@@ -136,15 +136,15 @@ export function GlobalSidebar() {
         {mounted && (
           <button 
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className={`flex items-center ${collapsed ? 'justify-center w-10 h-10' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-indigo-300 transition-colors group`}
+            className={`flex items-center ${collapsed ? 'justify-center w-10 h-10' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-emerald-300 transition-colors group`}
             title={t('sidebar', 'theme')}
           >
             {collapsed ? (
-               theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
+               theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
             ) : (
               <>
                <span className="text-xs font-semibold flex items-center gap-2">
-                 {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />}
+                 {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />}
                  {t('sidebar', 'theme')}
                </span>
                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{theme}</span>

@@ -11,18 +11,18 @@
   --chat-surface-bg: var(--color-white);
   --chat-area-bg: var(--color-slate-50);
   
-  --chat-outbound-bg-start: var(--color-indigo-500);
-  --chat-outbound-bg-end: var(--color-violet-600);
-  --chat-outbound-border: var(--color-indigo-400);
+  --chat-outbound-bg-start: var(--color-emerald-500);
+  --chat-outbound-bg-end: var(--color-teal-600);
+  --chat-outbound-border: var(--color-emerald-400);
   --chat-outbound-fg: var(--color-white);
-  --chat-outbound-shadow: var(--color-indigo-200);
+  --chat-outbound-shadow: var(--color-emerald-200);
   
   --chat-inbound-bg: var(--color-white);
   --chat-inbound-border: var(--color-slate-200);
   --chat-inbound-fg: var(--color-slate-700);
   
-  --chat-icon-bg: var(--color-indigo-100);
-  --chat-icon-text: var(--color-indigo-600);
+  --chat-icon-bg: var(--color-emerald-100);
+  --chat-icon-text: var(--color-emerald-600);
 }
 
 @theme inline {
@@ -62,9 +62,9 @@
   --chat-surface-bg: var(--color-slate-900);
   --chat-area-bg: var(--color-slate-900);
   
-  --chat-outbound-bg-start: var(--color-indigo-600);
-  --chat-outbound-bg-end: var(--color-indigo-800);
-  --chat-outbound-border: var(--color-indigo-500);
+  --chat-outbound-bg-start: var(--color-emerald-600);
+  --chat-outbound-bg-end: var(--color-emerald-800);
+  --chat-outbound-border: var(--color-emerald-500);
   --chat-outbound-fg: var(--color-slate-50);
   --chat-outbound-shadow: transparent;
   
@@ -73,7 +73,7 @@
   --chat-inbound-fg: var(--color-slate-200);
 
   --chat-icon-bg: var(--color-slate-800);
-  --chat-icon-text: var(--color-indigo-400);
+  --chat-icon-text: var(--color-emerald-400);
 }
 
 .sunset {

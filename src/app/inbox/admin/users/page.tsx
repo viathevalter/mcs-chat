@@ -92,17 +92,17 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto shadow-sm">
-        <table className="w-full text-left text-sm whitespace-nowrap">
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <table className="w-full text-left text-sm table-fixed">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
-              <th className="px-6 py-4 font-bold text-slate-800">
+              <th className="px-6 py-4 font-bold text-slate-800 w-full lg:w-1/2">
                 {t("adminUsers", "tableUser")}
               </th>
-              <th className="px-6 py-4 font-bold text-slate-800">
+              <th className="px-6 py-4 font-bold text-slate-800 w-[240px]">
                 {t("adminUsers", "tableRole")}
               </th>
-              <th className="px-6 py-4 font-bold text-slate-800 text-right">
+              <th className="px-6 py-4 font-bold text-slate-800 text-right w-[160px]">
                 {t("adminUsers", "tableStatus")}
               </th>
             </tr>

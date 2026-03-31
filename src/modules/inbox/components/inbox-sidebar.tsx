@@ -8,10 +8,12 @@ import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NewChatModal } from './new-chat-modal'
 import { ThemeSwitcher } from './theme-switcher'
+import { useI18n } from '@/contexts/i18n-context'
 
 type FilterType = 'minhas' | 'abertas' | 'todos' | 'fechadas'
 
 export default function InboxSidebar() {
+  const { t } = useI18n()
   const { conversations, loading, currentUserId } = useInbox()
   const params = useParams()
   const activeId = params?.id as string
@@ -71,7 +73,7 @@ export default function InboxSidebar() {
       {/* Header */}
       <div className="h-20 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <h1 className="text-[22px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          Conversas
+          {t('sidebar', 'inbox')}
         </h1>
         <div className="flex items-center gap-1.5">
            <ThemeSwitcher />
@@ -79,7 +81,7 @@ export default function InboxSidebar() {
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
               Agenda
            </Link>
-           <button onClick={() => setIsModalOpen(true)} className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none rounded-lg transition-colors flex items-center justify-center relative group" title="Buscar Trabalhador">
+           <button onClick={() => setIsModalOpen(true)} className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none rounded-lg transition-colors flex items-center justify-center relative group" title={t('inboxSidebar', 'newChat')}>
              <Plus className="w-4 h-4" />
            </button>
         </div>
@@ -93,7 +95,7 @@ export default function InboxSidebar() {
             type="text" 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Buscar colaborador ou telefone..." 
+            placeholder={t('inboxSidebar', 'searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
           />
         </div>
@@ -120,13 +122,13 @@ export default function InboxSidebar() {
           onClick={() => setActiveFilter('minhas')}
           className={`${activeFilter === 'minhas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
         >
-          Minhas
+          {t('inboxSidebar', 'mine')}
         </button>
         <button 
           onClick={() => setActiveFilter('abertas')}
           className={`${activeFilter === 'abertas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors flex items-center`}
         >
-          Abertas 
+          {t('inboxSidebar', 'open')}
           <span className={`text-[10px] ml-1 px-1.5 py-0.5 rounded-full ${activeFilter === 'abertas' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
             {openCount}
           </span>
@@ -135,22 +137,22 @@ export default function InboxSidebar() {
           onClick={() => setActiveFilter('todos')}
           className={`${activeFilter === 'todos' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
         >
-          Todos
+          {t('inboxSidebar', 'all')}
         </button>
         <button 
           onClick={() => setActiveFilter('fechadas')}
           className={`${activeFilter === 'fechadas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
         >
-          Fechadas
+          {t('inboxSidebar', 'closed')}
         </button>
       </div>
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading ? (
-          <p className="text-center text-sm text-slate-400 mt-10">Carregando conversas...</p>
+          <p className="text-center text-sm text-slate-400 mt-10">{t('inboxSidebar', 'loading')}</p>
         ) : filteredConversations.length === 0 ? (
-          <p className="text-center text-xs text-slate-400 mt-10">Nenhuma conversa encontrada neste filtro.</p>
+          <p className="text-center text-xs text-slate-400 mt-10">{t('inboxSidebar', 'noConversations')}</p>
         ) : (
           filteredConversations.map(conv => (
             <Link key={conv.id} href={`/inbox/${conv.id}`}>

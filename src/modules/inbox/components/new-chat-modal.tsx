@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react'
 import { Search, X, User, ArrowRight, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useI18n } from '@/contexts/i18n-context'
 
 export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [workers, setWorkers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -43,7 +45,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       // Clean phone
       const phone = worker.movil ? worker.movil.replace(/\D/g, '') : null
       if (!phone) {
-         alert('Trabalhador não possui celular cadastrado.')
+         alert(t('newChatModal', 'noPhone'))
          setStartingId(null)
          return
       }
@@ -74,7 +76,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
         .single()
       
       if (!channel) {
-         alert('Nenhum canal WhatsApp configurado e ativo. Vá em Configurações.')
+         alert(t('newChatModal', 'noChannel'))
          setStartingId(null)
          return
       }
@@ -99,7 +101,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
 
     } catch (err) {
       console.error(err)
-      alert('Erro ao iniciar conversa')
+      alert(t('newChatModal', 'error'))
     } finally {
       setStartingId(null)
     }
@@ -112,7 +114,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
          {/* Header */}
          <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-            <h2 className="text-xl font-bold text-slate-800">Novo Atendimento</h2>
+            <h2 className="text-xl font-bold text-slate-800">{t('newChatModal', 'title')}</h2>
             <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
                <X className="w-5 h-5" />
             </button>
@@ -125,7 +127,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                <input 
                  autoFocus
                  type="text"
-                 placeholder="Buscar por nome ou celular..."
+                 placeholder={t('newChatModal', 'searchPlaceholder')}
                  value={query}
                  onChange={e => setQuery(e.target.value)}
                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
@@ -138,11 +140,11 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
             {loading && <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /></div>}
             
             {!loading && query.length > 0 && query.length < 3 && (
-               <p className="text-center text-sm text-slate-400 p-8">Digite pelo menos 3 caracteres...</p>
+               <p className="text-center text-sm text-slate-400 p-8">{t('newChatModal', 'typeMore')}</p>
             )}
 
             {!loading && query.length >= 3 && workers.length === 0 && (
-               <p className="text-center text-sm text-slate-400 p-8">Nenhum trabalhador encontrado.</p>
+               <p className="text-center text-sm text-slate-400 p-8">{t('newChatModal', 'noWorker')}</p>
             )}
 
             {!loading && workers.map(worker => (

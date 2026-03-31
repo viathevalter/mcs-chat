@@ -62,7 +62,11 @@ export function useChat(conversationId: string) {
     setLoading(false)
   }
 
-  const sendMessage = async (text: string, messageType: string = 'text') => {
+  const sendMessage = async (
+    text: string, 
+    messageType: string = 'text', 
+    options?: { mediaUrl?: string; fileName?: string }
+  ) => {
     // Generate optimistic ID
     const optId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
     
@@ -72,7 +76,7 @@ export function useChat(conversationId: string) {
       conversation_id: conversationId,
       direction: messageType === 'internal_note' ? 'internal' : 'outbound',
       content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
-      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : undefined,
+      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : options?.mediaUrl,
       message_type: messageType,
       status: 'sending',
       created_at: new Date().toISOString(),
@@ -85,7 +89,13 @@ export function useChat(conversationId: string) {
       await fetch('/api/chat/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, text, messageType })
+        body: JSON.stringify({ 
+          conversationId, 
+          text, 
+          messageType,
+          mediaUrl: options?.mediaUrl,
+          fileName: options?.fileName
+        })
       })
       
       // Update local state to delivered/sent (temporarily until realtime sync)

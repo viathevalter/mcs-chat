@@ -4,7 +4,8 @@ import { evolutionApi } from '@/lib/whatsapp/evolution-api'
 
 export async function POST(req: Request) {
   try {
-    const { conversationId, text, messageType = 'text' } = await req.json()
+    const reqData = await req.json()
+    const { conversationId, text, messageType = 'text', mediaUrl, fileName } = reqData
     if (!conversationId || !text) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
@@ -48,6 +49,20 @@ export async function POST(req: Request) {
           apiToken,
           provider
         })
+      } else if (messageType === 'image' || messageType === 'document') {
+        const _mediaUrl = reqData.mediaUrl
+        const _fileName = reqData.fileName || `file_${Date.now()}`
+        await evolutionApi.sendMedia({
+          number: cleanedPhone,
+          mediaUrl: _mediaUrl,
+          mediaType: messageType,
+          fileName: _fileName,
+          caption: text || '',
+          instanceName,
+          apiUrl,
+          apiToken,
+          provider
+        })
       } else {
         // Send via Evolution API (Dynamic Multi-Tenant)
         await evolutionApi.sendText({
@@ -66,7 +81,7 @@ export async function POST(req: Request) {
       conversation_id: conversationId,
       direction: isInternalNote ? 'internal' : 'outbound',
       content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
-      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : null,
+      media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : mediaUrl || null,
       message_type: isInternalNote ? 'internal_note' : messageType,
       sender_name: isInternalNote ? 'RH (Nota Interna)' : 'RH (Atendente)',
       status: isInternalNote ? 'delivered' : 'sent'

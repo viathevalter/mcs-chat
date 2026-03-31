@@ -6,8 +6,10 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import AgendaForm from './agenda-form'
 import { supabase } from '@/lib/supabase/client'
+import { useI18n } from '@/contexts/i18n-context'
 
 export default function ChatContextPanel({ conversationId }: { conversationId: string }) {
+  const { t } = useI18n()
   const { context, loading } = useConversationContext(conversationId)
   const [activeTab, setActiveTab] = useState<'info' | 'agenda'>('info')
   const [appointments, setAppointments] = useState<any[]>([])
@@ -31,7 +33,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
      return (
        <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col items-center justify-center h-full border-l border-slate-200 hidden lg:flex">
           <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-4" />
-          <p className="text-sm text-slate-500">Carregando contexto HR...</p>
+          <p className="text-sm text-slate-500">{t('contextPanel', 'loadingContext')}</p>
        </aside>
      )
   }
@@ -39,7 +41,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   if (!context) {
      return (
        <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col items-center p-8 text-center h-full border-l border-slate-200 hidden lg:flex">
-          <p className="text-sm text-slate-500">Contexto não disponível.</p>
+          <p className="text-sm text-slate-500">{t('contextPanel', 'noContext')}</p>
        </aside>
      )
   }
@@ -74,13 +76,13 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
            onClick={() => setActiveTab('info')}
            className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'info' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
          >
-           Visão Geral
+           {t('contextPanel', 'overview')}
          </button>
          <button 
            onClick={() => setActiveTab('agenda')}
            className={`pb-3 border-b-2 flex-1 transition-colors ${activeTab === 'agenda' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
          >
-           Agenda
+           {t('contextPanel', 'agenda')}
          </button>
       </div>
 
@@ -92,16 +94,16 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
             {/* Company Info */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <Building className="w-3.5 h-3.5" /> Vínculo Empregatício
+                <Building className="w-3.5 h-3.5" /> {t('contextPanel', 'companyLink')}
               </h3>
               <div className="bg-white rounded-2xl p-4 border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow space-y-3">
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Empresa Oficial</p>
+                   <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">{t('contextPanel', 'officialCompany')}</p>
                    <p className="text-sm font-semibold text-slate-800">MCS-Chat</p>
                 </div>
                 <div className="h-px w-full bg-slate-100"></div>
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Data de Início do Chat</p>
+                   <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">{t('contextPanel', 'chatStartDate')}</p>
                    <p className="text-sm font-semibold text-slate-700">
                      {conversation?.created_at ? format(new Date(conversation.created_at), "dd MMM yyyy", { locale: ptBR }) : '-'}
                    </p>
@@ -112,16 +114,16 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
             {/* Worksite */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <Briefcase className="w-3.5 h-3.5" /> Detalhes da Linha
+                <Briefcase className="w-3.5 h-3.5" /> {t('contextPanel', 'lineDetails')}
               </h3>
               <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 rounded-2xl p-4 border border-emerald-100 shadow-sm hover:shadow-md transition-shadow space-y-3">
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">Status do Ticket</p>
+                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">{t('contextPanel', 'ticketStatus')}</p>
                    <p className="text-sm font-bold text-emerald-900 uppercase">{conversation?.status}</p>
                 </div>
                 <div className="h-px w-full bg-emerald-100/50"></div>
                 <div>
-                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">Telefone Vinculado</p>
+                   <p className="text-[10px] uppercase tracking-wider text-emerald-600/80 font-bold mb-1">{t('contextPanel', 'phoneLinked')}</p>
                    <p className="text-sm font-semibold text-emerald-800">{conversation?.contact_phone}</p>
                 </div>
               </div>
@@ -136,11 +138,11 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
             <div className="space-y-3 mt-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <CalendarHeart className="w-3.5 h-3.5" /> Próximos Atendimentos
+                <CalendarHeart className="w-3.5 h-3.5" /> {t('contextPanel', 'nextAppointments')}
               </h3>
               
               {appointments.length === 0 ? (
-                <p className="text-center text-xs text-slate-400 mt-4 italic">Nenhum retorno agendado.</p>
+                <p className="text-center text-xs text-slate-400 mt-4 italic">{t('contextPanel', 'noAppointments')}</p>
               ) : (
                 appointments.map(app => (
                   <div key={app.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm relative overflow-hidden">

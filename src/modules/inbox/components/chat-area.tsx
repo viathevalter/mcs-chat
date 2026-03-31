@@ -1,6 +1,6 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap, Loader2, Image as ImageIcon, FileText, X } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format, isToday, isYesterday, isSameDay } from 'date-fns'
@@ -8,6 +8,8 @@ import { ptBR } from 'date-fns/locale'
 import { AudioRecorder } from './audio-recorder'
 import { CustomAudioPlayer } from './custom-audio-player'
 import { supabase } from '@/lib/supabase/client'
+import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react'
+import { useI18n } from '@/contexts/i18n-context'
 
 interface ChatAreaProps {
   conversationId: string
@@ -15,7 +17,15 @@ interface ChatAreaProps {
   isPanelOpen?: boolean
 }
 
+interface QuickReply {
+  id: string
+  title: string
+  shortcut: string | null
+  content: string
+}
+
 export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: ChatAreaProps) {
+  const { t } = useI18n()
   const { messages, loading, sendMessage } = useChat(conversationId)
   const { context } = useConversationContext(conversationId)
   const [text, setText] = useState('')
@@ -26,13 +36,30 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
+  // Novas states para Ferramentas
+  const [showEmoji, setShowEmoji] = useState(false)
+  const [showAttach, setShowAttach] = useState(false)
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+
+  const docInputRef = useRef<HTMLInputElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null))
+    fetchQuickReplies()
   }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const fetchQuickReplies = async () => {
+    const { data } = await supabase.from('chat_quick_replies').select('*').order('created_at', { ascending: false })
+    if (data) setQuickReplies(data)
+  }
 
   const handleSend = async () => {
     if (!text.trim() || isSending) return
@@ -40,6 +67,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     try {
       await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text')
       setText('')
+      setShowQuickReplies(false)
+      setShowEmoji(false)
     } finally {
       setIsSending(false)
     }
@@ -52,6 +81,40 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       await sendMessage(base64Audio, 'audio')
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // Limites (16MB fotos/videos | 100MB Documentação)
+    const maxSize = type === 'image' ? 16 * 1024 * 1024 : 100 * 1024 * 1024
+    if (file.size > maxSize) {
+      alert(type === 'image' ? t('chatArea', 'maxImageLimit') : t('chatArea', 'maxDocLimit'))
+      return
+    }
+
+    setShowAttach(false)
+    setIsUploading(true)
+    
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
+      
+      const { data, error } = await supabase.storage.from('chat_media').upload(fileName, file)
+      if (error) throw error
+      
+      const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName)
+      
+      await sendMessage('', type, { mediaUrl: publicUrl, fileName: file.name })
+      
+    } catch (err) {
+      console.error('Erro no upload', err)
+      alert(t('chatArea', 'error'))
+    } finally {
+      setIsUploading(false)
+      if (e.target) e.target.value = ''
     }
   }
 
@@ -74,6 +137,39 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       setIsAssigning(false)
     }
   }
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setText((prev) => prev + emojiData.emoji)
+  }
+
+  const handleSelectQuickReply = (content: string) => {
+    setText((prev) => {
+      // Remove o atalho digitado (ex: /bomdia) se houver
+      const replaced = prev.replace(/\/[a-z0-9_-]*$/i, '')
+      return replaced + content
+    })
+    setShowQuickReplies(false)
+    textareaRef.current?.focus()
+  }
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setText(val)
+    
+    // Trigger para mostrar quick replies
+    const latestWordMatch = val.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
+    if (latestWordMatch) {
+      setShowQuickReplies(true)
+    } else if (showQuickReplies && !val.includes('/')) {
+      setShowQuickReplies(false)
+    }
+  }
+
+  const currentMatch = text.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
+  const currentShortcutStr = currentMatch ? currentMatch[2].toLowerCase() : ''
+  const filteredReplies = currentShortcutStr 
+    ? quickReplies.filter(r => r.shortcut && r.shortcut.toLowerCase().startsWith(currentShortcutStr))
+    : quickReplies
 
   const conversation = context?.conversation
   const isMine = conversation?.assigned_to === currentUserId
@@ -105,29 +201,25 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           {isClosed ? (
             <span className="px-4 py-2 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-2">
                <LockKeyhole className="w-3.5 h-3.5" />
-               Ticket Fechado
+               {t('chatArea', 'closedTicket')}
             </span>
           ) : isMine ? (
             <button onClick={handleClose} disabled={isAssigning} className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
                <CheckCircle2 className="w-3.5 h-3.5" />
-               Encerrar Atendimento
+               {t('chatArea', 'endChat')}
             </button>
           ) : (
             <button onClick={handleAssign} disabled={isAssigning} className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
                <LockOpen className="w-3.5 h-3.5" />
-               Assumir Atendimento
+               {t('chatArea', 'takeChat')}
             </button>
           )}
 
-          <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Resumir com IA">
-             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
-          </button>
-          
           {togglePanel && (
             <button 
               onClick={togglePanel}
               className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all border border-transparent hover:border-emerald-100 flex items-center justify-center shrink-0" 
-              title={isPanelOpen ? "Esconder detalhes" : "Mostrar detalhes"}
+              title={isPanelOpen ? t('chatArea', 'hideDetails') : t('chatArea', 'showDetails')}
             >
                {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
             </button>
@@ -140,10 +232,10 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {loading && <p className="text-center text-slate-400 text-sm mt-10">Carregando mensagens...</p>}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6" onClick={() => {setShowEmoji(false); setShowAttach(false); setShowQuickReplies(false);}}>
+        {loading && <p className="text-center text-slate-400 text-sm mt-10">{t('chatArea', 'loadingMessages')}</p>}
         {messages.length === 0 && !loading && (
-          <div className="text-center text-slate-400 text-sm mt-10">Nenhuma mensagem neste chat ainda.</div>
+          <div className="text-center text-slate-400 text-sm mt-10">{t('chatArea', 'noMessages')}</div>
         )}
         
         {messages.map((msg, index) => {
@@ -189,11 +281,20 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               </div>
               <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
                 
-                {msg.media_url && msg.message_type !== 'audio' && (
+                {msg.media_url && msg.message_type === 'image' && (
                   <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
                   </div>
+                )}
+
+                {msg.media_url && msg.message_type === 'document' && (
+                  <a href={msg.media_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-white/20 rounded-xl mb-1 mt-1 mx-1 hover:bg-white/30 transition">
+                    <div className="p-2 bg-white/50 rounded-lg shrink-0">
+                       <FileText className="w-6 h-6" />
+                    </div>
+                    <span className="text-sm font-medium underline underline-offset-2">{t('chatArea', 'downloadDoc')}</span>
+                  </a>
                 )}
                 
                 {msg.media_url && msg.message_type === 'audio' && (
@@ -204,13 +305,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   />
                 )}
 
-                {msg.content && msg.content !== '[Mídia UAZ]' && (
+                {msg.content && msg.content !== '[Mídia UAZ]' && msg.content !== '[Mensagem de Voz]' && (
                    <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
                 )}
-                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-chat-outbound-fg opacity-80') : 'text-chat-inbound-fg opacity-60'}`}>
-                   <span className="text-[10px] font-medium">{time} {isNote && '• Nota Interna'}</span>
+                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 grouphover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-chat-outbound-fg opacity-80') : 'text-chat-inbound-fg opacity-60'}`}>
+                   <span className="text-[10px] font-medium">{time} {isNote && t('chatArea', 'internalNoteTag')}</span>
                    {isOutbound && !isNote && (
-                      msg.status === 'error' ? <span className="text-[10px] text-red-400">Erro</span> :
+                      msg.status === 'error' ? <span className="text-[10px] text-red-400">{t('chatArea', 'error')}</span> :
                       msg.status === 'read' ? <CheckCheck className="w-4 h-4 text-blue-300" /> :
                       msg.status === 'delivered' ? <CheckCheck className="w-4 h-4" /> :
                       msg.status === 'sending' ? <Clock className="w-3.5 h-3.5" /> :
@@ -225,22 +326,98 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 bg-chat-surface-bg/80 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300">
-        <div className="max-w-5xl mx-auto flex flex-col gap-2">
+      <div className="p-4 bg-chat-surface-bg/80 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
+        
+        {/* Quick Replies Popup */}
+        {showQuickReplies && quickReplies.length > 0 && (
+          <div className="absolute bottom-full left-4 mb-2 w-80 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden transform transition-all pb-1 max-h-72 overflow-y-auto">
+            <div className="p-3 border-b border-slate-100 bg-slate-50/80 sticky top-0 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('quickReplies', 'title')}</span>
+              <button onClick={() => setShowQuickReplies(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-1">
+              {filteredReplies.length === 0 && <div className="p-4 text-xs text-center text-slate-400">{t('quickReplies', 'noShortcutFound')}</div>}
+              {filteredReplies.map((reply) => (
+                <button
+                  key={reply.id}
+                  onClick={() => handleSelectQuickReply(reply.content)}
+                  className="w-full text-left p-3 hover:bg-emerald-50 rounded-xl transition-colors flex flex-col gap-1 border border-transparent hover:border-emerald-100/50"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-emerald-800">{reply.title}</span>
+                    {reply.shortcut && <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 font-semibold border border-slate-200 rounded">{reply.shortcut}</span>}
+                  </div>
+                  <span className="text-xs text-slate-500 truncate">{reply.content}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Emoji Picker Popup */}
+        {showEmoji && (
+          <div className="absolute bottom-full left-4 mb-2 shadow-2xl rounded-2xl overflow-hidden border border-slate-200">
+            <EmojiPicker onEmojiClick={onEmojiClick} theme={Theme.AUTO} searchPlaceholder="Buscar emoji..." />
+          </div>
+        )}
+
+        {/* Attachment Options Popup */}
+        {showAttach && (
+          <div className="absolute bottom-full left-20 mb-2 w-56 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden p-1.5 animate-in fade-in slide-in-from-bottom-2">
+             <button
+                onClick={() => { photoInputRef.current?.click() }}
+                className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700"
+             >
+                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                   <ImageIcon className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-sm font-semibold">{t('chatArea', 'photos')}</span>
+                  <span className="block text-xs text-slate-500">{t('chatArea', 'maxImageLimit')}</span>
+                </div>
+             </button>
+             <button
+                onClick={() => { docInputRef.current?.click() }}
+                className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700 mt-1"
+             >
+                <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+                   <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-sm font-semibold">{t('chatArea', 'documents')}</span>
+                  <span className="block text-xs text-slate-500">{t('chatArea', 'maxDocLimit')}</span>
+                </div>
+             </button>
+          </div>
+        )}
+
+        {/* File Inputs (Hidden) */}
+        <input type="file" ref={photoInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => handleFileUpload(e, 'image')} />
+        <input type="file" ref={docInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={(e) => handleFileUpload(e, 'document')} />
+
+        <div className="max-w-5xl mx-auto flex flex-col gap-2 relative">
+           {/* Uploading indicator */}
+           {isUploading && (
+             <div className="absolute -top-10 left-0 bg-emerald-50 text-emerald-700 text-xs px-4 py-2 font-bold rounded-full border border-emerald-200 flex items-center gap-2 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                {t('chatArea', 'uploading')}
+             </div>
+           )}
+
            {/* Tabs Responder / Privada */}
            <div className="flex items-center gap-6 px-2 text-[13px] font-semibold text-slate-500">
               <button 
                 onClick={() => setActiveTab('reply')}
                 className={`${activeTab === 'reply' ? 'text-slate-800 border-emerald-600' : 'hover:text-slate-800 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
               >
-                 Responder
+                 {t('chatArea', 'reply')}
               </button>
               <button 
                 onClick={() => setActiveTab('note')}
                 className={`${activeTab === 'note' ? 'text-amber-600 border-amber-600' : 'hover:text-amber-600 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
               >
                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                 Mensagem Privada
+                 {t('chatArea', 'privateNote')}
               </button>
            </div>
            
@@ -249,24 +426,25 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              
              {/* Ações Rápidas (Esquerda) */}
              <div className="flex items-center gap-0.5 shrink-0 self-end mb-1">
-               <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Respostas Rápidas (/)">
+               <button onClick={() => setShowQuickReplies(!showQuickReplies)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showQuickReplies ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'quickReplies')}>
                  <Zap className="w-5 h-5" />
                </button>
-               <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Emoji">
+               <button onClick={() => setShowEmoji(!showEmoji)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showEmoji ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'emoji')}>
                  <Smile className="w-5 h-5" />
                </button>
-               <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-slate-50 rounded-xl transition-colors shrink-0" title="Anexar">
+               <button onClick={() => setShowAttach(!showAttach)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showAttach ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'attach')}>
                  <Paperclip className="w-5 h-5" />
                </button>
                <div className="flex items-center justify-center -ml-1">
-                  <AudioRecorder onSend={handleSendAudio} disabled={isSending} />
+                  <AudioRecorder onSend={handleSendAudio} disabled={isSending || isUploading} />
                </div>
              </div>
              
              <div className="flex-1 flex overflow-hidden self-center border-l border-slate-200/60 pl-2 ml-1">
                <textarea 
+                 ref={textareaRef}
                  value={text}
-                 onChange={(e) => setText(e.target.value)}
+                 onChange={handleTextChange}
                  onKeyDown={(e) => {
                    if (e.key === 'Enter' && !e.shiftKey) {
                      e.preventDefault()
@@ -276,7 +454,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                    }
                  }}
                  className="w-full bg-transparent px-2 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
-                 placeholder={activeTab === 'note' ? "Nota interna..." : "Digite uma mensagem..."}
+                 placeholder={activeTab === 'note' ? t('chatArea', 'internalNote') : t('chatArea', 'typeMessage')}
                  rows={1}
                />
              </div>
@@ -285,9 +463,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              <div className="shrink-0 self-end mb-1 mr-1">
                <button 
                  onClick={handleSend} 
-                 disabled={isSending || text.trim() === ''} 
+                 disabled={isSending || text.trim() === '' || isUploading} 
                  className={`p-2.5 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center justify-center ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-800'}`}
-                 title={activeTab === 'note' ? 'Salvar' : 'Enviar'}
+                 title={activeTab === 'note' ? t('chatArea', 'save') : t('chatArea', 'send')}
                >
                  <Send className="w-5 h-5 ml-0.5" />
                </button>

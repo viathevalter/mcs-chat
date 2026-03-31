@@ -10,6 +10,7 @@ import { CustomAudioPlayer } from './custom-audio-player'
 import { supabase } from '@/lib/supabase/client'
 import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react'
 import { useI18n } from '@/contexts/i18n-context'
+import { useRouter } from 'next/navigation'
 
 interface ChatAreaProps {
   conversationId: string
@@ -26,6 +27,7 @@ interface QuickReply {
 
 export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: ChatAreaProps) {
   const { t } = useI18n()
+  const router = useRouter()
   const { messages, loading, sendMessage } = useChat(conversationId)
   const { context } = useConversationContext(conversationId)
   const [text, setText] = useState('')
@@ -123,6 +125,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     setIsAssigning(true)
     try {
       await supabase.from('chat_conversations').update({ assigned_to: currentUserId, status: 'open' }).eq('id', conversationId)
+      router.refresh()
     } finally {
       setIsAssigning(false)
     }
@@ -133,6 +136,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     setIsAssigning(true)
     try {
       await supabase.from('chat_conversations').update({ status: 'closed', assigned_to: null }).eq('id', conversationId)
+      router.replace('/inbox')
+    } catch (error) {
+      console.error('Erro ao encerrar:', error)
     } finally {
       setIsAssigning(false)
     }

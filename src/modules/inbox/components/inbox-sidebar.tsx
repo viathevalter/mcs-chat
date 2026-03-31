@@ -20,7 +20,8 @@ export default function InboxSidebar() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   
   const [activeFilter, setActiveFilter] = useState<FilterType>('abertas')
-  const [channelFilter, setChannelFilter] = useState<string>('all')
+  const [channelFilter, setChannelFilter] = useState<string[]>([])
+  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Derive unique channels from current conversation list
@@ -37,7 +38,7 @@ export default function InboxSidebar() {
   const filteredConversations = useMemo(() => {
     return conversations.filter(conv => {
       // 1. Channel Filter
-      if (channelFilter !== 'all' && conv.channel_id !== channelFilter) return false
+      if (channelFilter.length > 0 && conv.channel_id && !channelFilter.includes(conv.channel_id)) return false
       
       // 2. Search Filter
       if (searchQuery) {
@@ -100,18 +101,51 @@ export default function InboxSidebar() {
           />
         </div>
         {availableChannels.length > 0 && (
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg text-sm px-2 focus-within:ring-2 focus-within:ring-emerald-500/50">
-             <span className="text-[10px] uppercase font-bold text-slate-400 select-none mr-2">{t('inboxSidebar', 'channel')}</span>
-             <select 
-               value={channelFilter} 
-               onChange={(e) => setChannelFilter(e.target.value)}
-               className="w-full py-1.5 bg-transparent border-none focus:outline-none text-slate-700 font-medium text-[13px] cursor-pointer"
+          <div className="relative">
+             <button 
+               onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
+               className="w-full flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm px-3 py-2 text-slate-700 font-medium cursor-pointer shadow-sm hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
              >
-                <option value="all">{t('inboxSidebar', 'allChannels')}</option>
-                {availableChannels.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-             </select>
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] uppercase font-bold text-slate-400 select-none shrink-0">{t('inboxSidebar', 'channel')}:</span>
+                   <span className="text-[13px] truncate">
+                     {channelFilter.length === 0 ? t('inboxSidebar', 'allChannels') : `${channelFilter.length} Selecionados`}
+                   </span>
+                </div>
+                <svg className={`w-4 h-4 text-emerald-600 transition-transform ${isChannelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+             </button>
+             
+             {isChannelDropdownOpen && (
+               <>
+                 <div className="fixed inset-0 z-40" onClick={() => setIsChannelDropdownOpen(false)}></div>
+                 <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl z-50 py-1 max-h-64 overflow-y-auto">
+                    <button 
+                      onClick={() => { setChannelFilter([]); setIsChannelDropdownOpen(false) }}
+                      className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors font-semibold border-b border-slate-100 dark:border-slate-800"
+                    >
+                       💡 {t('inboxSidebar', 'allChannels')}
+                    </button>
+                    {availableChannels.map(c => {
+                       const isSelected = channelFilter.includes(c.id)
+                       return (
+                         <button 
+                           key={c.id} 
+                           onClick={(e) => {
+                             e.preventDefault()
+                             setChannelFilter(prev => isSelected ? prev.filter(id => id !== c.id) : [...prev, c.id])
+                           }}
+                           className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                         >
+                            <div className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}>
+                               {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" /></svg>}
+                            </div>
+                            <span className={`truncate text-left flex-1 ${isSelected ? 'font-bold text-emerald-800 dark:text-emerald-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>{c.name}</span>
+                         </button>
+                       )
+                    })}
+                 </div>
+               </>
+             )}
           </div>
         )}
       </div>
@@ -174,7 +208,8 @@ export default function InboxSidebar() {
                         </span>
                      )}
                    </div>
-                   {conv.unread_count > 0 && (
+                   {/* Optimistic UI update: hide badge if it's the currently active open conversation wrapper */}
+                   {conv.unread_count > 0 && activeId !== conv.id && (
                      <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
                         {conv.unread_count}
                      </div>

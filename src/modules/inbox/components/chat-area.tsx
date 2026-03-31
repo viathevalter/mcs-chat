@@ -132,7 +132,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (isAssigning) return
     setIsAssigning(true)
     try {
-      await supabase.from('chat_conversations').update({ status: 'closed' }).eq('id', conversationId)
+      await supabase.from('chat_conversations').update({ status: 'closed', assigned_to: null }).eq('id', conversationId)
     } finally {
       setIsAssigning(false)
     }

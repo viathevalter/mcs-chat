@@ -1,0 +1,294 @@
+  /send/media:
+    post:
+      operationId: sendMedia
+      tags:
+        - Enviar Mensagem
+      summary: Enviar mídia (imagem, vídeo, áudio ou documento)
+      description: >
+        Envia diferentes tipos de mídia para um contato ou grupo. Suporta URLs ou arquivos base64.
+
+
+        ## Tipos de Mídia Suportados
+
+        - **`image`**: Imagens (JPG preferencialmente)
+
+        - **`video`**: Vídeos (apenas MP4)
+
+        - **`document`**: Documentos (PDF, DOCX, XLSX, etc)
+
+        - **`audio`**: Áudio comum (MP3 ou OGG)
+
+        - **`myaudio`**: Mensagem de voz (alternativa ao PTT)
+
+        - **`ptt`**: Mensagem de voz (Push-to-Talk)
+
+        - **`ptv`**: Mensagem de vídeo (Push-to-Video)
+
+        - **`sticker`**: Figurinha/Sticker
+
+
+        ## Recursos Específicos
+
+        - **Upload por URL ou base64**
+
+        - **Caption/legenda** opcional com suporte a placeholders
+
+        - **Nome personalizado** para documentos (`docName`)
+
+        - **Geração automática de thumbnails**
+
+        - **Compressão otimizada** conforme o tipo
+
+
+        ## Campos Comuns
+
+
+        Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+
+        `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders
+        e envio para grupos.
+
+
+        ## Exemplos Básicos
+
+
+        ### Imagem Simples
+
+        ```json
+
+        {
+          "number": "5511999999999",
+          "type": "image",
+          "file": "https://exemplo.com/foto.jpg"
+        }
+
+        ```
+
+
+        ### Documento com Nome
+
+        ```json
+
+        {
+          "number": "5511999999999",
+          "type": "document",
+          "file": "https://exemplo.com/contrato.pdf",
+          "docName": "Contrato.pdf",
+          "text": "Segue o documento solicitado"
+        }
+
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number:
+                  type: string
+                  description: >-
+                    ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato
+                    internacional, um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+                  example: '5511999999999'
+                type:
+                  type: string
+                  description: Tipo de mídia (image, video, document, audio, myaudio, ptt, ptv, sticker)
+                  enum:
+                    - image
+                    - video
+                    - document
+                    - audio
+                    - myaudio
+                    - ptt
+                    - ptv
+                    - sticker
+                  example: image
+                file:
+                  type: string
+                  description: URL ou base64 do arquivo
+                  example: https://exemplo.com/imagem.jpg
+                text:
+                  type: string
+                  description: Texto descritivo (caption) - aceita placeholders
+                  example: Veja esta foto!
+                docName:
+                  type: string
+                  description: Nome do arquivo (apenas para documents)
+                  example: relatorio.pdf
+                thumbnail:
+                  type: string
+                  description: URL ou base64 de thumbnail personalizado para vídeos e documentos
+                  example: https://exemplo.com/thumb.jpg
+                mimetype:
+                  type: string
+                  description: MIME type do arquivo (opcional, detectado automaticamente)
+                  example: application/pdf
+                replyid:
+                  type: string
+                  description: ID da mensagem para responder
+                  example: 3EB0538DA65A59F6D8A251
+                mentions:
+                  type: string
+                  description: Números para mencionar (separados por vírgula)
+                  example: 5511999999999,5511888888888
+                readchat:
+                  type: boolean
+                  description: Marca conversa como lida após envio
+                  example: true
+                readmessages:
+                  type: boolean
+                  description: Marca últimas mensagens recebidas como lidas
+                  example: true
+                delay:
+                  type: integer
+                  description: >-
+                    Atraso em milissegundos antes do envio, durante o atraso apacerá 'Digitando...' ou 'Gravando
+                    áudio...'
+                  example: 1000
+                forward:
+                  type: boolean
+                  description: Marca a mensagem como encaminhada no WhatsApp
+                  example: true
+                track_source:
+                  type: string
+                  description: Origem do rastreamento da mensagem
+                  example: chatwoot
+                track_id:
+                  type: string
+                  description: ID para rastreamento da mensagem (aceita valores duplicados)
+                  example: msg_123456789
+                async:
+                  type: boolean
+                  description: Se true, envia a mensagem de forma assíncrona via fila interna
+                  example: false
+              required:
+                - number
+                - type
+                - file
+            examples:
+              image:
+                summary: Imagem
+                description: Envio de imagem simples
+                value:
+                  number: '5511999999999'
+                  type: image
+                  file: https://exemplo.com/foto.jpg
+              imageWithCaption:
+                summary: Imagem com legenda
+                description: Imagem com texto descritivo
+                value:
+                  number: '5511999999999'
+                  type: image
+                  file: https://exemplo.com/foto.jpg
+                  text: Veja esta foto!
+              document:
+                summary: Documento
+                description: Documento PDF com nome personalizado
+                value:
+                  number: '5511999999999'
+                  type: document
+                  file: https://exemplo.com/contrato.pdf
+                  docName: Contrato.pdf
+                  text: Segue o documento solicitado
+              audio:
+                summary: Mensagem de voz
+                description: Arquivo de áudio como mensagem de voz
+                value:
+                  number: '5511999999999'
+                  type: ptt
+                  file: https://exemplo.com/audio.ogg
+              video:
+                summary: Vídeo
+                description: Arquivo de vídeo com legenda
+                value:
+                  number: '5511999999999'
+                  type: video
+                  file: https://exemplo.com/video.mp4
+                  text: Confira este vídeo!
+              ptv:
+                summary: Mensagem de vídeo
+                description: Arquivo de vídeo como mensagem de vídeo
+                value:
+                  number: '5511999999999'
+                  type: ptv
+                  file: https://exemplo.com/video.mp4
+              sticker:
+                summary: Figurinha
+                description: Envio de figurinha/sticker
+                value:
+                  number: '5511999999999'
+                  type: sticker
+                  file: https://exemplo.com/sticker.webp
+      responses:
+        '200':
+          description: Mídia enviada com sucesso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: ../schemas/message.yaml#/Message
+                  - type: object
+                    properties:
+                      response:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: success
+                          message:
+                            type: string
+                            example: Media sent successfully
+                          fileUrl:
+                            type: string
+                            example: https://mmg.whatsapp.net/...
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid media type or file format
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid token
+        '413':
+          description: Arquivo muito grande
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: File size exceeds limit
+        '415':
+          description: Formato de mídia não suportado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unsupported media format
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Failed to upload media

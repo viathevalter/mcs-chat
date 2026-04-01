@@ -1,0 +1,237 @@
+  /send/text:
+    post:
+      operationId: sendText
+      tags:
+        - Enviar Mensagem
+      summary: Enviar mensagem de texto
+      description: >
+        Envia uma mensagem de texto para um contato ou grupo.
+
+
+        ## Recursos Específicos
+
+
+        - **Preview de links** com suporte a personalização automática ou customizada
+
+        - **Formatação básica** do texto
+
+        - **Substituição automática de placeholders** dinâmicos
+
+
+        ## Campos Comuns
+
+
+        Este endpoint suporta todos os **campos opcionais comuns** documentados na tag **"Enviar Mensagem"**, incluindo:
+
+        `delay`, `readchat`, `readmessages`, `replyid`, `mentions`, `forward`, `track_source`, `track_id`, placeholders
+        e envio para grupos.
+
+
+        ## Preview de Links
+
+
+        ### Preview Automático
+
+        ```json
+
+        {
+          "number": "5511999999999",
+          "text": "Confira: https://exemplo.com",
+          "linkPreview": true
+        }
+
+        ```
+
+
+        ### Preview Personalizado
+
+        ```json
+
+        {
+          "number": "5511999999999",
+          "text": "Confira nosso site! https://exemplo.com",
+          "linkPreview": true,
+          "linkPreviewTitle": "Título Personalizado",
+          "linkPreviewDescription": "Uma descrição personalizada do link",
+          "linkPreviewImage": "https://exemplo.com/imagem.jpg",
+          "linkPreviewLarge": true
+        }
+
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number:
+                  type: string
+                  description: >-
+                    ID do chat para o qual a mensagem será enviada. Pode ser um número de telefone em formato
+                    internacional, um ID de grupo (`@g.us`), um ID de usuário (com `@s.whatsapp.net` ou `@lid`).
+                  example: '5511999999999'
+                text:
+                  type: string
+                  description: Texto da mensagem (aceita placeholders)
+                  example: Olá {{name}}! Como posso ajudar?
+                linkPreview:
+                  type: boolean
+                  description: >
+                    Ativa/desativa preview de links. Se true, procura automaticamente um link no texto para gerar
+                    preview.
+
+
+                    Comportamento:
+
+                    - Se apenas linkPreview=true: gera preview automático do primeiro link encontrado no texto
+
+                    - Se fornecidos campos personalizados (title, description, image): usa os valores fornecidos
+
+                    - Se campos personalizados parciais: combina com dados automáticos do link como fallback
+                  example: true
+                linkPreviewTitle:
+                  type: string
+                  description: Define um título personalizado para o preview do link
+                  example: Título Personalizado
+                linkPreviewDescription:
+                  type: string
+                  description: Define uma descrição personalizada para o preview do link
+                  example: Descrição personalizada do link
+                linkPreviewImage:
+                  type: string
+                  description: URL ou Base64 da imagem para usar no preview do link
+                  example: https://exemplo.com/imagem.jpg
+                linkPreviewLarge:
+                  type: boolean
+                  description: Se true, gera um preview grande com upload da imagem. Se false, gera um preview pequeno sem upload
+                  example: true
+                replyid:
+                  type: string
+                  description: ID da mensagem para responder
+                  example: 3EB0538DA65A59F6D8A251
+                mentions:
+                  type: string
+                  description: Números para mencionar (separados por vírgula)
+                  example: 5511999999999,5511888888888
+                readchat:
+                  type: boolean
+                  description: Marca conversa como lida após envio
+                  example: true
+                readmessages:
+                  type: boolean
+                  description: Marca últimas mensagens recebidas como lidas
+                  example: true
+                delay:
+                  type: integer
+                  description: Atraso em milissegundos antes do envio, durante o atraso apacerá 'Digitando...'
+                  example: 1000
+                forward:
+                  type: boolean
+                  description: Marca a mensagem como encaminhada no WhatsApp
+                  example: true
+                track_source:
+                  type: string
+                  description: Origem do rastreamento da mensagem
+                  example: chatwoot
+                track_id:
+                  type: string
+                  description: ID para rastreamento da mensagem (aceita valores duplicados)
+                  example: msg_123456789
+                async:
+                  type: boolean
+                  description: Se true, envia a mensagem de forma assíncrona via fila interna. Útil para alto volume de mensagens.
+                  example: false
+              required:
+                - number
+                - text
+            examples:
+              basic:
+                summary: Mensagem básica
+                description: Exemplo mais simples possível
+                value:
+                  number: '5511999999999'
+                  text: Olá! Como posso ajudar?
+              withLinkPreview:
+                summary: Com preview automático
+                description: Preview automático de link no texto
+                value:
+                  number: '5511999999999'
+                  text: 'Confira: https://exemplo.com'
+                  linkPreview: true
+              customLinkPreview:
+                summary: Preview personalizado
+                description: Preview com título, descrição e imagem customizados
+                value:
+                  number: '5511999999999'
+                  text: Confira nosso site! https://exemplo.com
+                  linkPreview: true
+                  linkPreviewTitle: Título Personalizado
+                  linkPreviewDescription: Uma descrição personalizada do link
+                  linkPreviewImage: https://exemplo.com/imagem.jpg
+                  linkPreviewLarge: true
+              withPlaceholders:
+                summary: Com placeholders
+                description: Texto com variáveis dinâmicas
+                value:
+                  number: '5511999999999'
+                  text: Olá {{name}}! Sua empresa {{company}} está cadastrada.
+      responses:
+        '200':
+          description: Mensagem enviada com sucesso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: ../schemas/message.yaml#/Message
+                  - type: object
+                    properties:
+                      response:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: success
+                          message:
+                            type: string
+                            example: Message sent successfully
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Missing number or text
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid token
+        '429':
+          description: Limite de requisições excedido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Rate limit exceeded
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Failed to send message

@@ -147,7 +147,7 @@ export const evolutionApi = {
     }
   },
 
-  async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string }> {
+  async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string, _debug?: any }> {
     try {
       if (!apiUrl) throw new Error('API URL is required');
       const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
@@ -190,17 +190,17 @@ export const evolutionApi = {
         resultObj = data;
       }
 
-      if (resultObj && (resultObj.exists === true || resultObj.exists === 'true')) {
+      if (resultObj && (resultObj.exists === true || resultObj.exists === 'true' || resultObj.status === 'VALID' || resultObj.isValid)) {
         let fmt = resultObj.jid ? resultObj.jid.replace('@s.whatsapp.net', '') : cleanNumber;
         if (resultObj.number) fmt = resultObj.number;
-        return { exists: true, formattedNumber: fmt };
+        return { exists: true, formattedNumber: fmt, _debug: data };
       }
 
-      return { exists: false };
+      return { exists: false, _debug: data };
 
-    } catch (e) {
+    } catch (e: any) {
       console.error(`[Evolution API] Failed to check number ${number}:`, e);
-      return { exists: false };
+      return { exists: false, _debug: { error: e.message } };
     }
   }
 };

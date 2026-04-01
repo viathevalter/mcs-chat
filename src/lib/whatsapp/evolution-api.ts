@@ -109,17 +109,23 @@ export const evolutionApi = {
       let headers: any = { 'Content-Type': 'application/json' };
       
       if (provider === 'uazapi') {
-        url = `${cleanUrl}/chat/profile-picture`;
+        url = `${cleanUrl}/chat/details`;
         headers['token'] = apiToken;
         const response = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify({ number: cleanNumber })
         });
+        
         if (response.ok) {
-          const data = await response.json();
-          return data.picture || data.profilePictureUrl || null;
+           const data = await response.json();
+           if (data && data.image && data.image !== '') {
+             return data.image; // Return the full resolution image URL
+           } else if (data && data.imagePreview && data.imagePreview !== '') {
+             return data.imagePreview;
+           }
         }
+        return null; // Return null if it fails or there's no picture
       } else {
         url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}?number=${cleanNumber}`;
         headers['apikey'] = apiToken;

@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { User, Briefcase, Building, FileText, CheckCircle2, AlertCircle, Loader2, CalendarHeart, Clock, Pencil } from 'lucide-react'
+import { User, Briefcase, Building, FileText, CheckCircle2, AlertCircle, Loader2, CalendarHeart, Clock, Pencil, Check } from 'lucide-react'
 import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -76,17 +76,36 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
     <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col h-full overflow-hidden hidden lg:flex border-l border-slate-200">
       
       {/* Profile Header */}
-      <div className="p-8 pb-4 flex flex-col items-center bg-gradient-to-b from-slate-50 to-white">
-        <div className="relative mb-4">
-          {conversation?.contact_avatar_url ? (
-            <img src={conversation.contact_avatar_url} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300 border-4 border-white" />
-          ) : (
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center text-emerald-500 shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300">
-              <User className="w-12 h-12" />
-            </div>
-          )}
-          <div className="absolute -bottom-2 -right-2 bg-emerald-500 rounded-full p-1 shadow-md border-2 border-white">
-            <CheckCircle2 className="w-4 h-4 text-white" />
+      <div className="flex flex-col items-center pt-8 pb-6 px-4 bg-gradient-to-b from-slate-50 to-white">
+        <div className="relative group">
+          <div className="w-24 h-24 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl font-bold shadow-md shadow-emerald-100/50 mb-4 overflow-hidden ring-4 ring-white">
+            {conversation?.contact_avatar_url ? (
+              <img src={conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <User className="w-10 h-10" />
+            )}
+          </div>
+          
+          {/* Sync Avatar Button */}
+          <button 
+             onClick={async () => {
+                try {
+                  const btn = document.getElementById('sync-avatar-btn');
+                  if (btn) btn.innerHTML = 'Buscando...';
+                  await fetch(`/api/chat/sync-avatar?conversationId=${conversationId}`, { method: 'POST' });
+                  if (btn) btn.innerHTML = 'Atualizar Tela (F5)';
+                } catch (e) {
+                  alert("Erro ao buscar imagem. Talvez o número esconda a foto.");
+                }
+             }}
+             id="sync-avatar-btn"
+             className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white text-[10px] text-slate-500 font-medium px-2 py-1 rounded-full border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-50"
+          >
+            Baixar Foto
+          </button>
+
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-white flex items-center justify-center bg-emerald-500">
+            <Check className="w-3 h-3 text-white" />
           </div>
         </div>
         

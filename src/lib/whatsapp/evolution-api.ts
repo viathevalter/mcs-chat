@@ -145,5 +145,62 @@ export const evolutionApi = {
       console.error(`[Evolution API] Failed to fetch profile picture for ${number}:`, e);
       return null;
     }
+  },
+
+  async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string }> {
+    try {
+      if (!apiUrl) throw new Error('API URL is required');
+      const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+      const cleanNumber = number.replace(/\D/g, '');
+      
+      let url = '';
+      let headers: any = { 'Content-Type': 'application/json' };
+      
+      if (provider === 'uazapi') {
+        url = `${cleanUrl}/chat/check`;
+        headers['token'] = apiToken;
+      } else {
+        url = `${cleanUrl}/chat/whatsappNumbers/${instanceName}`;
+        headers['apikey'] = apiToken;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ numbers: [cleanNumber] }),
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        console.error(`[Evolution API] checkNumber error: ${response.status} ${response.statusText}`);
+        return { exists: false };
+      }
+
+      const data = await response.json();
+      
+      // Handle the various structures possible from Evolution or Uazapi
+      let resultObj = null;
+      if (Array.isArray(data)) {
+        resultObj = data[0];
+      } else if (data && Array.isArray(data.result)) {
+        resultObj = data.result[0];
+      } else if (data && data[0]) {
+        resultObj = data[0];
+      } else if (data) {
+        resultObj = data;
+      }
+
+      if (resultObj && (resultObj.exists === true || resultObj.exists === 'true')) {
+        let fmt = resultObj.jid ? resultObj.jid.replace('@s.whatsapp.net', '') : cleanNumber;
+        if (resultObj.number) fmt = resultObj.number;
+        return { exists: true, formattedNumber: fmt };
+      }
+
+      return { exists: false };
+
+    } catch (e) {
+      console.error(`[Evolution API] Failed to check number ${number}:`, e);
+      return { exists: false };
+    }
   }
 };

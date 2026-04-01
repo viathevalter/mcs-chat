@@ -45,9 +45,9 @@ export async function POST(request: Request) {
     // Call evolutionApi to check the number
     let result = await evolutionApi.checkNumber({
       number: phone,
-      instanceName: channel.provider_instance_name,
-      apiUrl: channel.provider_api_url,
-      apiToken: channel.provider_api_token,
+      instanceName: channel.name,
+      apiUrl: channel.api_url,
+      apiToken: channel.api_token,
       provider: channel.provider
     })
 
@@ -68,9 +68,9 @@ export async function POST(request: Request) {
         console.log(`[check-number] Checking alt phone ${altPhone} for ${phone}`);
         const altResult = await evolutionApi.checkNumber({
           number: altPhone,
-          instanceName: channel.provider_instance_name,
-          apiUrl: channel.provider_api_url,
-          apiToken: channel.provider_api_token,
+          instanceName: channel.name,
+          apiUrl: channel.api_url,
+          apiToken: channel.api_token,
           provider: channel.provider
         })
         if (altResult.exists) {

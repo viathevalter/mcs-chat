@@ -103,6 +103,7 @@ export const evolutionApi = {
     try {
       if (!apiUrl) return null;
       const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+      const cleanNumber = number.replace(/@.*$/, '');
       
       let url = '';
       let headers: any = { 'Content-Type': 'application/json' };
@@ -113,16 +114,20 @@ export const evolutionApi = {
         const response = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ number })
+          body: JSON.stringify({ number: cleanNumber })
         });
         if (response.ok) {
           const data = await response.json();
           return data.picture || data.profilePictureUrl || null;
         }
       } else {
-        url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}?number=${number}`;
+        url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
         headers['apikey'] = apiToken;
-        const response = await fetch(url, { method: 'GET', headers });
+        const response = await fetch(url, { 
+          method: 'POST', 
+          headers,
+          body: JSON.stringify({ number: cleanNumber })
+        });
         if (response.ok) {
           const data = await response.json();
           return data.profilePictureUrl || data.picture || null;

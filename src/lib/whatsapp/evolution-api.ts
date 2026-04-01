@@ -147,49 +147,47 @@ export const evolutionApi = {
     }
   },
 
-  async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string, _debug?: any }> {
+  async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string, displayName?: string, profilePictureUrl?: string }> {
     try {
       const finalUrl = apiUrl || process.env.EVOLUTION_API_URL;
       const finalToken = apiToken || process.env.EVOLUTION_API_KEY;
 
-      if (!finalUrl) throw new Error('API URL is required');
-      const cleanUrl = finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+      if (!finalUrl || !finalToken) {
+        throw new Error('Missing API URL or Token for checking number.');
+      }
+
+      const cleanUrl = finalUrl.replace(/\/$/, '');
       const cleanNumber = number.replace(/\D/g, '');
-      
+      const isUazapi = provider?.toLowerCase() === 'uazapi';
+
       let url = '';
       let headers: any = { 'Content-Type': 'application/json' };
-      
-      if (provider === 'uazapi') {
+      let body: string | null = null;
+      let method = 'POST';
+
+      if (isUazapi) {
         url = `${cleanUrl}/chat/check`;
         headers['token'] = finalToken;
+        body = JSON.stringify({ numbers: [cleanNumber] });
       } else {
         url = `${cleanUrl}/chat/whatsappNumbers/${instanceName}`;
         headers['apikey'] = finalToken;
+        body = JSON.stringify({ numbers: [cleanNumber] });
       }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ numbers: [cleanNumber] }),
-        cache: 'no-store'
-      });
-
-      if (!response.ok) {
-        console.error(`[Evolution API] checkNumber error: ${response.status} ${response.statusText}`);
-        return { exists: false };
-      }
-
-      const data = await response.json();
+      const response = await fetch(url, { method, headers, ...(body ? { body } : {}) });
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
       
-      // Handle the various structures possible from Evolution or Uazapi
-      let resultObj = null;
+      const data = await response.json();
+      let resultObj = data;
+      
       if (Array.isArray(data)) {
         resultObj = data[0];
-      } else if (data && Array.isArray(data.result)) {
-        resultObj = data.result[0];
+      } else if (data && Array.isArray(data.numbers)) {
+        resultObj = data.numbers[0];
       } else if (data && data[0]) {
         resultObj = data[0];
-      } else if (data) {
+      } else {
         resultObj = data;
       }
 
@@ -203,14 +201,39 @@ export const evolutionApi = {
       )) {
         let fmt = resultObj.jid ? resultObj.jid.replace('@s.whatsapp.net', '') : cleanNumber;
         if (resultObj.number) fmt = resultObj.number;
-        return { exists: true, formattedNumber: fmt, _debug: data };
+        
+        let dName = resultObj.pushName || resultObj.name || resultObj.verifiedName || undefined;
+        let profilePic: string | undefined = undefined;
+
+        // Try fetching more details
+        try {
+          if (isUazapi) {
+            const dtUrl = `${cleanUrl}/chat/details`;
+            const dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
+            if (dtRes.ok) {
+              const dtData = await dtRes.json();
+              if (dtData) {
+                if (!dName || dName.trim() === '') dName = dtData.wa_name || dtData.name || dtData.contactName || dtData.verifiedName || undefined;
+                profilePic = dtData.image || dtData.imagePreview || undefined;
+              }
+            }
+          } else {
+            profilePic = await this.fetchProfilePictureUrl({ number: cleanNumber, instanceName, apiUrl: finalUrl, apiToken: finalToken, provider: 'evolution' }) || undefined;
+          }
+        } catch (err) {
+          console.error('[Evolution API] Failed to fetch extended check details', err);
+        }
+
+        if (dName && dName.trim() === '') dName = undefined;
+
+        return { exists: true, formattedNumber: fmt, displayName: dName, profilePictureUrl: profilePic };
       }
 
-      return { exists: false, _debug: data };
+      return { exists: false };
 
     } catch (e: any) {
       console.error(`[Evolution API] Failed to check number ${number}:`, e);
-      return { exists: false, _debug: { error: e.message } };
+      return { exists: false };
     }
   }
 };

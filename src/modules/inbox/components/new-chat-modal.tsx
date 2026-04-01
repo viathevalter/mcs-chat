@@ -22,7 +22,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   const [waPhone, setWaPhone] = useState('')
   const [waName, setWaName] = useState('')
   const [waChecking, setWaChecking] = useState(false)
-  const [waResult, setWaResult] = useState<{ exists: boolean, formattedNumber?: string, displayName?: string } | null>(null)
+  const [waResult, setWaResult] = useState<{ exists: boolean, formattedNumber?: string, displayName?: string, profilePictureUrl?: string } | null>(null)
 
   const router = useRouter()
 
@@ -305,6 +305,16 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                         <span className="font-bold text-sm">{t('newChatModal', 'waNumberValid')}</span>
                       </div>
+                      
+                      {waResult.profilePictureUrl && (
+                        <div className="flex justify-center -mb-2">
+                           <img 
+                             src={waResult.profilePictureUrl} 
+                             alt="Profile" 
+                             className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200 shadow-sm"
+                           />
+                        </div>
+                      )}
                       
                       <input 
                         type="text"

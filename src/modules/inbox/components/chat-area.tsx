@@ -186,8 +186,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       <div className="h-20 flex-shrink-0 bg-chat-surface-bg/80 backdrop-blur-md border-b border-chat-inbound-border px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
         <div className="flex items-center gap-4">
           <div className="relative">
-             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-emerald-200 rotate-3 hover:rotate-0 transition-all duration-300">
-               RH
+             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-emerald-200 rotate-3 hover:rotate-0 transition-all duration-300 overflow-hidden">
+               {context?.conversation?.contact_avatar_url ? (
+                  <img src={context.conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+               ) : (
+                  (context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()
+               )}
              </div>
              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white"></div>
           </div>

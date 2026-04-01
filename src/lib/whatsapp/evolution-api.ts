@@ -121,16 +121,17 @@ export const evolutionApi = {
           return data.picture || data.profilePictureUrl || null;
         }
       } else {
-        url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
+        url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}?number=${cleanNumber}`;
         headers['apikey'] = apiToken;
         const response = await fetch(url, { 
-          method: 'POST', 
-          headers,
-          body: JSON.stringify({ number: cleanNumber })
+          method: 'GET', 
+          headers 
         });
         if (response.ok) {
           const data = await response.json();
           return data.profilePictureUrl || data.picture || null;
+        } else {
+          console.error(`Evolution fetchProfilePicture error: ${response.status}`, await response.text());
         }
       }
       return null;

@@ -1,0 +1,160 @@
+  /chat/details:
+    post:
+      operationId: getChatDetails
+      tags:
+        - Contatos
+      summary: Obter Detalhes Completos
+      description: >
+        Retorna informações **completas** sobre um contato ou chat, incluindo **todos os campos disponíveis** do modelo
+        Chat.
+
+
+        ### Funcionalidades:
+
+        - **Retorna chat completo**: Todos os campos do modelo Chat (mais de 60 campos)
+
+        - **Busca informações para contatos individuais e grupos**
+
+        - **URLs de imagem em dois tamanhos**: preview (menor) ou full (original)
+
+        - **Combina informações de diferentes fontes**: WhatsApp, contatos salvos, leads
+
+        - **Atualiza automaticamente dados desatualizados** no banco
+
+
+        ### Campos Retornados:
+
+        - **Informações básicas**: id, wa_fastid, wa_chatid, owner, name, phone
+
+        - **Dados do WhatsApp**: wa_name, wa_contactName, wa_archived, wa_isBlocked, etc.
+
+        - **Dados de lead/CRM**: lead_name, lead_email, lead_status, lead_field01-20, etc.
+
+        - **Informações de grupo**: wa_isGroup, wa_isGroup_admin, wa_isGroup_announce, etc.
+
+        - **Chatbot**: chatbot_summary, chatbot_lastTrigger_id, chatbot_disableUntil, etc.
+
+        - **Configurações**: wa_muteEndTime, wa_isPinned, wa_unreadCount, etc.
+
+
+        **Comportamento**:
+
+        - Para contatos individuais:
+          - Busca nome verificado do WhatsApp
+          - Verifica nome salvo nos contatos
+          - Formata número internacional
+          - Calcula grupos em comum
+        - Para grupos:
+          - Busca nome do grupo
+          - Verifica status de comunidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number:
+                  type: string
+                  description: Número do telefone ou ID do grupo
+                  example: '5511999999999'
+                preview:
+                  type: boolean
+                  description: |
+                    Controla o tamanho da imagem de perfil retornada:
+                    - `true`: Retorna imagem em tamanho preview (menor, otimizada para listagens)
+                    - `false` (padrão): Retorna imagem em tamanho full (resolução original, maior qualidade)
+                  default: false
+              required:
+                - number
+      responses:
+        '200':
+          description: Informações completas do chat retornadas com sucesso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: ../schemas/chat.yaml#/Chat
+                  - type: object
+                    properties:
+                      common_groups:
+                        type: string
+                        description: 'Grupos em comum separados por vírgula, formato: nome_grupo(id_grupo)'
+                        example: Grupo Família(120363123456789012@g.us),Trabalho(987654321098765432@g.us)
+                      imagePreview:
+                        type: string
+                        description: URL da imagem de perfil em tamanho preview (menor) - apenas se preview=true
+                      image:
+                        type: string
+                        description: URL da imagem de perfil em tamanho full (resolução original) - apenas se preview=false
+              examples:
+                contact_example:
+                  summary: Contato individual
+                  description: Exemplo de resposta para um contato individual
+                  value:
+                    id: r1a2b3c4d5e6f7
+                    wa_fastid: admin:5511999999999
+                    wa_chatid: 5511999999999@s.whatsapp.net
+                    wa_name: João Silva
+                    name: João Silva
+                    phone: +55 11 99999-9999
+                    owner: admin
+                    wa_archived: false
+                    wa_isBlocked: false
+                    wa_isGroup: false
+                    lead_name: João
+                    lead_fullName: João Silva
+                    lead_email: joao@exemplo.com
+                    lead_status: ativo
+                    wa_contactName: João Silva
+                    common_groups: Grupo Família(120363123456789012@g.us),Trabalho(987654321098765432@g.us)
+                    image: https://pps.whatsapp.net/v/t61.24694-24/12345_image.jpg
+                group_example:
+                  summary: Grupo
+                  description: Exemplo de resposta para um grupo
+                  value:
+                    id: r9z8y7x6w5v4u3
+                    wa_fastid: admin:120363123456789012@g.us
+                    wa_chatid: 120363123456789012@g.us
+                    wa_name: Grupo Família
+                    name: Grupo Família
+                    phone: ''
+                    owner: admin
+                    wa_archived: false
+                    wa_isBlocked: false
+                    wa_isGroup: true
+                    wa_isGroup_admin: true
+                    wa_isGroup_announce: false
+                    wa_isGroup_community: false
+                    wa_isGroup_member: true
+                    image: https://pps.whatsapp.net/v/t61.24694-24/67890_group.jpg
+        '400':
+          description: Payload inválido ou número inválido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid request payload
+        '401':
+          description: Token não fornecido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unauthorized
+        '500':
+          description: Erro interno do servidor ou sessão não iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: No session

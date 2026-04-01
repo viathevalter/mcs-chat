@@ -149,8 +149,11 @@ export const evolutionApi = {
 
   async checkNumber({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string, _debug?: any }> {
     try {
-      if (!apiUrl) throw new Error('API URL is required');
-      const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+      const finalUrl = apiUrl || process.env.EVOLUTION_API_URL;
+      const finalToken = apiToken || process.env.EVOLUTION_API_KEY;
+
+      if (!finalUrl) throw new Error('API URL is required');
+      const cleanUrl = finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
       const cleanNumber = number.replace(/\D/g, '');
       
       let url = '';
@@ -158,10 +161,10 @@ export const evolutionApi = {
       
       if (provider === 'uazapi') {
         url = `${cleanUrl}/chat/check`;
-        headers['token'] = apiToken;
+        headers['token'] = finalToken;
       } else {
         url = `${cleanUrl}/chat/whatsappNumbers/${instanceName}`;
-        headers['apikey'] = apiToken;
+        headers['apikey'] = finalToken;
       }
 
       const response = await fetch(url, {

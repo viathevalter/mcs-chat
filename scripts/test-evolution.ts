@@ -33,27 +33,31 @@ async function test() {
   const { channel, contact_phone } = conv;
   
   const cleanUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
-  const cleanNumber = contact_phone;
+  const numberClean = contact_phone.replace(/@.*$/, '');
+  const numberJid = numberClean + '@s.whatsapp.net';
 
-  console.log(`Trying GET ${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}?number=${cleanNumber}`);
-  const res1 = await fetch(`${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}?number=${cleanNumber}`, {
-     headers: { 'apikey': channel.api_token }
-  });
-  console.log('GET STATUS:', res1.status);
-  const text1 = await res1.text();
-  console.log('GET BODY:', text1);
-  
-  console.log(`Trying POST ${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}`);
-  const res2 = await fetch(`${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}`, {
-     method: 'POST',
-     headers: { 'apikey': channel.api_token, 'Content-Type': 'application/json' },
-     body: JSON.stringify({ number: cleanNumber })
-  });
-  console.log('POST STATUS:', res2.status);
-  const text2 = await res2.text();
-  console.log('POST BODY:', text2);
+  const combinations = [
+    { method: 'GET', url: `${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}?number=${numberClean}`, body: null },
+    { method: 'GET', url: `${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}?number=${numberJid}`, body: null },
+    { method: 'POST', url: `${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}`, body: { number: numberClean } },
+    { method: 'POST', url: `${cleanUrl}/chat/fetchProfilePictureUrl/${channel.name}`, body: { number: numberJid } }
+  ];
 
-  console.log('Finished tests');
+  for (const combo of combinations) {
+    console.log(`\nTrying ${combo.method} ${combo.url}`);
+    try {
+       const opts: any = { method: combo.method, headers: { 'apikey': channel.api_token, 'Content-Type': 'application/json' } };
+       if (combo.body) opts.body = JSON.stringify(combo.body);
+       const res = await fetch(combo.url, opts);
+       const text = await res.text();
+       console.log(`STATUS: ${res.status}`);
+       console.log(`BODY: ${text.substring(0, 100)}...`);
+    } catch (e: any) {
+       console.log(`ERROR: ${e.message}`);
+    }
+  }
+
+  console.log('\nFinished tests');
 }
 
 test().catch(console.error);

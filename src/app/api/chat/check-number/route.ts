@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     // Call evolutionApi to check the number
-    const result = await evolutionApi.checkNumber({
+    let result = await evolutionApi.checkNumber({
       number: phone,
       instanceName: channel.provider_instance_name,
       apiUrl: channel.provider_api_url,
@@ -51,6 +51,36 @@ export async function POST(request: Request) {
       provider: channel.provider
     })
 
+    // Brazilian 9th digit fallback logic
+    if (!result.exists && phone.startsWith('55')) {
+      let altPhone = null;
+      
+      // If it has 12 digits (55 + 2 DDD + 8 NUM), it's missing the 9. Add the 9.
+      if (phone.length === 12) {
+        altPhone = phone.slice(0, 4) + '9' + phone.slice(4);
+      } 
+      // If it has 13 digits (55 + 2 DDD + 9 + 8 NUM), try without the 9.
+      else if (phone.length === 13 && phone[4] === '9') {
+        altPhone = phone.slice(0, 4) + phone.slice(5);
+      }
+
+      if (altPhone) {
+        console.log(`[check-number] Checking alt phone ${altPhone} for ${phone}`);
+        const altResult = await evolutionApi.checkNumber({
+          number: altPhone,
+          instanceName: channel.provider_instance_name,
+          apiUrl: channel.provider_api_url,
+          apiToken: channel.provider_api_token,
+          provider: channel.provider
+        })
+        if (altResult.exists) {
+          result = altResult;
+        }
+      }
+    }
+
+    // Add debug context
+    console.log(`[check-number] Final result for ${phone}:`, result);
     return NextResponse.json(result)
 
   } catch (error: any) {

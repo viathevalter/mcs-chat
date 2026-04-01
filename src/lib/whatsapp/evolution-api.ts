@@ -209,9 +209,17 @@ export const evolutionApi = {
         try {
           if (isUazapi) {
             const dtUrl = `${cleanUrl}/chat/details`;
-            const dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
+            let dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
             if (dtRes.ok) {
-              const dtData = await dtRes.json();
+              let dtData = await dtRes.json();
+              
+              // UAZAPI often does lazy loading from WA servers. If it returns empty, wait and retry once.
+              if (dtData && !dtData.wa_name && !dtData.name && !dtData.image && !dtData.imagePreview) {
+                await new Promise(r => setTimeout(r, 1500)); // wait 1.5s
+                dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
+                if (dtRes.ok) dtData = await dtRes.json();
+              }
+
               if (dtData) {
                 if (!dName || dName.trim() === '') dName = dtData.wa_name || dtData.name || dtData.contactName || dtData.verifiedName || undefined;
                 profilePic = dtData.image || dtData.imagePreview || undefined;

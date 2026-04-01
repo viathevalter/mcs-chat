@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { User, Briefcase, Building, FileText, CheckCircle2, AlertCircle, Loader2, CalendarHeart, Clock } from 'lucide-react'
+import { User, Briefcase, Building, FileText, CheckCircle2, AlertCircle, Loader2, CalendarHeart, Clock, Pencil } from 'lucide-react'
 import { useConversationContext } from '../hooks/use-context'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -13,6 +13,9 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   const { context, loading } = useConversationContext(conversationId)
   const [activeTab, setActiveTab] = useState<'info' | 'agenda'>('info')
   const [appointments, setAppointments] = useState<any[]>([])
+
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editNameValue, setEditNameValue] = useState('')
 
   const loadAppointments = async () => {
     const { data } = await supabase
@@ -48,20 +51,65 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
   const { worker, conversation } = context
 
+  const handleEditClick = () => {
+    setEditNameValue(worker?.nome || conversation?.contact_name || '')
+    setIsEditingName(true)
+  }
+
+  const handleNameSave = async () => {
+    setIsEditingName(false)
+    if (!conversation) return
+    const newName = editNameValue.trim()
+    if (newName && newName !== conversation.contact_name) {
+      // Optimistic update of local state before reload
+      conversation.contact_name = newName
+      await supabase.from('chat_conversations').update({ contact_name: newName }).eq('id', conversationId)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleNameSave()
+    if (e.key === 'Escape') setIsEditingName(false)
+  }
+
   return (
     <aside className="w-[420px] flex-shrink-0 bg-white flex flex-col h-full overflow-hidden hidden lg:flex border-l border-slate-200">
       
       {/* Profile Header */}
       <div className="p-8 pb-4 flex flex-col items-center bg-gradient-to-b from-slate-50 to-white">
         <div className="relative mb-4">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center text-emerald-500 shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300">
-            <User className="w-12 h-12" />
-          </div>
+          {conversation?.contact_avatar_url ? (
+            <img src={conversation.contact_avatar_url} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300 border-4 border-white" />
+          ) : (
+            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center text-emerald-500 shadow-sm rotate-3 hover:rotate-0 transition-transform duration-300">
+              <User className="w-12 h-12" />
+            </div>
+          )}
           <div className="absolute -bottom-2 -right-2 bg-emerald-500 rounded-full p-1 shadow-md border-2 border-white">
             <CheckCircle2 className="w-4 h-4 text-white" />
           </div>
         </div>
-        <h2 className="text-xl font-bold text-slate-800 tracking-tight text-center">{worker?.nome || conversation?.contact_name || conversation?.contact_phone}</h2>
+        
+        {isEditingName ? (
+          <input 
+            type="text"
+            className="text-lg font-bold text-slate-800 text-center border-b-2 border-emerald-500 bg-transparent focus:outline-none mb-1 w-full px-2"
+            value={editNameValue}
+            onChange={e => setEditNameValue(e.target.value)}
+            onBlur={handleNameSave}
+            onKeyDown={handleKeyDown}
+            autoFocus
+          />
+        ) : (
+          <h2 
+            className="text-xl font-bold text-slate-800 tracking-tight text-center cursor-pointer hover:text-emerald-700 transition-colors group flex items-center justify-center gap-1.5"
+            onClick={handleEditClick}
+            title="Clique para alterar"
+          >
+            {worker?.nome || conversation?.contact_name || conversation?.contact_phone}
+            <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-500" />
+          </h2>
+        )}
         {worker?.ocupacao && <p className="text-sm text-slate-500 font-medium mb-4">{worker.ocupacao}</p>}
 
         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/50 shadow-sm">

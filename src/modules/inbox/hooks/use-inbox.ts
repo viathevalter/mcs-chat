@@ -5,6 +5,7 @@ export interface Conversation {
   id: string
   contact_name: string
   contact_phone: string
+  contact_avatar_url?: string | null
   status: string
   unread_count: number
   last_message_at: string

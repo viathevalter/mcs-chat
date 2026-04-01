@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, User } from 'lucide-react'
 import { useInbox } from '../hooks/use-inbox'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -191,30 +191,41 @@ export default function InboxSidebar() {
           filteredConversations.map(conv => (
             <Link key={conv.id} href={`/inbox/${conv.id}`}>
               <div className={`p-3 rounded-lg cursor-pointer transition-colors border group ${activeId === conv.id ? 'bg-emerald-50 border-emerald-100' : 'hover:bg-slate-50 border-transparent hover:border-slate-100'}`}>
-                 <div className="flex justify-between items-start mb-1">
-                   <h3 className={`font-medium text-sm truncate pr-2 ${activeId === conv.id ? 'text-emerald-900' : 'text-slate-800'}`}>
-                      {conv.contact_name || conv.contact_phone}
-                   </h3>
-                   <span className="text-[10px] text-slate-400 whitespace-nowrap pt-1">
-                     {conv.last_message_at ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR }) : ''}
-                   </span>
-                 </div>
-                 <div className="flex justify-between items-center">
-                   <div className="flex items-center gap-2">
-                     <p className="text-xs text-slate-500 truncate">{conv.contact_phone}</p>
-                     {conv.channel && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 max-w-[80px] truncate uppercase" title={`Via ${conv.channel.name}`}>
-                           {conv.channel.name}
-                        </span>
+                <div className="flex gap-3 items-center">
+                 {conv.contact_avatar_url ? (
+                   <img src={conv.contact_avatar_url} alt="Avatar" className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200" />
+                 ) : (
+                   <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200 dark:border-slate-700">
+                     <User className="w-5 h-5" />
+                   </div>
+                 )}
+                 <div className="flex-1 min-w-0">
+                   <div className="flex justify-between items-start mb-1">
+                     <h3 className={`font-medium text-sm truncate pr-2 ${activeId === conv.id ? 'text-emerald-900' : 'text-slate-800 dark:text-slate-200'}`}>
+                        {conv.contact_name || conv.contact_phone}
+                     </h3>
+                     <span className="text-[10px] text-slate-400 whitespace-nowrap pt-1">
+                       {conv.last_message_at ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR }) : ''}
+                     </span>
+                   </div>
+                   <div className="flex justify-between items-center">
+                     <div className="flex items-center gap-2 min-w-0 pr-2">
+                       <p className="text-xs text-slate-500 truncate">{conv.contact_phone}</p>
+                       {conv.channel && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 max-w-[80px] truncate uppercase" title={`Via ${conv.channel.name}`}>
+                             {conv.channel.name}
+                          </span>
+                       )}
+                     </div>
+                     {/* Optimistic UI update: hide badge if it's the currently active open conversation wrapper */}
+                     {conv.unread_count > 0 && activeId !== conv.id && (
+                       <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
+                          {conv.unread_count}
+                       </div>
                      )}
                    </div>
-                   {/* Optimistic UI update: hide badge if it's the currently active open conversation wrapper */}
-                   {conv.unread_count > 0 && activeId !== conv.id && (
-                     <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
-                        {conv.unread_count}
-                     </div>
-                   )}
                  </div>
+                </div>
               </div>
             </Link>
           ))

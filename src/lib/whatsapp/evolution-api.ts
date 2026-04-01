@@ -193,7 +193,14 @@ export const evolutionApi = {
         resultObj = data;
       }
 
-      if (resultObj && (resultObj.exists === true || resultObj.exists === 'true' || resultObj.status === 'VALID' || resultObj.isValid)) {
+      if (resultObj && (
+          resultObj.exists === true || 
+          resultObj.exists === 'true' || 
+          resultObj.status === 'VALID' || 
+          resultObj.isValid ||
+          resultObj.isInWhatsapp === true ||
+          resultObj.isInWhatsapp === 'true'
+      )) {
         let fmt = resultObj.jid ? resultObj.jid.replace('@s.whatsapp.net', '') : cleanNumber;
         if (resultObj.number) fmt = resultObj.number;
         return { exists: true, formattedNumber: fmt, _debug: data };

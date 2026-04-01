@@ -23,6 +23,23 @@ export async function POST(req: Request) {
 
     const isInternalNote = messageType === 'internal_note'
 
+    // Fetch Avatar if missing
+    let newlyFetchedAvatar = undefined;
+    if (!conv.contact_avatar_url && conv.channel && conv.channel.name && !isInternalNote) {
+       try {
+         const fetchedAvatar = await evolutionApi.fetchProfilePictureUrl({
+            number: conv.contact_phone + '@s.whatsapp.net',
+            instanceName: conv.channel.name,
+            apiUrl: conv.channel.api_url,
+            apiToken: conv.channel.api_token,
+            provider: conv.channel.provider
+         });
+         if (fetchedAvatar) {
+            newlyFetchedAvatar = fetchedAvatar;
+         }
+       } catch(e) {}
+    }
+
     // Only hit UAZ API if it's not an internal note
     if (!isInternalNote) {
       const channelData = conv.channel as any
@@ -87,7 +104,11 @@ export async function POST(req: Request) {
       status: isInternalNote ? 'delivered' : 'sent'
     })
 
-    if (msgError) throw msgError
+    // Update the conversation's last_message_at so the sidebar instantly re-renders via Realtime
+    const updatePayload: any = { last_message_at: new Date().toISOString() };
+    if (newlyFetchedAvatar) updatePayload.contact_avatar_url = newlyFetchedAvatar;
+
+    await supabase.from('chat_conversations').update(updatePayload).eq('id', conversationId);
 
     return NextResponse.json({ success: true, isInternalNote })
 

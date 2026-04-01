@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { evolutionApi } from '@/lib/whatsapp/evolution-api'
 
 export const maxDuration = 60 // Extending timeout for Whisper STT and Media Uploads
 export const dynamic = 'force-dynamic'
@@ -219,6 +220,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
         .limit(1)
         .single()
 
+      let newlyFetchedAvatar: string | undefined = undefined;
+
       if (!conversation) {
          // Attempt to find worker by phone (very basic matching)
          let worker = null
@@ -232,12 +235,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             if (workers && workers.length > 0) worker = workers[0]
          } catch(e) {} // Failsafe if Schema not found
 
+         // Tenta buscar a foto de perfil do WhatsApp se for Evolution/UAZ
+         try {
+           const fetchedUrl = await evolutionApi.fetchProfilePictureUrl({
+             number: remoteJid,
+             instanceName: channel.name,
+             apiUrl: channel.api_url,
+             apiToken: channel.api_token,
+             provider: channel.provider
+           });
+           if (fetchedUrl) newlyFetchedAvatar = fetchedUrl;
+         } catch(e) {}
+
          const { data: newConv, error: convError } = await supabase
            .from('chat_conversations')
            .insert({
              channel_id: channel.id,
              contact_phone: phone,
              contact_name: worker ? worker.nome : senderName,
+             contact_avatar_url: newlyFetchedAvatar || null,
              worker_id: worker?.id || null,
              status: 'open'
            })
@@ -252,6 +268,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
              .from('chat_conversations')
              .update({ status: 'open' })
              .eq('id', conversation.id)
+         }
+         
+         // Se a conversa já existe mas a foto nula, tentar recuperar
+         if (!conversation.contact_avatar_url) {
+            try {
+              const fetchedUrl = await evolutionApi.fetchProfilePictureUrl({
+                number: remoteJid,
+                instanceName: channel.name,
+                apiUrl: channel.api_url,
+                apiToken: channel.api_token,
+                provider: channel.provider
+              });
+              if (fetchedUrl) {
+                newlyFetchedAvatar = fetchedUrl;
+                conversation.contact_avatar_url = fetchedUrl;
+                // Deixa atualizar silenciosamente junto com o last_message_at depois, no fluxo de always update.
+              }
+            } catch(e) {}
          }
       }
 
@@ -308,15 +342,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
          // The transcription is now successfully merged into the audio message's content directly.
 
          // Update unread_count and last_message_at
+         const updateConversationPayload: any = {};
+         if (newlyFetchedAvatar) updateConversationPayload.contact_avatar_url = newlyFetchedAvatar;
+
          if (!isFromMe) {
-           await supabase.from('chat_conversations').update({
-             unread_count: (conversation.unread_count || 0) + 1,
-             last_message_at: new Date().toISOString()
-           }).eq('id', conversation.id)
+           updateConversationPayload.unread_count = (conversation.unread_count || 0) + 1;
+           updateConversationPayload.last_message_at = new Date().toISOString();
+           await supabase.from('chat_conversations').update(updateConversationPayload).eq('id', conversation.id)
          } else {
-           await supabase.from('chat_conversations').update({
-             last_message_at: new Date().toISOString()
-           }).eq('id', conversation.id)
+           updateConversationPayload.last_message_at = new Date().toISOString();
+           await supabase.from('chat_conversations').update(updateConversationPayload).eq('id', conversation.id)
          }
       }
 

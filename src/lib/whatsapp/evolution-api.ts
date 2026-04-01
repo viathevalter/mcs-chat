@@ -97,5 +97,41 @@ export const evolutionApi = {
       throw new Error(`Failed to send media: ${error}`);
     }
     return response.json();
+  },
+
+  async fetchProfilePictureUrl({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<string | null> {
+    try {
+      if (!apiUrl) return null;
+      const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+      
+      let url = '';
+      let headers: any = { 'Content-Type': 'application/json' };
+      
+      if (provider === 'uazapi') {
+        url = `${cleanUrl}/chat/profile-picture`;
+        headers['token'] = apiToken;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ number })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return data.picture || data.profilePictureUrl || null;
+        }
+      } else {
+        url = `${cleanUrl}/chat/fetchProfilePictureUrl/${instanceName}?number=${number}`;
+        headers['apikey'] = apiToken;
+        const response = await fetch(url, { method: 'GET', headers });
+        if (response.ok) {
+          const data = await response.json();
+          return data.profilePictureUrl || data.picture || null;
+        }
+      }
+      return null;
+    } catch (e) {
+      console.error(`[Evolution API] Failed to fetch profile picture for ${number}:`, e);
+      return null;
+    }
   }
 };

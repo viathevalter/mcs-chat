@@ -290,13 +290,8 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                   </button>
 
                   {waResult && !waResult.exists && (
-                    <div className="mt-2 p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-center text-sm font-medium break-all text-left">
+                    <div className="mt-2 p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-center text-sm font-medium">
                       {t('newChatModal', 'waNumberInvalid')}
-                      {waResult._debug && (
-                        <pre className="mt-2 text-xs text-red-400 overflow-x-auto">
-                          {JSON.stringify(waResult._debug, null, 2)}
-                        </pre>
-                      )}
                     </div>
                   )}
 

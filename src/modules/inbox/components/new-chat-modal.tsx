@@ -22,7 +22,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   const [waPhone, setWaPhone] = useState('')
   const [waName, setWaName] = useState('')
   const [waChecking, setWaChecking] = useState(false)
-  const [waResult, setWaResult] = useState<{ exists: boolean, formattedNumber?: string, _debug?: any } | null>(null)
+  const [waResult, setWaResult] = useState<{ exists: boolean, formattedNumber?: string, displayName?: string } | null>(null)
 
   const router = useRouter()
 
@@ -84,6 +84,9 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       if (!res.ok) throw new Error('API request failed')
       const data = await res.json()
       setWaResult(data)
+      if (data.exists && data.displayName && !waName) {
+        setWaName(data.displayName)
+      }
     } catch(e) {
       setWaResult({ exists: false })
     } finally {
@@ -275,6 +278,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                        onChange={e => {
                           setWaPhone(e.target.value);
                           setWaResult(null); // reset result if typing again
+                          setWaName('');     // clear the name to allow auto-fill for the new number
                        }}
                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
                      />

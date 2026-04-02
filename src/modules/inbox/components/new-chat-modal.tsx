@@ -5,6 +5,19 @@ import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useI18n } from '@/contexts/i18n-context'
 
+const COUNTRIES = [
+  { code: '34', name: 'ES', flag: '🇪🇸', label: 'Espanha' },
+  { code: '57', name: 'CO', flag: '🇨🇴', label: 'Colômbia' },
+  { code: '55', name: 'BR', flag: '🇧🇷', label: 'Brasil' },
+  { code: '39', name: 'IT', flag: '🇮🇹', label: 'Itália' },
+  { code: '33', name: 'FR', flag: '🇫🇷', label: 'França' },
+  { code: '351', name: 'PT', flag: '🇵🇹', label: 'Portugal' },
+  { code: '1', name: 'US', flag: '🇺🇸', label: 'EUA' },
+  { code: '54', name: 'AR', flag: '🇦🇷', label: 'Argentina' },
+  { code: '56', name: 'CL', flag: '🇨🇱', label: 'Chile' },
+  { code: '52', name: 'MX', flag: '🇲🇽', label: 'México' },
+]
+
 export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const { t } = useI18n()
   
@@ -19,6 +32,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   const [startingId, setStartingId] = useState<string | null>(null)
   
   // WA direct fields
+  const [waDdi, setWaDdi] = useState('34')
   const [waPhone, setWaPhone] = useState('')
   const [waName, setWaName] = useState('')
   const [waChecking, setWaChecking] = useState(false)
@@ -35,6 +49,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       setWaResult(null)
       setActiveTab('db')
       setStartingId(null)
+      setWaDdi('34')
     } else {
       fetchChannels()
     }
@@ -69,13 +84,17 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   }, [query, activeTab])
 
   const checkWaNumber = async () => {
-    if (!waPhone || waPhone.length < 8) return
+    if (!waPhone || waPhone.length < 6) return
     if (!selectedChannelId) return alert(t('newChatModal', 'noChannel'))
     
     setWaChecking(true)
     setWaResult(null)
     try {
-      const formatted = waPhone.replace(/\D/g, '')
+      const purePhone = waPhone.replace(/\D/g, '')
+      // Remove starting zeroes locally
+      const cleanPhone = purePhone.replace(/^0+/, '')
+      const formatted = `${waDdi}${cleanPhone}`
+      
       const res = await fetch('/api/chat/check-number', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,7 +124,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       }
       
       setStartingId(worker.id)
-      await createOrRedirect(phone, worker.nome, worker.id)
+      await createOrRedirect(phone, worker.nome, worker.id, false)
     } catch (err) {
       console.error(err)
       alert(t('newChatModal', 'error'))
@@ -117,7 +136,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
     if (!waResult?.exists || !waResult.formattedNumber || startingId) return
     setStartingId('wa-new')
     try {
-      await createOrRedirect(waResult.formattedNumber, waName || 'Desconhecido', null)
+      await createOrRedirect(waResult.formattedNumber, waName || 'Desconhecido', null, true)
     } catch (err) {
       console.error(err)
       alert(t('newChatModal', 'error'))
@@ -125,8 +144,15 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
     }
   }
 
-  const createOrRedirect = async (phone: string, name: string, workerId: string | null) => {
-      const formattedPhone = phone.startsWith('55') ? phone : '55' + phone
+  const createOrRedirect = async (phone: string, name: string, workerId: string | null, isFromWaSearch: boolean = false) => {
+      let formattedPhone = phone
+      
+      if (!isFromWaSearch) {
+         // Normalize DB phones starting without DDI if needed. Only add 55 if extremely short (just DDD + number).
+         if (phone.length <= 11 && !phone.startsWith('55') && !phone.startsWith('34')) {
+             formattedPhone = '55' + phone
+         }
+      }
       
       if (!selectedChannelId) {
          alert(t('newChatModal', 'noChannel'))
@@ -268,20 +294,33 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
              <>
                {/* Search Whatsapp */}
                <div className="p-6 flex flex-col gap-4">
-                  <div className="relative">
-                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                     <input 
-                       autoFocus
-                       type="text"
-                       placeholder={t('newChatModal', 'waSearchPlaceholder')}
-                       value={waPhone}
-                       onChange={e => {
-                          setWaPhone(e.target.value);
-                          setWaResult(null); // reset result if typing again
-                          setWaName('');     // clear the name to allow auto-fill for the new number
-                       }}
-                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
-                     />
+                  <div className="flex gap-2">
+                     <div className="w-[125px] shrink-0">
+                        <select
+                          value={waDdi}
+                          onChange={e => setWaDdi(e.target.value)}
+                          className="w-full h-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-3 text-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
+                        >
+                          {COUNTRIES.map(c => (
+                            <option key={c.code} value={c.code}>{c.flag} (+{c.code})</option>
+                          ))}
+                        </select>
+                     </div>
+                     <div className="relative flex-1">
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          autoFocus
+                          type="text"
+                          placeholder={t('newChatModal', 'waSearchPlaceholder')}
+                          value={waPhone}
+                          onChange={e => {
+                             setWaPhone(e.target.value);
+                             setWaResult(null); // reset result if typing again
+                             setWaName('');     // clear the name to allow auto-fill for the new number
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[15px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-medium text-slate-700"
+                        />
+                     </div>
                   </div>
                   
                   <button 

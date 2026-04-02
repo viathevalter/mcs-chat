@@ -263,12 +263,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
          if (convError) throw convError
          conversation = newConv
       } else {
-         if (conversation.status === 'closed' && !isFromMe) {
-           await supabase
-             .from('chat_conversations')
-             .update({ status: 'open' })
-             .eq('id', conversation.id)
-         }
+         // Status and assignments will be updated at the end with the latest unread count
          
          // Se a conversa já existe mas a foto nula, tentar recuperar
          if (!conversation.contact_avatar_url) {
@@ -339,11 +334,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             }
          }
 
-         // The transcription is now successfully merged into the audio message's content directly.
-
-         // Update unread_count and last_message_at
+         // Update unread_count, last_message_at and reopen if closed
          const updateConversationPayload: any = {};
          if (newlyFetchedAvatar) updateConversationPayload.contact_avatar_url = newlyFetchedAvatar;
+
+         // If the chat is closed and contact messages us, reopen it and clear assignment.
+         if (conversation.status === 'closed' && !isFromMe) {
+           updateConversationPayload.status = 'open';
+           updateConversationPayload.assigned_to = null;
+         }
 
          if (!isFromMe) {
            updateConversationPayload.unread_count = (conversation.unread_count || 0) + 1;

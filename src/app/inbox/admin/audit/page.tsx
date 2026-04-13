@@ -9,14 +9,25 @@ export default function AuditAIPage() {
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-
-  const fetchSummary = async (date: string) => {
+  
+  const [channels, setChannels] = useState<{id: string, name: string}[]>([])
+  const [selectedChannel, setSelectedChannel] = useState<string>('all')
+  const [customPrompt, setCustomPrompt] = useState<string>('')
+  
+  const fetchSummary = async (date: string, channelId = 'all') => {
     setLoading(true)
-    const { data, error } = await supabase
+    let req = supabase
       .from('chat_daily_summaries')
       .select('*')
       .eq('summary_date', date)
-      .single()
+      
+    if (channelId !== 'all') {
+      req = req.eq('channel_id', channelId)
+    } else {
+      req = req.is('channel_id', null)
+    }
+
+    const { data, error } = await req.single()
       
     if (!error && data) {
       setSummary(data)
@@ -27,8 +38,14 @@ export default function AuditAIPage() {
   }
 
   useEffect(() => {
-    fetchSummary(selectedDate)
-  }, [selectedDate])
+    fetchSummary(selectedDate, selectedChannel)
+  }, [selectedDate, selectedChannel])
+
+  useEffect(() => {
+    supabase.from('chat_channels').select('id, name').order('name').then(({data}) => {
+      if (data) setChannels(data)
+    })
+  }, [])
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -36,7 +53,11 @@ export default function AuditAIPage() {
       const res = await fetch('/api/chat/daily-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: selectedDate })
+        body: JSON.stringify({ 
+           date: selectedDate,
+           channelId: selectedChannel !== 'all' ? selectedChannel : undefined,
+           customPrompt: customPrompt.trim() !== '' ? customPrompt.trim() : undefined
+        })
       })
       const result = await res.json()
       if (result.success || result.message) {
@@ -52,24 +73,65 @@ export default function AuditAIPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <BrainCircuit className="w-7 h-7 text-emerald-600" />
-            Auditoria por I.A
-          </h2>
-          <p className="text-slate-500 text-sm mt-1">
-            Resumo gerencial e radar de riscos das conversas do dia.
-          </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+              <BrainCircuit className="w-7 h-7 text-emerald-600" />
+              Auditoria por I.A
+            </h2>
+            <p className="text-slate-500 text-sm mt-1">
+              Resumo gerencial e radar de riscos das conversas do dia.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedChannel}
+              onChange={(e) => setSelectedChannel(e.target.value)}
+              className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm text-sm font-medium text-slate-700 outline-none"
+            >
+              <option value="all">Todos os Canais</option>
+              {channels.map(ch => (
+                 <option key={ch.id} value={ch.id}>{ch.name}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+              <Calendar className="w-5 h-5 text-slate-400 ml-2" />
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border-none bg-transparent outline-none text-sm font-medium text-slate-700 cursor-pointer"
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-          <Calendar className="w-5 h-5 text-slate-400 ml-2" />
-          <input 
-            type="date" 
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="border-none bg-transparent outline-none text-sm font-medium text-slate-700 cursor-pointer"
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+            Instruções Específicas / Foco da Auditoria (Opcional)
+          </label>
+          <textarea
+             value={customPrompt}
+             onChange={(e) => setCustomPrompt(e.target.value)}
+             placeholder="Ex: A empresa está passando por uma inspeção de trabalho sobre Carga Horária, foque a pesquisa nesses casos."
+             className="w-full h-16 text-sm p-3 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
           />
+          {summary && (
+              <div className="mt-3 flex justify-end">
+                <button 
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {generating ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Gerando novo relatório...</>
+                  ) : (
+                    <><BrainCircuit className="w-4 h-4" /> Forçar Nova Auditoria Personalizada</>
+                  )}
+                </button>
+              </div>
+          )}
         </div>
       </div>
 

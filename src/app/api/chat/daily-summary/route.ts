@@ -15,13 +15,20 @@ export async function POST(req: Request) {
     const reqData = await req.json().catch(() => ({}))
     const targetDate = reqData.date || new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
 
+    const channelId = reqData.channelId || null
+    const customPrompt = reqData.customPrompt || ''
+
     const supabase = createAdminClient()
 
-    const { data: existingSummary } = await supabase
+    let q = supabase
       .from('chat_daily_summaries')
       .select('id, status')
       .eq('summary_date', targetDate)
-      .single()
+      
+    if (channelId) q = q.eq('channel_id', channelId)
+    else q = q.is('channel_id', null)
+
+    const { data: existingSummary } = await q.single()
 
     if (existingSummary && existingSummary.status === 'completed' && !reqData.force) {
       return NextResponse.json({ message: 'Summary already completed for this date.' })
@@ -30,7 +37,7 @@ export async function POST(req: Request) {
     let summaryId = existingSummary?.id
     if (!summaryId) {
       const { data: newSum } = await supabase.from('chat_daily_summaries')
-        .insert({ summary_date: targetDate, status: 'processing' })
+        .insert({ summary_date: targetDate, status: 'processing', channel_id: channelId })
         .select('id')
         .single()
       summaryId = newSum?.id
@@ -41,13 +48,19 @@ export async function POST(req: Request) {
     const startOfDay = new Date(`${targetDate}T00:00:00.000Z`).toISOString()
     const endOfDay = new Date(`${targetDate}T23:59:59.999Z`).toISOString()
 
-    const { data: messages, error: msgError } = await supabase
+    let messageQuery = supabase
       .from('chat_messages')
-      .select('id, conversation_id, content, direction, sender_name, created_at, message_type')
+      .select('id, conversation_id, content, direction, sender_name, created_at, message_type, chat_conversations!inner(channel_id)')
       .gte('created_at', startOfDay)
       .lte('created_at', endOfDay)
       .neq('message_type', 'internal_note')
       .order('created_at', { ascending: true })
+
+    if (channelId) {
+       messageQuery = messageQuery.eq('chat_conversations.channel_id', channelId)
+    }
+
+    const { data: messages, error: msgError } = await messageQuery
 
     if (msgError || !messages || messages.length === 0) {
       await supabase.from('chat_daily_summaries').update({ status: 'error', summary: 'No messages found for this date.' }).eq('id', summaryId)
@@ -88,7 +101,8 @@ CRITÉRIOS DE RISCO:
 2. Ameaças de processos trabalhistas, reclamações severas no Ministério do Trabalho ou descontentamento extremo.
 3. Atendimento Ríspido: Qualquer grosseria, falta de profissionalismo, ironia ou despreparo por parte do "Operador".
 
-Resuma o dia em um texto claro e extraia os tópicos mais falados com porcentagem aproximada.`
+Resuma o dia em um texto claro e extraia os tópicos mais falados com porcentagem aproximada.
+${customPrompt ? `\nINSTRUÇÕES ADICIONAIS DO SUPERVISOR:\n${customPrompt}` : ''}`
 
     const { object: aiResponse } = await generateObject({
       model: openai('gpt-4o-mini'),

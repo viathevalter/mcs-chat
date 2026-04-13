@@ -43,7 +43,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [replyingTo, setReplyingTo] = useState<any | null>(null)
   const [translatorActive, setTranslatorActive] = useState(false)
   const [showTranslationMenu, setShowTranslationMenu] = useState(false)
-  const [targetLang, setTargetLang] = useState("Spanish") // Config padrão
+  const [myLang, setMyLang] = useState("Português (Brasil)")
+  const [targetLang, setTargetLang] = useState("English") // Config padrão
   const [isTranslatingOutbound, setIsTranslatingOutbound] = useState(false)
 
   // Tags States
@@ -458,11 +459,33 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Meu Idioma (Leitura)</label>
-                <input type="text" value="pt-BR" readOnly className="w-full text-sm border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-slate-600 outline-none" />
+                <select 
+                   value={myLang} 
+                   onChange={e => setMyLang(e.target.value)} 
+                   className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm bg-white"
+                >
+                    <option value="Português (Brasil)">Português (Brasil)</option>
+                    <option value="English">English</option>
+                    <option value="Spanish">Español</option>
+                    <option value="French">Français</option>
+                    <option value="German">Deutsch</option>
+                    <option value="Italian">Italiano</option>
+                </select>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Idioma do Cliente (Envio)</label>
-                <input type="text" value={targetLang} onChange={e => setTargetLang(e.target.value)} className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm" placeholder="Ex: Spanish, English..." />
+                <select 
+                   value={targetLang} 
+                   onChange={e => setTargetLang(e.target.value)} 
+                   className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm bg-white"
+                >
+                    <option value="English">English</option>
+                    <option value="Spanish">Español</option>
+                    <option value="French">Français</option>
+                    <option value="German">Deutsch</option>
+                    <option value="Italian">Italiano</option>
+                    <option value="Português (Brasil)">Português (Brasil)</option>
+                </select>
               </div>
             </div>
             <div className="mt-4 p-2.5 bg-blue-50/80 border border-blue-100 text-blue-800 text-[11px] rounded-lg flex gap-2.5 items-start leading-relaxed shadow-sm">
@@ -586,7 +609,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
                 {msg.content && msg.content !== '[Mídia UAZ]' && msg.content !== '[Mensagem de Voz]' && (
     translatorActive && !isNote && (!['audio', 'video', 'image', 'document'].includes(msg.message_type)) ? (
-        <BilingualMessage msg={msg} translationActive={translatorActive} myLang="pt-BR" />
+        <BilingualMessage msg={msg} translationActive={translatorActive} myLang={myLang} />
     ) : (
         <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
     )

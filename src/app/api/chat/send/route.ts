@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     const reqData = await req.json()
     const { conversationId, text, messageType = 'text', mediaUrl, fileName } = reqData
-    if (!conversationId || !text) {
+    if (!conversationId || (!text && !mediaUrl)) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
 

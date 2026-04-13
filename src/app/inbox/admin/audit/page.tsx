@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Calendar, BrainCircuit, AlertTriangle, MessageSquare, Loader2, CheckCircle2, Siren } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 
@@ -145,16 +146,19 @@ export default function AuditAIPage() {
                  <div className="space-y-4">
                     {summary.risks_detected?.length > 0 ? (
                       summary.risks_detected.map((risk: any, idx: number) => (
-                        <div key={idx} className="bg-red-50/50 p-4 rounded-xl border border-red-100 relative overflow-hidden group">
+                        <Link href={`/inbox/${risk.conversation_id}`} key={idx} className="bg-red-50/50 p-4 rounded-xl border border-red-100 relative overflow-hidden group hover:bg-red-50 hover:shadow-md transition-all block cursor-pointer">
                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
                            <span className="inline-block px-2 py-1 bg-red-100 text-red-800 text-[10px] font-bold uppercase rounded mb-2">
                              {risk.type}
                            </span>
-                           <p className="text-sm text-slate-800 font-semibold mb-1">{risk.reason}</p>
+                           <p className="text-sm text-slate-800 font-semibold mb-1 group-hover:text-red-700 transition-colors">{risk.reason}</p>
                            <div className="bg-white/80 p-2.5 rounded text-xs text-slate-600 italic border border-red-50 font-mono line-clamp-3">
                              "{risk.excerpt}"
                            </div>
-                        </div>
+                           <div className="mt-3 text-[10px] font-bold text-red-400 group-hover:text-red-600 transition-colors flex items-center gap-1">
+                             <MessageSquare className="w-3 h-3" /> Abrir Conversa
+                           </div>
+                        </Link>
                       ))
                     ) : (
                       <div className="text-center py-8">

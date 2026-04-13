@@ -71,7 +71,7 @@ export default function InboxSidebar() {
 
   return (
     <>
-    <aside className="w-[340px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors">
+    <aside className="w-[370px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors">
       {/* Header */}
       <div className="h-20 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
         <h1 className="text-[22px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">

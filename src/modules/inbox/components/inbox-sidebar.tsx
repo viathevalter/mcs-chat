@@ -152,7 +152,7 @@ export default function InboxSidebar() {
       </div>
 
       {/* Sub Nav / Filters */}
-      <div className="px-4 pt-1 flex flex-nowrap overflow-x-auto scrollbar-hide items-center gap-3 text-[12.5px] whitespace-nowrap font-semibold border-b border-slate-100 pb-0">
+      <div className="px-4 pt-1 flex flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] items-center gap-3 text-[12.5px] whitespace-nowrap font-semibold border-b border-slate-100 pb-0">
         <button 
           onClick={() => setActiveFilter('minhas')}
           className={`${activeFilter === 'minhas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}

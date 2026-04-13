@@ -343,7 +343,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           )}
 
           <div className="w-px h-6 bg-slate-200 mx-1"></div>
-          <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
+          <button onClick={togglePanel} className={`p-2.5 rounded-xl transition-all ${isPanelOpen ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`} title="Detalhes do Contato">
             <MoreVertical className="w-5 h-5" />
           </button>
         </div>
@@ -393,7 +393,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </div>
               )}
               <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''} relative`}>
-     <div className={`absolute top-1 ${isOutbound ? '-left-10' : '-right-10'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity`}>
+     <div className={`absolute top-1 ${isOutbound ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity z-10 whitespace-nowrap`}>
         <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors">
            <CornerUpLeft className="w-3 h-3" />
         </button>

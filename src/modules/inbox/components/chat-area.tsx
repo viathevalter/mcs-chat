@@ -491,37 +491,40 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           }
           
           return (
-            <div key={msg.id} className="flex flex-col gap-4">
+            <div key={msg.id} className={`mb-4 animate-in fade-in slide-in-from-bottom-2 ${isOutbound ? 'pr-2' : 'pl-2'}`}>
               {showDateSeparator && (
                 <div className="flex justify-center my-4">
                   <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">{dateLabel}</span>
                 </div>
               )}
-              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''} relative`}>
-     <div className={`absolute top-1 ${isOutbound ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity z-10 whitespace-nowrap`}>
-        <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors">
-           <CornerUpLeft className="w-3 h-3" />
-        </button>
-            {isOutbound && (
-                <button onClick={() => handleDeleteMessage(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1" title="Apagar Mensagem">
-                    <Trash2 className="w-3 h-3" />
-                </button>
-            )}
-     </div>
-              <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`}>
-                {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
-              </div>
-              <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
+              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
+                <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`}>
+                  {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
+                </div>
                 
-                {(msg as any).quoted && (() => {
-       const qMsg = messages.find((m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted);
-       return (
-         <div className="w-full mb-1 p-1.5 bg-black/5 dark:bg-white/10 rounded border-l-4 border-emerald-500/60 text-xs cursor-pointer hover:bg-black/10 transition-colors">
-            <span className="font-bold text-emerald-700 block mb-0.5">{qMsg ? (qMsg.direction === 'outbound' ? 'Você' : 'Contato') : 'Mensagem'}</span>
-            <span className="text-slate-600 dark:text-slate-300 line-clamp-1 truncate">{qMsg?.content || '...'}</span>
-         </div>
-       )
-   })()}
+                <div className="relative group max-w-full flex items-center">
+                  <div className={`absolute top-0 ${isOutbound ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity z-10 whitespace-nowrap`}>
+                    <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors">
+                        <CornerUpLeft className="w-3 h-3" />
+                    </button>
+                    {isOutbound && (
+                        <button onClick={() => handleDeleteMessage(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1" title="Apagar Mensagem">
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                    )}
+                  </div>
+
+                  <div className={`pointer-events-auto px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
+                    
+                    {(msg as any).quoted && (() => {
+           const qMsg = messages.find((m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted);
+           return (
+             <div className="w-full mb-1 p-1.5 bg-black/5 dark:bg-white/10 rounded border-l-4 border-emerald-500/60 text-xs cursor-pointer hover:bg-black/10 transition-colors">
+                <span className="font-bold text-emerald-700 block mb-0.5">{qMsg ? (qMsg.direction === 'outbound' ? 'Você' : 'Contato') : 'Mensagem'}</span>
+                <span className="text-slate-600 dark:text-slate-300 line-clamp-1 truncate">{qMsg?.content || '...'}</span>
+             </div>
+           )
+       })()}
    {msg.media_url && msg.message_type === 'image' && (
                   <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -607,9 +607,10 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </div>
               </div>
             </div>
-            </div>
-          )
-        })}
+          </div>
+        </div>
+        )
+      })}
         <div ref={bottomRef} />
       </div>
 

@@ -19,7 +19,7 @@ export function BilingualMessage({
     useEffect(() => {
         if (!translationActive) return;
         if (msg.direction === 'outbound') return; // We only translate inbound automatically
-        if (msg.message_type !== 'text') return;
+        if (['audio', 'video', 'image', 'document'].includes(msg.message_type)) return;
 
         // DB saved cache check
         if (msg.translations?.[myLang]) {
@@ -44,7 +44,7 @@ export function BilingualMessage({
         return () => { isMounted = false }
     }, [translationActive, myLang, msg])
 
-    if (!translationActive || msg.direction === 'outbound' || msg.message_type !== 'text') {
+    if (!translationActive || msg.direction === 'outbound' || ['audio', 'video', 'image', 'document'].includes(msg.message_type)) {
         return <p className="text-[14px] leading-relaxed break-words">{msg.content}</p>
     }
 

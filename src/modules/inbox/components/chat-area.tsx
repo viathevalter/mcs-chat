@@ -556,8 +556,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </div>
               )}
               <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
-                <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`}>
-                  {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
+                <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`} title={msg.sender_name || 'Desconhecido'}>
+                  {isOutbound ? (msg.sender_name?.substring(0, 2).toUpperCase() || 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
                 </div>
                 
                 <div className="relative group max-w-full flex items-center">

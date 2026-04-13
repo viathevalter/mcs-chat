@@ -16,9 +16,16 @@ export interface Message { quoted?: string | null;
 export function useChat(conversationId: string) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
+  const [senderName, setSenderName] = useState<string>('RH')
 
   useEffect(() => {
     if (!conversationId) return
+
+    // Get current user profile for naming the sender
+    supabase.auth.getUser().then(({ data }) => {
+      const name = data.user?.user_metadata?.full_name || data.user?.email?.split('@')[0];
+      if (name) setSenderName(name);
+    });
 
     fetchMessages()
     
@@ -65,7 +72,7 @@ export function useChat(conversationId: string) {
   const sendMessage = async (
     text: string, 
     messageType: string = 'text', 
-    options?: { mediaUrl?: string; fileName?: string; quoted?: string }
+    options?: { mediaUrl?: string; fileName?: string; quoted?: string; senderName?: string }
   ) => {
     // Generate optimistic ID
     const optId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
@@ -81,7 +88,7 @@ export function useChat(conversationId: string) {
       status: 'sending',
       created_at: new Date().toISOString(),
       quoted: options?.quoted,
-      sender_name: messageType === 'internal_note' ? 'RH (Nota Interna)' : 'RH (Atendente)'
+      sender_name: options?.senderName || senderName || (messageType === 'internal_note' ? 'Nota Interna' : 'Atendente')
     }
     
     setMessages(prev => [...prev, optimisticMessage])
@@ -96,7 +103,8 @@ export function useChat(conversationId: string) {
           messageType,
           mediaUrl: options?.mediaUrl,
           fileName: options?.fileName,
-          quotedMessageId: options?.quoted
+          quotedMessageId: options?.quoted,
+          senderName: options?.senderName || senderName
         })
       })
       

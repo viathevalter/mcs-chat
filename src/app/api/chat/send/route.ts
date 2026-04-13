@@ -5,7 +5,7 @@ import { evolutionApi } from '@/lib/whatsapp/evolution-api'
 export async function POST(req: Request) {
   try {
     const reqData = await req.json()
-    const { conversationId, text, messageType = 'text', mediaUrl, fileName } = reqData
+    const { conversationId, text, messageType = 'text', mediaUrl, fileName, senderName } = reqData
     if (!conversationId || (!text && !mediaUrl)) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
       media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : mediaUrl || null,
       message_type: isInternalNote ? 'internal_note' : messageType,
-      sender_name: isInternalNote ? 'RH (Nota Interna)' : 'RH (Atendente)',
+      sender_name: senderName || (isInternalNote ? 'RH (Nota Interna)' : 'RH (Atendente)'),
       status: isInternalNote ? 'delivered' : 'sent'
     })
 

@@ -42,8 +42,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   
   const [replyingTo, setReplyingTo] = useState<any | null>(null)
   const [translatorActive, setTranslatorActive] = useState(false)
+  const [showTranslationMenu, setShowTranslationMenu] = useState(false)
+  const [targetLang, setTargetLang] = useState("Spanish") // Config padrão
   const [isTranslatingOutbound, setIsTranslatingOutbound] = useState(false)
-  const targetLang = "Spanish" // Config padrão
   
 
   // Novas states para Ferramentas
@@ -290,12 +291,47 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
           
     {/* BOTOES TAG, FAVORITO E AUTO IA */}
-    <button onClick={togglePin} className={`px-3 py-1.5 ml-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${context?.conversation?.is_pinned ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
-       <Star className={`w-3.5 h-3.5 ${context?.conversation?.is_pinned ? 'fill-yellow-400' : ''}`} /> {t('chatArea', 'favorite') || 'Favorito'}
+    <button className="px-3 py-1.5 ml-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-white text-slate-500 hover:bg-slate-50 hidden md:flex">
+       <Tag className="w-3.5 h-3.5" /> Tags
     </button>
-    <button onClick={() => setTranslatorActive(!translatorActive)} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${translatorActive ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-white text-emerald-600 border-slate-200 hover:bg-emerald-50'}`}>
-       <Languages className="w-3.5 h-3.5" /> Auto-A.I 
+    <button onClick={togglePin} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${context?.conversation?.is_pinned ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+       <Star className={`w-3.5 h-3.5 ${context?.conversation?.is_pinned ? 'fill-yellow-400' : ''}`} /> {t('chatArea', 'favorite') || 'Fixar'}
     </button>
+    <div className="relative">
+      <button onClick={() => setShowTranslationMenu(!showTranslationMenu)} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${translatorActive ? 'bg-orange-500 text-white border-orange-600 shadow-sm shadow-orange-200' : 'bg-white text-orange-500 border-orange-200 hover:bg-orange-50'}`}>
+         <Languages className="w-3.5 h-3.5" /> Auto-A.I 
+      </button>
+      {showTranslationMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowTranslationMenu(false)}></div>
+          <div className="absolute top-full right-0 mt-2 w-[290px] bg-white shadow-2xl rounded-xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-3">
+              <div>
+                <span className="font-bold text-slate-700 block text-[13px]">Auto Translation</span>
+                <span className="text-[11px] text-slate-500">Tradução simultânea via OpenAI.</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer group">
+                <input type="checkbox" className="sr-only peer" checked={translatorActive} onChange={() => setTranslatorActive(!translatorActive)} />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500 group-hover:after:scale-95"></div>
+              </label>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Meu Idioma (Leitura)</label>
+                <input type="text" value="pt-BR" readOnly className="w-full text-sm border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-slate-600 outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Idioma do Cliente (Envio)</label>
+                <input type="text" value={targetLang} onChange={e => setTargetLang(e.target.value)} className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm" placeholder="Ex: Spanish, English..." />
+              </div>
+            </div>
+            <div className="mt-4 p-2.5 bg-blue-50/80 border border-blue-100 text-blue-800 text-[11px] rounded-lg flex gap-2.5 items-start leading-relaxed shadow-sm">
+               <span className="mt-0.5 text-lg">💡</span> <span>A IA detectará automaticamente o idioma que escreverem para você. Você só precisa dizer o idioma deles para que o botão de <strong>"Traduzir"</strong> mande corretamente.</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   {togglePanel && (
             <button 
               onClick={togglePanel}
@@ -571,14 +607,26 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              </div>
              
              {/* Botão Enviar (Direita) */}
-             <div className="shrink-0 self-end mb-1 mr-1">
+             <div className="shrink-0 self-end mb-1 mr-1 flex flex-col sm:flex-row items-center gap-1.5">
+               {translatorActive && activeTab !== 'note' && (
+                 <button 
+                   onClick={handleTranslateAndSend} 
+                   disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound} 
+                   className={`px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-[13px] font-bold shadow-sm hover:shadow-md rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+                   title="Traduzir e Enviar"
+                 >
+                   {isTranslatingOutbound ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
+                   <span className="hidden sm:inline">Traduzir</span>
+                 </button>
+               )}
                <button 
-                 onClick={translatorActive ? handleTranslateAndSend : handleSend} 
-                 disabled={isSending || text.trim() === '' || isUploading} 
-                 className={`p-2.5 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center justify-center ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : translatorActive ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-slate-700 hover:bg-slate-800'}`}
+                 onClick={handleSend} 
+                 disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound} 
+                 className={`px-4 py-2 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center gap-2 text-[13px] font-bold ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                  title={activeTab === 'note' ? t('chatArea', 'save') : t('chatArea', 'send')}
                >
-                 <Send className="w-5 h-5 ml-0.5" />
+                 <span className="hidden sm:inline">{activeTab === 'note' ? 'Salvar Nota' : 'Enviar'}</span>
+                 <Send className="w-4 h-4" />
                </button>
              </div>
            </div>

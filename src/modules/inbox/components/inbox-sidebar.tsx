@@ -152,12 +152,18 @@ export default function InboxSidebar() {
       </div>
 
       {/* Sub Nav / Filters */}
-      <div className="px-4 pt-1 flex flex-wrap items-center gap-4 text-[13px] font-semibold border-b border-slate-100 pb-0">
+      <div className="px-4 pt-1 flex flex-nowrap overflow-x-auto scrollbar-hide items-center gap-3 text-[12.5px] whitespace-nowrap font-semibold border-b border-slate-100 pb-0">
         <button 
           onClick={() => setActiveFilter('minhas')}
           className={`${activeFilter === 'minhas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
         >
           {t('inboxSidebar', 'mine')}
+        </button>
+        <button 
+          onClick={() => setActiveFilter('favoritos')}
+          className={`${activeFilter === 'favoritos' ? 'text-yellow-600 border-b-2 border-yellow-600' : 'text-slate-500 hover:text-yellow-600 border-b-2 border-transparent'} pb-2 transition-colors flex items-center gap-1`}
+        >
+          <span className="text-yellow-500 text-[10px]">⭐</span> {t('inboxSidebar', 'favorites') || 'Favoritos'}
         </button>
         <button 
           onClick={() => setActiveFilter('abertas')}

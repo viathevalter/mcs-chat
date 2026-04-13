@@ -102,6 +102,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [attachment, setAttachment] = useState<{file: File, type: 'image' | 'document', previewUrl?: string} | null>(null)
 
   const docInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -168,16 +169,42 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   }
 
   const handleSend = async () => {
-    if (!text.trim() || isSending) return
+    if ((!text.trim() && !attachment) || isSending || isUploading) return
     setIsSending(true)
+    
     try {
-      await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
-      setText('')
-      setShowQuickReplies(false)
-      setShowEmoji(false)
-      setReplyingTo(null)
+        if (attachment) {
+            setIsUploading(true)
+            const fileExt = attachment.file.name.split('.').pop() || 'png';
+            const fileName = `chat_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            
+            const { error: uploadError } = await supabase.storage.from('chat_media').upload(fileName, attachment.file);
+            if (uploadError) throw uploadError;
+            
+            const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName);
+            
+            await sendMessage(text.trim() || '', attachment.type, { mediaUrl: publicUrl, fileName: attachment.file.name, quoted: replyingTo?.id })
+            
+            setAttachment(null)
+            setText('')
+            setReplyingTo(null)
+            setShowQuickReplies(false)
+            setShowEmoji(false)
+            setIsUploading(false)
+            return;
+        }
+
+        await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
+        setText('')
+        setShowQuickReplies(false)
+        setShowEmoji(false)
+        setReplyingTo(null)
+    } catch (err) {
+        console.error('Erro ao enviar anexo:', err)
+        alert(t('chatArea', 'error'))
     } finally {
-      setIsSending(false)
+        setIsSending(false)
+        setIsUploading(false)
     }
   }
 
@@ -203,27 +230,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
 
     setShowAttach(false)
-    setIsUploading(true)
-    
-    try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
-      
-      const { data, error } = await supabase.storage.from('chat_media').upload(fileName, file)
-      if (error) throw error
-      
-      const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName)
-      
-      await sendMessage('', type, { mediaUrl: publicUrl, fileName: file.name, quoted: replyingTo?.id })
-      setReplyingTo(null)
-      
-    } catch (err) {
-      console.error('Erro no upload', err)
-      alert(t('chatArea', 'error'))
-    } finally {
-      setIsUploading(false)
-      if (e.target) e.target.value = ''
+    let previewUrl;
+    if (type === 'image') {
+       previewUrl = URL.createObjectURL(file);
     }
+    setAttachment({ file, type, previewUrl });
+    if (e.target) e.target.value = ''
   }
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -242,24 +254,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               return;
             }
 
-            setIsUploading(true);
-            try {
-              const fileExt = file.name.split('.').pop() || 'png';
-              const fileName = `paste_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-              
-              const { data, error } = await supabase.storage.from('chat_media').upload(fileName, file);
-              if (error) throw error;
-              
-              const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName);
-              
-              await sendMessage('', 'image', { mediaUrl: publicUrl, fileName: file.name, quoted: replyingTo?.id });
-              setReplyingTo(null);
-            } catch (err) {
-              console.error('Erro no upload de paste', err);
-              alert(t('chatArea', 'error'));
-            } finally {
-              setIsUploading(false);
-            }
+            const previewUrl = URL.createObjectURL(file);
+            setAttachment({ file, type: 'image', previewUrl });
             break; // Handle only the first image
         }
     }
@@ -692,11 +688,26 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              </div>
            )}
 
-           {replyingTo && (
+   {replyingTo && (
     <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2.5 mx-2 text-sm relative shadow-sm">
       <button onClick={() => setReplyingTo(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
       <span className="font-bold text-emerald-600 text-xs mb-0.5">{replyingTo.direction === 'outbound' ? 'Você' : (context?.conversation?.contact_name || 'Contato')}</span>
       <span className="text-slate-500 text-xs truncate max-w-[85%]">{replyingTo.content || 'Mídia'}</span>
+    </div>
+  )}
+
+  {attachment && (
+    <div className="relative mx-2 mb-1 p-2 bg-slate-100/50 rounded-xl border border-slate-200 w-max max-w-[300px] shadow-sm">
+      <button onClick={() => setAttachment(null)} className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md border hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors z-10"><X className="w-4 h-4" /></button>
+      {attachment.type === 'image' ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={attachment.previewUrl} className="max-h-32 object-contain rounded-lg" alt="Preview"/>
+      ) : (
+        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+           <FileText className="w-6 h-6 text-emerald-500" />
+           <span className="text-sm font-medium text-slate-700 max-w-[150px] truncate">{attachment.file.name}</span>
+        </div>
+      )}
     </div>
   )}
   {/* Tabs Responder / Privada */}
@@ -743,7 +754,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                  onKeyDown={(e) => {
                    if (e.key === 'Enter' && !e.shiftKey) {
                      e.preventDefault()
-                     if (text.trim()) {
+                     if (text.trim() || attachment) {
                        handleSend()
                      }
                    }
@@ -770,7 +781,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                )}
                <button 
                  onClick={handleSend} 
-                 disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound} 
+                 disabled={isSending || (text.trim() === '' && !attachment) || isUploading || isTranslatingOutbound} 
                  className={`px-4 py-2 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center gap-2 text-[13px] font-bold ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                  title={activeTab === 'note' ? t('chatArea', 'save') : t('chatArea', 'send')}
                >

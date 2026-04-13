@@ -7,7 +7,7 @@ import { useInbox } from '../hooks/use-inbox'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NewChatModal } from './new-chat-modal'
-import { ThemeSwitcher } from './theme-switcher'
+
 import { useI18n } from '@/contexts/i18n-context'
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
@@ -78,7 +78,7 @@ export default function InboxSidebar() {
           {t('sidebar', 'inbox')}
         </h1>
         <div className="flex items-center gap-1.5">
-           <ThemeSwitcher />
+
            <Link href="/inbox/agenda" className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
               {t('inboxSidebar', 'agenda')}

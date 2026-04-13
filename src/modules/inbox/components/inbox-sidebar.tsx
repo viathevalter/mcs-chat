@@ -233,6 +233,16 @@ export default function InboxSidebar() {
                    </div>
                  </div>
                 </div>
+                {/* TAGS RENDERING */}
+                {(conv.tags && conv.tags.length > 0) && (
+                   <div className="flex flex-wrap gap-1 mt-2 pl-12">
+                     {conv.tags.map((tag: any, idx: number) => (
+                       <span key={idx} className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] shadow-sm" style={{ backgroundColor: tag.color }}>
+                         {tag.name}
+                       </span>
+                     ))}
+                   </div>
+                )}
               </div>
             </Link>
           ))

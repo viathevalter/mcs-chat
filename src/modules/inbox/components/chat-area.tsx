@@ -342,7 +342,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       {showTagsMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowTagsMenu(false)}></div>
-          <div className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-slate-900 shadow-2xl rounded-xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+          <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 shadow-2xl rounded-xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
             <div className="mb-4">
               <span className="font-bold text-slate-700 dark:text-slate-200 block text-sm mb-2 flex items-center gap-2">
                 <Tag className="w-4 h-4" /> Etiquetas do Contato
@@ -363,19 +363,19 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             
             <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-2">Nova Etiqueta</span>
-              <div className="flex gap-2 mb-3">
+              <div className="flex gap-2 mb-3 w-full">
                 <input 
                   type="text" 
                   placeholder="Ex: Lead Novo" 
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                  className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="flex-1 min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
                 <button 
                   onClick={handleAddTag} 
                   disabled={!newTagName.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
                 >
                   Add
                 </button>

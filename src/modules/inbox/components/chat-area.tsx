@@ -31,7 +31,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const { t } = useI18n()
   const router = useRouter()
   const { messages, loading, sendMessage } = useChat(conversationId)
-  const { context } = useConversationContext(conversationId)
+  const { context, setContext } = useConversationContext(conversationId)
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
@@ -66,11 +66,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
     
     const updatedTags = [...currentTags, newTag];
-    context.setConversation({ ...context.conversation, tags: updatedTags });
+    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null);
 
     const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId);
     if(error){
-        context.setConversation({ ...context.conversation, tags: currentTags });
+        setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null);
     } else {
         setNewTagName('');
     }
@@ -80,11 +80,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (!context?.conversation) return;
     const currentTags = context.conversation.tags || [];
     const updatedTags = currentTags.filter((t:any) => t.name !== tagName);
-    context.setConversation({ ...context.conversation, tags: updatedTags });
+    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null);
 
     const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId);
     if(error){
-        context.setConversation({ ...context.conversation, tags: currentTags });
+        setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null);
     }
   };
 

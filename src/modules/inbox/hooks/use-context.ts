@@ -89,5 +89,5 @@ export function useConversationContext(conversationId: string) {
     }
   }, [conversationId])
 
-  return { context, loading }
+  return { context, setContext, loading }
 }

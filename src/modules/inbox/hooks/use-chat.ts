@@ -65,7 +65,7 @@ export function useChat(conversationId: string) {
   const sendMessage = async (
     text: string, 
     messageType: string = 'text', 
-    options?: { mediaUrl?: string; fileName?: string }
+    options?: { mediaUrl?: string; fileName?: string; quoted?: string }
   ) => {
     // Generate optimistic ID
     const optId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
@@ -80,6 +80,7 @@ export function useChat(conversationId: string) {
       message_type: messageType,
       status: 'sending',
       created_at: new Date().toISOString(),
+      quoted: options?.quoted,
       sender_name: messageType === 'internal_note' ? 'RH (Nota Interna)' : 'RH (Atendente)'
     }
     
@@ -94,7 +95,8 @@ export function useChat(conversationId: string) {
           text, 
           messageType,
           mediaUrl: options?.mediaUrl,
-          fileName: options?.fileName
+          fileName: options?.fileName,
+          quotedMessageId: options?.quoted
         })
       })
       

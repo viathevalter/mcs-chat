@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
-export interface Conversation {
+export interface Conversation { is_pinned?: boolean; tags?: any[]; 
   id: string
   contact_name: string
   contact_phone: string

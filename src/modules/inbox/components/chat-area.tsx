@@ -1,6 +1,6 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap, Loader2, Image as ImageIcon, FileText, X } from 'lucide-react'
+import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap, Loader2, Image as ImageIcon, FileText, X, Languages, Star, Tag, CornerUpLeft, Trash2 } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format, isToday, isYesterday, isSameDay } from 'date-fns'
@@ -10,6 +10,8 @@ import { CustomAudioPlayer } from './custom-audio-player'
 import { supabase } from '@/lib/supabase/client'
 import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react'
 import { useI18n } from '@/contexts/i18n-context'
+import { translateOutboundMessage } from '@/app/actions/translation-actions'
+import { BilingualMessage } from './bilingual-message'
 import { useRouter } from 'next/navigation'
 
 interface ChatAreaProps {
@@ -37,8 +39,20 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const bottomRef = useRef<HTMLDivElement>(null)
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  
+  const [replyingTo, setReplyingTo] = useState<any | null>(null)
+  const [translatorActive, setTranslatorActive] = useState(false)
+  const [isTranslatingOutbound, setIsTranslatingOutbound] = useState(false)
+  const targetLang = "Spanish" // Config padrão
+  
 
   // Novas states para Ferramentas
+  const togglePin = async () => {
+     if (!context?.conversation) return;
+     const newStatus = !context.conversation.is_pinned;
+     await supabase.from('chat_conversations').update({ is_pinned: newStatus }).eq('id', conversationId);
+  }
+
   const [showEmoji, setShowEmoji] = useState(false)
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
@@ -63,14 +77,62 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (data) setQuickReplies(data)
   }
 
+  const handleTranslateAndSend = async () => {
+    if (!text.trim() || isSending || isTranslatingOutbound) return
+    setIsTranslatingOutbound(true)
+    const rawContent = text
+    setText('')
+    try {
+       const res = await translateOutboundMessage(rawContent, targetLang)
+       if (res.success && res.translation) {
+           await sendMessage(res.translation, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
+       } else {
+           setText(rawContent)
+       }
+    } finally {
+       setIsTranslatingOutbound(false)
+       setReplyingTo(null)
+    }
+  }
+
+  const handleDeleteMessage = async (msg: any) => {
+    if (!confirm(t('chatArea', 'confirmDelete') || 'Deseja realmente apagar esta mensagem para todos?')) return;
+    
+    // Optimistic UI
+    const originalContent = msg.content;
+    const originalStatus = msg.status;
+    
+    try {
+        // Usa a Rota Nativa copiada do CRM que exclui lá na ponta (UAZAPI / WhatsApp)
+        const res = await fetch('/api/channels/uazapi/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messageId: msg.id,
+                externalId: msg.external_id || msg.id,
+                instanceName: context?.conversation?.channel?.name || 'default'
+            })
+        });
+        
+        // Se a API externa falhar, garantiremos que, usando o fallback, vamos no mínimo remover da UI
+        if (!res.ok) {
+           console.warn('API de delete externa falhou. Removendo apenas local.');
+           await supabase.from('chat_messages').update({ content: '🚫 Mensagem apagada', status: 'deleted' }).eq('id', msg.id);
+        }
+    } catch(err) {
+        console.error('Falha ao apagar msg', err);
+    }
+  }
+
   const handleSend = async () => {
     if (!text.trim() || isSending) return
     setIsSending(true)
     try {
-      await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text')
+      await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
       setText('')
       setShowQuickReplies(false)
       setShowEmoji(false)
+      setReplyingTo(null)
     } finally {
       setIsSending(false)
     }
@@ -109,7 +171,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       
       const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName)
       
-      await sendMessage('', type, { mediaUrl: publicUrl, fileName: file.name })
+      await sendMessage('', type, { mediaUrl: publicUrl, fileName: file.name, quoted: replyingTo?.id })
+      setReplyingTo(null)
       
     } catch (err) {
       console.error('Erro no upload', err)
@@ -225,10 +288,18 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             </button>
           )}
 
-          {togglePanel && (
+          
+    {/* BOTOES TAG, FAVORITO E AUTO IA */}
+    <button onClick={togglePin} className={`px-3 py-1.5 ml-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${context?.conversation?.is_pinned ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+       <Star className={`w-3.5 h-3.5 ${context?.conversation?.is_pinned ? 'fill-yellow-400' : ''}`} /> {t('chatArea', 'favorite') || 'Favorito'}
+    </button>
+    <button onClick={() => setTranslatorActive(!translatorActive)} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${translatorActive ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-white text-emerald-600 border-slate-200 hover:bg-emerald-50'}`}>
+       <Languages className="w-3.5 h-3.5" /> Auto-A.I 
+    </button>
+  {togglePanel && (
             <button 
               onClick={togglePanel}
-              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all border border-transparent hover:border-emerald-100 flex items-center justify-center shrink-0" 
+              className="hidden" 
               title={isPanelOpen ? t('chatArea', 'hideDetails') : t('chatArea', 'showDetails')}
             >
                {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
@@ -285,13 +356,32 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">{dateLabel}</span>
                 </div>
               )}
-              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
+              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} group items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''} relative`}>
+     <div className={`absolute top-1 ${isOutbound ? '-left-10' : '-right-10'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity`}>
+        <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors">
+           <CornerUpLeft className="w-3 h-3" />
+        </button>
+            {isOutbound && (
+                <button onClick={() => handleDeleteMessage(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1" title="Apagar Mensagem">
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            )}
+     </div>
               <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`}>
                 {isOutbound ? (isNote ? 'RH' : 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
               </div>
               <div className={`px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
                 
-                {msg.media_url && msg.message_type === 'image' && (
+                {(msg as any).quoted && (() => {
+       const qMsg = messages.find((m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted);
+       return (
+         <div className="w-full mb-1 p-1.5 bg-black/5 dark:bg-white/10 rounded border-l-4 border-emerald-500/60 text-xs cursor-pointer hover:bg-black/10 transition-colors">
+            <span className="font-bold text-emerald-700 block mb-0.5">{qMsg ? (qMsg.direction === 'outbound' ? 'Você' : 'Contato') : 'Mensagem'}</span>
+            <span className="text-slate-600 dark:text-slate-300 line-clamp-1 truncate">{qMsg?.content || '...'}</span>
+         </div>
+       )
+   })()}
+   {msg.media_url && msg.message_type === 'image' && (
                   <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
@@ -316,8 +406,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 )}
 
                 {msg.content && msg.content !== '[Mídia UAZ]' && msg.content !== '[Mensagem de Voz]' && (
-                   <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
-                )}
+    translatorActive && !isNote && (!['audio', 'video', 'image', 'document'].includes(msg.message_type)) ? (
+        <BilingualMessage msg={msg} translationActive={translatorActive} myLang="pt-BR" />
+    ) : (
+        <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
+    )
+)}
                 <div className={`flex justify-end gap-1 mt-0.5 opacity-60 grouphover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-chat-outbound-fg opacity-80') : 'text-chat-inbound-fg opacity-60'}`}>
                    <span className="text-[10px] font-medium">{time} {isNote && t('chatArea', 'internalNoteTag')}</span>
                    {isOutbound && !isNote && (
@@ -414,7 +508,14 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              </div>
            )}
 
-           {/* Tabs Responder / Privada */}
+           {replyingTo && (
+    <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2.5 mx-2 text-sm relative shadow-sm">
+      <button onClick={() => setReplyingTo(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+      <span className="font-bold text-emerald-600 text-xs mb-0.5">{replyingTo.direction === 'outbound' ? 'Você' : (context?.conversation?.contact_name || 'Contato')}</span>
+      <span className="text-slate-500 text-xs truncate max-w-[85%]">{replyingTo.content || 'Mídia'}</span>
+    </div>
+  )}
+  {/* Tabs Responder / Privada */}
            <div className="flex items-center gap-6 px-2 text-[13px] font-semibold text-slate-500">
               <button 
                 onClick={() => setActiveTab('reply')}
@@ -472,9 +573,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
              {/* Botão Enviar (Direita) */}
              <div className="shrink-0 self-end mb-1 mr-1">
                <button 
-                 onClick={handleSend} 
+                 onClick={translatorActive ? handleTranslateAndSend : handleSend} 
                  disabled={isSending || text.trim() === '' || isUploading} 
-                 className={`p-2.5 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center justify-center ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-800'}`}
+                 className={`p-2.5 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center justify-center ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : translatorActive ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-slate-700 hover:bg-slate-800'}`}
                  title={activeTab === 'note' ? t('chatArea', 'save') : t('chatArea', 'send')}
                >
                  <Send className="w-5 h-5 ml-0.5" />

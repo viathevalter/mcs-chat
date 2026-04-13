@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.52",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.0",
+    "ai": "^6.0.158",
     "date-fns": "^4.1.0",
     "emoji-picker-react": "^4.18.0",
     "lucide-react": "^1.7.0",

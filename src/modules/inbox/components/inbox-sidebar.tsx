@@ -10,7 +10,7 @@ import { NewChatModal } from './new-chat-modal'
 import { ThemeSwitcher } from './theme-switcher'
 import { useI18n } from '@/contexts/i18n-context'
 
-type FilterType = 'minhas' | 'abertas' | 'todos' | 'fechadas'
+type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
 export default function InboxSidebar() {
   const { t } = useI18n()
@@ -49,6 +49,7 @@ export default function InboxSidebar() {
       }
 
       // 3. Status Filter
+      if (activeFilter === 'favoritos') { return conv.is_pinned === true; }
       if (activeFilter === 'minhas') {
         return conv.assigned_to === currentUserId && conv.status !== 'closed'
       }
@@ -202,7 +203,7 @@ export default function InboxSidebar() {
                  <div className="flex-1 min-w-0">
                    <div className="flex justify-between items-start mb-1">
                      <h3 className={`font-medium text-sm truncate pr-2 ${activeId === conv.id ? 'text-emerald-900' : 'text-slate-800 dark:text-slate-200'}`}>
-                        {conv.contact_name || conv.contact_phone}
+                        {conv.contact_name || conv.contact_phone}{conv.is_pinned && <span className="text-yellow-500 text-[10px] ml-1">⭐</span>}
                      </h3>
                      <span className="text-[10px] text-slate-400 whitespace-nowrap pt-1">
                        {conv.last_message_at ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR }) : ''}

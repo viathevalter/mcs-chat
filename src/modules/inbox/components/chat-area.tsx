@@ -226,6 +226,45 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
   }
 
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            if (!file) continue;
+            
+            const maxSize = 16 * 1024 * 1024;
+            if (file.size > maxSize) {
+              alert(t('chatArea', 'maxImageLimit'));
+              return;
+            }
+
+            setIsUploading(true);
+            try {
+              const fileExt = file.name.split('.').pop() || 'png';
+              const fileName = `paste_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+              
+              const { data, error } = await supabase.storage.from('chat_media').upload(fileName, file);
+              if (error) throw error;
+              
+              const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName);
+              
+              await sendMessage('', 'image', { mediaUrl: publicUrl, fileName: file.name, quoted: replyingTo?.id });
+              setReplyingTo(null);
+            } catch (err) {
+              console.error('Erro no upload de paste', err);
+              alert(t('chatArea', 'error'));
+            } finally {
+              setIsUploading(false);
+            }
+            break; // Handle only the first image
+        }
+    }
+  };
+
   const handleAssign = async () => {
     if (!currentUserId || isAssigning) return
     setIsAssigning(true)
@@ -708,6 +747,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                      }
                    }
                  }}
+                 onPaste={handlePaste}
                  className="w-full bg-transparent px-2 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
                  placeholder={activeTab === 'note' ? t('chatArea', 'internalNote') : t('chatArea', 'typeMessage')}
                  rows={1}

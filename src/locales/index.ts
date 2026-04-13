@@ -93,7 +93,7 @@ export const translations = {
       quickReplies: 'Mensagens Prontas',
       channels: 'Canais de Atendimento',
       gateways: 'Gateways e Chaves',
-      audit: 'Registro de Auditoria',
+      audit: 'Auditoria de I.A',
       generalSettingsTitle: 'Configurações Gerais',
       generalSettingsDesc: 'Gerencie a configuração da sua empresa, equipe e conectores técnicos (Integrações Multi-API).'
     },
@@ -230,7 +230,7 @@ export const translations = {
       quickReplies: 'Quick Replies',
       channels: 'Support Channels',
       gateways: 'Gateways & Keys',
-      audit: 'Audit Log',
+      audit: 'A.I Audit Log',
       generalSettingsTitle: 'General Settings',
       generalSettingsDesc: 'Manage your company configuration, team and technical connectors (Multi-API Integrations).'
     },

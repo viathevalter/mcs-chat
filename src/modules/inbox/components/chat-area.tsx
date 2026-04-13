@@ -147,14 +147,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     const originalStatus = msg.status;
     
     try {
-        // Usa a Rota Nativa copiada do CRM que exclui lá na ponta (UAZAPI / WhatsApp)
-        const res = await fetch('/api/channels/uazapi/delete', {
+        // Usa a Rota Nativa do Kotrik (que busca url e api_token do chat_channels)
+        const res = await fetch('/api/chat/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messageId: msg.id,
-                externalId: msg.external_id || msg.id,
-                instanceName: context?.conversation?.channel?.name || 'default'
+                externalId: msg.external_id || msg.id
             })
         });
         

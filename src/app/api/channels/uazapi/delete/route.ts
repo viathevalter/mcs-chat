@@ -18,11 +18,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "O ID da mensagem e o ID externo são obrigatórios" }, { status: 400, headers: corsHeaders })
     }
 
-    const API_URL = process.env.UAZ_API_URL
-    const GLOBAL_KEY = process.env.UAZ_GLOBAL_KEY
+    const API_URL = process.env.EVOLUTION_API_URL || process.env.UAZ_API_URL
+    const GLOBAL_KEY = process.env.EVOLUTION_API_KEY || process.env.UAZ_GLOBAL_KEY
 
     if (!API_URL || !GLOBAL_KEY) {
-       console.error("Faltam variáveis da UAZ API no .env")
+       console.error("Faltam variáveis da Evolution API no .env")
        return NextResponse.json({ error: "Configuração do Gateway Incompleta" }, { status: 500, headers: corsHeaders })
     }
 

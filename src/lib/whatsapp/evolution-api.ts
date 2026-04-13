@@ -99,6 +99,51 @@ export const evolutionApi = {
     return response.json();
   },
 
+  async deleteMessage({ id, number, instanceName, apiUrl, apiToken, provider }: { id: string, number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }) {
+    if (!apiUrl) throw new Error('API URL is required');
+    const cleanUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+    const cleanNumber = number.replace(/\D/g, '');
+    
+    let url = '';
+    let headers: any = { 'Content-Type': 'application/json' };
+    let body: any = {};
+
+    if (provider === 'uazapi') {
+      url = `${cleanUrl}/message/delete`;
+      headers['token'] = apiToken;
+      
+      let formattedId = id;
+      if (!formattedId.includes(':') && cleanNumber) {
+          formattedId = `${cleanNumber}@s.whatsapp.net:${id}`;
+      }
+      body = { id: formattedId, number: cleanNumber };
+    } else {
+      url = `${cleanUrl}/chat/deleteMessage/${instanceName}`;
+      headers['apikey'] = apiToken;
+      body = {
+        key: {
+          remoteJid: `${cleanNumber}@s.whatsapp.net`,
+          fromMe: true,
+          id: id
+        }
+      };
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+        const error = await response.text();
+        console.error(`[Evolution API] Failed to delete message ${id}:`, error);
+        throw new Error(`Failed to delete message: ${error}`);
+    }
+    return response.json();
+  },
+
   async fetchProfilePictureUrl({ number, instanceName, apiUrl, apiToken, provider }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<string | null> {
     try {
       if (!apiUrl) return null;

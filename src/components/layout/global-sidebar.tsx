@@ -55,9 +55,9 @@ export function GlobalSidebar() {
 
 
   return (
-    <nav className={`flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 transition-all duration-300 ${collapsed ? 'w-20' : 'w-[240px]'} h-full shrink-0 relative z-50`}>
+    <nav className={`flex flex-col border-r border-slate-200 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 bg-chat-surface-bg transition-all duration-300 ${collapsed ? 'w-20' : 'w-[240px]'} h-full shrink-0 relative z-50`}>
       {/* Logo Area */}
-      <div className="h-20 flex items-center justify-center border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <div className="h-20 flex items-center justify-center border-b border-slate-100 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 shrink-0">
          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
            M
          </div>

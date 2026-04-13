@@ -77,10 +77,10 @@
 }
 
 .sunset {
-  --background: #fffdf9;
+  --background: #fff5f2;
   --foreground: #2d1b19;
 
-  --chat-surface-bg: #fffdf9;
+  --chat-surface-bg: #fff5f2;
   --chat-area-bg: #ffede6;
   
   --chat-outbound-bg-start: #ff758c;
@@ -98,10 +98,10 @@
 }
 
 .ocean {
-  --background: #f0fdfa;
+  --background: #f0f9ff;
   --foreground: #042f2e;
 
-  --chat-surface-bg: #f8fafc;
+  --chat-surface-bg: #f0f9ff;
   --chat-area-bg: #e0f2fe;
   
   --chat-outbound-bg-start: #0ea5e9;

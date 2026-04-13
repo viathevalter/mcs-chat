@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
-export interface Message {
+export interface Message { quoted?: string | null; 
   id: string
   conversation_id: string
   direction: 'inbound' | 'outbound' | 'internal'

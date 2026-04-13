@@ -16,7 +16,7 @@ export default function AdminLayout({
          <p className="text-sm font-medium text-slate-500 mt-2">{t('admin', 'generalSettingsDesc')}</p>
       </div>
       
-      <div className="flex flex-1 overflow-visible p-8 max-w-[1400px] w-full gap-8">
+      <div className="flex flex-1 overflow-visible p-8 max-w-full w-full gap-8">
         <aside className="w-[280px] flex-shrink-0">
           <AdminNav />
         </aside>

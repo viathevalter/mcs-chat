@@ -112,11 +112,9 @@ export const evolutionApi = {
       url = `${cleanUrl}/message/delete`;
       headers['token'] = apiToken;
       
-      let formattedId = id;
-      if (!formattedId.includes(':') && cleanNumber) {
-          formattedId = `${cleanNumber}@s.whatsapp.net:${id}`;
-      }
-      body = { id: formattedId, number: cleanNumber };
+      // A Uazapi espera apenas o ID original (interno/uuid ou messageid gerado por eles)
+      // Não devemos concatenar com sufixos do Evolution
+      body = { id };
     } else {
       url = `${cleanUrl}/chat/deleteMessage/${instanceName}`;
       headers['apikey'] = apiToken;

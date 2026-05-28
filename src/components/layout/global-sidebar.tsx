@@ -74,6 +74,19 @@ export function GlobalSidebar() {
 
       {/* Navigation Links */}
       <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-hide">
+        {/* Hub Return Button */}
+        <button 
+          onClick={() => {
+            const hubUrl = process.env.NEXT_PUBLIC_HUB_URL || 'http://localhost:3000'
+            window.location.href = hubUrl
+          }}
+          title={collapsed ? t('sidebar', 'back_to_hub') || "Voltar para o Hub" : undefined}
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 mb-4 rounded-xl cursor-pointer transition-colors group relative bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700`}
+        >
+          <ChevronLeft className="w-5 h-5 shrink-0 transition-colors" />
+          {!collapsed && <span className="ml-3 text-[14px] whitespace-nowrap font-medium">Voltar para o Hub</span>}
+        </button>
+
         {links.map((link) => {
           const isActive = link.exact ? pathname === link.href : pathname?.startsWith(link.href)
           const Icon = link.icon

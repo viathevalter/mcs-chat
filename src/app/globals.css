@@ -3,26 +3,28 @@
 @custom-variant sunset (&:is(.sunset *));
 @custom-variant ocean (&:is(.ocean *));
 
-:root {
+:root,
+.light,
+html:not(.dark):not(.sunset):not(.ocean) {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #111b21;
 
-  /* Theme: Light (Classic) */
-  --chat-surface-bg: var(--color-white);
-  --chat-area-bg: var(--color-slate-50);
+  /* Theme: Light (Classic - WhatsApp Theme) */
+  --chat-surface-bg: #ffffff;
+  --chat-area-bg: #f5f1e9;
   
-  --chat-outbound-bg-start: var(--color-emerald-500);
-  --chat-outbound-bg-end: var(--color-teal-600);
-  --chat-outbound-border: var(--color-emerald-400);
-  --chat-outbound-fg: var(--color-white);
-  --chat-outbound-shadow: var(--color-emerald-200);
+  --chat-outbound-bg-start: #d7f7d0;
+  --chat-outbound-bg-end: #d7f7d0;
+  --chat-outbound-border: #b8eabb;
+  --chat-outbound-fg: #111b21;
+  --chat-outbound-shadow: rgba(11, 20, 26, 0.06);
   
-  --chat-inbound-bg: var(--color-white);
-  --chat-inbound-border: var(--color-slate-200);
-  --chat-inbound-fg: var(--color-slate-700);
+  --chat-inbound-bg: #ffffff;
+  --chat-inbound-border: #e9edef;
+  --chat-inbound-fg: #111b21;
   
-  --chat-icon-bg: var(--color-emerald-100);
-  --chat-icon-text: var(--color-emerald-600);
+  --chat-icon-bg: #e2f7db;
+  --chat-icon-text: #075e54;
 }
 
 @theme inline {
@@ -56,24 +58,24 @@
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #0b141a;
+  --foreground: #e9edef;
   
-  --chat-surface-bg: var(--color-slate-900);
-  --chat-area-bg: var(--color-slate-900);
+  --chat-surface-bg: #111b21;
+  --chat-area-bg: #0b141a;
   
-  --chat-outbound-bg-start: var(--color-emerald-600);
-  --chat-outbound-bg-end: var(--color-emerald-800);
-  --chat-outbound-border: var(--color-emerald-500);
-  --chat-outbound-fg: var(--color-slate-50);
+  --chat-outbound-bg-start: #005c4b;
+  --chat-outbound-bg-end: #005c4b;
+  --chat-outbound-border: #025144;
+  --chat-outbound-fg: #e9edef;
   --chat-outbound-shadow: transparent;
   
-  --chat-inbound-bg: var(--color-slate-800);
-  --chat-inbound-border: var(--color-slate-700);
-  --chat-inbound-fg: var(--color-slate-200);
+  --chat-inbound-bg: #202c33;
+  --chat-inbound-border: #222d34;
+  --chat-inbound-fg: #e9edef;
 
-  --chat-icon-bg: var(--color-slate-800);
-  --chat-icon-text: var(--color-emerald-400);
+  --chat-icon-bg: #111b21;
+  --chat-icon-text: #00a884;
 }
 
 .sunset {

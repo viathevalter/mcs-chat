@@ -31,6 +31,11 @@ const sidebarNavItemsKeys = [
     icon: MessageCircle,
   },
   {
+    translationKey: 'aiAgents' as any,
+    href: "/inbox/admin/ai-agents",
+    icon: Zap,
+  },
+  {
     translationKey: 'integrations',
     href: "/inbox/admin/integrations",
     icon: Key,

@@ -33,10 +33,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return translations[lang][section]?.[key] || key
   }
 
-  if (!mounted) {
-    return null // wait until mounted to avoid hydration mismatch
-  }
-
   return (
     <I18nContext.Provider value={{ lang, setLang: handleSetLang, t }}>
       {children}

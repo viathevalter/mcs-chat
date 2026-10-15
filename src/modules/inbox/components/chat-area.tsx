@@ -324,7 +324,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const isClosed = conversation?.status === 'closed'
 
   return (
-    <div className="flex flex-col h-full bg-chat-area-bg relative transition-colors duration-300">
+    <div className="flex flex-col h-full bg-[var(--chat-area-bg)] relative transition-colors duration-300">
       <div className="h-20 flex-shrink-0 bg-chat-surface-bg/80 backdrop-blur-md border-b border-chat-inbound-border px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
         <div className="flex items-center gap-4">
           <div className="relative">
@@ -572,7 +572,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                     )}
                   </div>
 
-                  <div className={`pointer-events-auto px-3 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-3xl rounded-br-sm shadow-amber-200/50' : 'bg-gradient-to-br from-chat-outbound-bg-start to-chat-outbound-bg-end text-chat-outbound-fg rounded-3xl rounded-br-sm shadow-chat-outbound-shadow backdrop-blur-sm') : 'bg-chat-inbound-bg border border-chat-inbound-border rounded-3xl rounded-bl-sm text-chat-inbound-fg backdrop-blur-sm'}`}>
+                  <div className={`pointer-events-auto px-3.5 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl rounded-br-xs shadow-amber-200/50' : 'bg-[var(--chat-outbound-bg-start)] text-[var(--chat-outbound-fg)] border border-[var(--chat-outbound-border)] rounded-2xl rounded-br-xs shadow-sm') : 'bg-[var(--chat-inbound-bg)] border border-[var(--chat-inbound-border)] rounded-2xl rounded-bl-xs text-[var(--chat-inbound-fg)] shadow-sm'}`}>
                     
                     {(msg as any).quoted && (() => {
            const qMsg = messages.find((m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted);
@@ -618,7 +618,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                    <span className="text-[10px] font-medium">{time} {isNote && t('chatArea', 'internalNoteTag')}</span>
                    {isOutbound && !isNote && (
                       msg.status === 'error' ? <span className="text-[10px] text-red-400">{t('chatArea', 'error')}</span> :
-                      msg.status === 'read' ? <CheckCheck className="w-4 h-4 text-blue-300" /> :
+                      msg.status === 'read' ? <CheckCheck className="w-4 h-4 text-sky-500" /> :
                       msg.status === 'delivered' ? <CheckCheck className="w-4 h-4" /> :
                       msg.status === 'sending' ? <Clock className="w-3.5 h-3.5" /> :
                       <Check className="w-4 h-4" />

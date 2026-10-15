@@ -1,15 +1,71 @@
 "use client"
-import { useState } from 'react'
-import { Megaphone, Users, Send, AlertCircle, CheckCircle2, Building2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Megaphone, Users, Send, AlertCircle, CheckCircle2, Building2, Briefcase, Sparkles, Loader2, Check } from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
 
 export default function AutomationsPage() {
   const [content, setContent] = useState('')
+  const [channels, setChannels] = useState<any[]>([])
+  const [selectedChannelId, setSelectedChannelId] = useState('')
+  const [companies, setCompanies] = useState<string[]>([])
+  const [selectedCompany, setSelectedCompany] = useState('')
+  const [clients, setClients] = useState<string[]>([])
+  const [selectedClient, setSelectedClient] = useState('')
+  const [targetType, setTargetType] = useState<'all' | 'company' | 'client'>('client')
+  
+  const [matchingWorkers, setMatchingWorkers] = useState<any[]>([])
+  const [loadingWorkers, setLoadingWorkers] = useState(false)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [targetType, setTargetType] = useState('all') // 'all', 'company', 'worksite'
+
+  useEffect(() => {
+    // 1. Fetch Channels
+    supabase.from('chat_channels').select('*').eq('is_active', true).then(({ data }) => {
+      if (data) {
+        setChannels(data)
+        if (data.length > 0) setSelectedChannelId(data[0].id)
+      }
+    })
+
+    // 2. Fetch distinct companies & clients from active workers
+    supabase.schema('core_personal').from('workers').select('contratante, cliente').eq('status_trabajador', 'Ativo').then(({ data }) => {
+      if (data) {
+        const emps = Array.from(new Set(data.map(w => w.contratante).filter(Boolean))) as string[]
+        const clis = Array.from(new Set(data.map(w => w.cliente).filter(Boolean))) as string[]
+        setCompanies(emps.sort())
+        setClients(clis.sort())
+        if (clis.length > 0) setSelectedClient(clis[0])
+        if (emps.length > 0) setSelectedCompany(emps[0])
+      }
+    })
+  }, [])
+
+  // Live query matching workers
+  useEffect(() => {
+    async function queryWorkers() {
+      setLoadingWorkers(true)
+      let q = supabase.schema('core_personal').from('workers').select('id, nome, telefono, contratante, cliente, funcion').eq('status_trabajador', 'Ativo')
+
+      if (targetType === 'company' && selectedCompany) {
+        q = q.ilike('contratante', `%${selectedCompany}%`)
+      } else if (targetType === 'client' && selectedClient) {
+        q = q.ilike('cliente', `%${selectedClient}%`)
+      }
+
+      const { data } = await q.limit(50)
+      if (data) setMatchingWorkers(data)
+      setLoadingWorkers(false)
+    }
+
+    queryWorkers()
+  }, [targetType, selectedCompany, selectedClient])
 
   const handleDispatch = async () => {
-    if (!content.trim()) return
+    if (!content.trim() || !selectedChannelId) {
+      alert('Preencha a mensagem e selecione o canal de envio.')
+      return
+    }
+
     setLoading(true)
     setStatus('idle')
 
@@ -17,7 +73,13 @@ export default function AutomationsPage() {
       const res = await fetch('/api/chat/campaign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, targetType })
+        body: JSON.stringify({
+          channelId: selectedChannelId,
+          content,
+          targetType,
+          company: selectedCompany,
+          client: selectedClient
+        })
       })
 
       if (!res.ok) throw new Error('Falha ao agendar disparos')
@@ -33,116 +95,189 @@ export default function AutomationsPage() {
   }
 
   return (
-    <div className="flex-1 flex w-full h-full min-w-0 bg-slate-50 overflow-y-auto">
-      <div className="max-w-4xl mx-auto w-full p-8 md:p-12">
+    <div className="flex-1 flex w-full h-full min-w-0 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+      <div className="max-w-5xl mx-auto w-full p-8 md:p-12">
         
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg shadow-teal-200">
-             <Megaphone className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none">
+             <Megaphone className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Campanhas Operacionais</h1>
-            <p className="text-slate-500 font-medium mt-1">Agende disparos em lote para grupos de colaboradores selecionados.</p>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Comunicados Segmentados por Cliente</h1>
+            <p className="text-slate-500 text-sm mt-0.5">Substitua os grupos manuais de WhatsApp por envios individuais diretos e organizados.</p>
           </div>
         </div>
 
-        {/* Form Grid */}
+        {/* Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
            
-           {/* Left Config */}
+           {/* Left Filters */}
            <div className="lg:col-span-1 space-y-6">
               
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Público Alvo
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Segmentação do Público
                  </h3>
                  
-                 <div className="space-y-3">
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'all' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                      <input type="radio" name="target" checked={targetType === 'all'} onChange={() => setTargetType('all')} className="mt-1" />
+                 <div className="space-y-2">
+                    <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${targetType === 'client' ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30' : 'border-slate-100 dark:border-slate-800'}`}>
+                      <input type="radio" name="target" checked={targetType === 'client'} onChange={() => setTargetType('client')} />
                       <div>
-                        <p className={`font-bold ${targetType === 'all' ? 'text-teal-900' : 'text-slate-700'}`}>Todos Colaboradores</p>
-                        <p className="text-xs text-slate-500 mt-1">Dispara para toda a base ativa.</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-white">Por Cliente / Obra</p>
+                        <p className="text-[10px] text-slate-500">Trabalhadores alocados no cliente</p>
                       </div>
                     </label>
 
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'company' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                      <input type="radio" name="target" checked={targetType === 'company'} onChange={() => setTargetType('company')} className="mt-1" />
+                    <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${targetType === 'company' ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30' : 'border-slate-100 dark:border-slate-800'}`}>
+                      <input type="radio" name="target" checked={targetType === 'company'} onChange={() => setTargetType('company')} />
                       <div>
-                        <p className={`font-bold ${targetType === 'company' ? 'text-teal-900' : 'text-slate-700'}`}>Por Empresa</p>
-                        <p className="text-xs text-slate-500 mt-1">Em breve: seleção de CNPJ.</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-white">Por Empresa Contratante</p>
+                        <p className="text-[10px] text-slate-500">Stocco, Luminous, Wiseowe, etc.</p>
                       </div>
                     </label>
 
-                    <label className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${targetType === 'worksite' ? 'border-teal-500 bg-teal-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                      <input type="radio" name="target" checked={targetType === 'worksite'} onChange={() => setTargetType('worksite')} className="mt-1" />
+                    <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${targetType === 'all' ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30' : 'border-slate-100 dark:border-slate-800'}`}>
+                      <input type="radio" name="target" checked={targetType === 'all'} onChange={() => setTargetType('all')} />
                       <div>
-                        <p className={`font-bold ${targetType === 'worksite' ? 'text-teal-900' : 'text-slate-700'}`}>Por Obra / Alocação</p>
-                        <p className="text-xs text-slate-500 mt-1">Em breve: seleção de Pedido.</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-white">Todos os Ativos</p>
+                        <p className="text-[10px] text-slate-500">Base completa de trabalhadores</p>
                       </div>
                     </label>
                  </div>
+
+                 {targetType === 'client' && (
+                   <div>
+                     <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Selecionar Cliente / Obra</label>
+                     <select
+                       value={selectedClient}
+                       onChange={e => setSelectedClient(e.target.value)}
+                       className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                     >
+                       {clients.map(cli => (
+                         <option key={cli} value={cli}>{cli}</option>
+                       ))}
+                     </select>
+                   </div>
+                 )}
+
+                 {targetType === 'company' && (
+                   <div>
+                     <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Selecionar Empresa</label>
+                     <select
+                       value={selectedCompany}
+                       onChange={e => setSelectedCompany(e.target.value)}
+                       className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                     >
+                       {companies.map(emp => (
+                         <option key={emp} value={emp}>{emp}</option>
+                       ))}
+                     </select>
+                   </div>
+                 )}
+
+                 <div>
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Canal WhatsApp de Disparo</label>
+                    <select
+                      value={selectedChannelId}
+                      onChange={e => setSelectedChannelId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    >
+                      {channels.map(ch => (
+                        <option key={ch.id} value={ch.id}>
+                          {ch.name} ({ch.company_name || 'Geral'})
+                        </option>
+                      ))}
+                    </select>
+                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-emerald-50 rounded-3xl p-6 border border-blue-100 shadow-sm">
-                 <h3 className="text-sm font-bold uppercase tracking-widest text-blue-500 mb-2 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" /> Alerta de Rate Limit
-                 </h3>
-                 <p className="text-xs text-blue-800/80 leading-relaxed font-medium">
-                   As mensagens agendadas entram na tabela <strong>chat_scheduled_messages</strong> e serão disparadas gradualmente pela fila em background (Cron) para evitar bans do WhatsApp.
-                 </p>
+              {/* Destinatários Estimados */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                 <div className="flex items-center justify-between">
+                   <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">Destinatários Ativos</h4>
+                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                     {matchingWorkers.length} trabalhadores
+                   </span>
+                 </div>
+
+                 <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+                   {loadingWorkers ? (
+                     <p className="text-[11px] text-slate-400">Buscando lista...</p>
+                   ) : matchingWorkers.length === 0 ? (
+                     <p className="text-[11px] text-slate-400">Nenhum trabalhador ativo neste filtro.</p>
+                   ) : (
+                     matchingWorkers.map(w => (
+                       <div key={w.id} className="pt-1.5 flex items-center justify-between text-[11px]">
+                         <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{w.nome}</span>
+                         <span className="text-slate-400 font-mono text-[10px]">{w.telefono || 's/ fone'}</span>
+                       </div>
+                     ))
+                   )}
+                 </div>
               </div>
 
            </div>
 
-           {/* Right Editor */}
-           <div className="lg:col-span-2">
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 flex flex-col h-full overflow-hidden">
-                 <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                    <h3 className="text-lg font-bold text-slate-800">Mensagem da Campanha</h3>
-                    <p className="text-sm text-slate-500 mt-1">O conteúdo abaixo será enviado individualmente para todos os trabalhadores selecionados.</p>
-                 </div>
-                 
-                 <div className="flex-1 p-6 relative">
-                    <textarea 
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Olá, *[Nome]*! Este é um lembrete oficial do RH..."
-                      className="w-full h-64 p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/20 focus:border-teal-400 focus:bg-white transition-all text-slate-700 text-base leading-relaxed resize-none"
-                    ></textarea>
+           {/* Right Composer */}
+           <div className="lg:col-span-2 space-y-6">
+              
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                    Mensagem do Comunicado
+                 </h3>
 
-                    <p className="text-xs text-slate-400 mt-3 font-medium flex justify-end">
-                      Suporta variáveis: [Nome], [Empresa] em atualizações futuras.
-                    </p>
-                 </div>
-                 
-                 <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                    <div>
-                      {status === 'success' && (
-                         <span className="flex items-center gap-2 text-emerald-600 font-bold text-sm bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
-                           <CheckCircle2 className="w-4 h-4" /> Lote de disparos criado na fila com sucesso!
-                         </span>
-                      )}
-                      {status === 'error' && (
-                         <span className="flex items-center gap-2 text-rose-600 font-bold text-sm bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100">
-                           <AlertCircle className="w-4 h-4" /> Ocorreu um erro ao criar lote.
-                         </span>
-                      )}
-                    </div>
-                    <button 
-                      onClick={handleDispatch}
-                      disabled={loading || !content.trim()}
-                      className="px-8 py-3.5 bg-gradient-to-r from-teal-600 to-fuchsia-600 text-white font-bold rounded-xl shadow-lg shadow-teal-200 hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
-                    >
-                      {loading ? 'Processando...' : 'Agendar Campanha'}
-                      {!loading && <Send className="w-4 h-4 ml-1" />}
+                 <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-slate-400">Tags dinâmicas:</span>
+                    <button onClick={() => setContent(c => c + ' {nome}')} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md font-mono text-emerald-600 hover:bg-emerald-50">
+                      {'{nome}'}
+                    </button>
+                    <button onClick={() => setContent(c => c + ' {cliente}')} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md font-mono text-blue-600 hover:bg-blue-50">
+                      {'{cliente}'}
+                    </button>
+                    <button onClick={() => setContent(c => c + ' {empresa}')} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md font-mono text-purple-600 hover:bg-purple-50">
+                      {'{empresa}'}
                     </button>
                  </div>
+
+                 <textarea
+                   rows={8}
+                   value={content}
+                   onChange={e => setContent(e.target.value)}
+                   placeholder="Digite a mensagem do comunicado ou lembrete de folha de horas..."
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 dark:text-slate-100"
+                 />
+
+                 {status === 'success' && (
+                   <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-semibold">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                     Comunicado agendado com sucesso! Os disparos estão sendo processados na fila.
+                   </div>
+                 )}
+
+                 {status === 'error' && (
+                   <div className="p-4 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 rounded-2xl flex items-center gap-2 text-xs font-semibold">
+                     <AlertCircle className="w-4 h-4 text-rose-600" />
+                     Erro ao processar envio do comunicado. Verifique a conexão com a UazAPI.
+                   </div>
+                 )}
+
+                 <div className="flex justify-end pt-2">
+                   <button
+                     onClick={handleDispatch}
+                     disabled={loading || matchingWorkers.length === 0}
+                     className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 transition-colors disabled:opacity-50"
+                   >
+                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                     {loading ? 'Disparando Fila...' : `Enviar para ${matchingWorkers.length} Trabalhadores`}
+                   </button>
+                 </div>
               </div>
+
            </div>
 
         </div>
+
       </div>
     </div>
   )

@@ -1,20 +1,25 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/config'
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const access_token = requestUrl.searchParams.get('access_token')
   const refresh_token = requestUrl.searchParams.get('refresh_token')
 
-  if (access_token && refresh_token) {
-    const cookieStore = await cookies()
-    // Prepare the success response early to attach cookies directly to it
-    const response = NextResponse.redirect(`${requestUrl.origin}/inbox`)
+  if (!access_token || !refresh_token) {
+    return NextResponse.redirect(new URL('/?error=missing_tokens', request.url))
+  }
 
+  const cookieStore = await cookies()
+  const redirectTarget = new URL('/inbox', request.url)
+  const response = NextResponse.redirect(redirectTarget)
+
+  try {
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY,
       {
         cookies: {
           getAll() {
@@ -23,32 +28,32 @@ export async function GET(request: Request) {
           setAll(cookiesToSet) {
             try {
               cookiesToSet.forEach(({ name, value, options }) => {
-                // Update Next.js cookie store
                 cookieStore.set(name, value, options)
-                // Also forcefully attach to the redirect response
                 response.cookies.set(name, value, options)
               })
             } catch (error) {
-              // Ignored from a server component
+              // Server component context
             }
           },
         },
       }
     )
 
-    const { error } = await supabase.auth.setSession({
+    const { data, error } = await supabase.auth.setSession({
       access_token,
       refresh_token,
     })
 
-    if (error) {
-      console.error('SSO Error:', error.message)
-      return NextResponse.redirect(`${requestUrl.origin}/?error=sso_failed`)
+    if (!error && data?.session) {
+      return response
     }
-
-    return response
+  } catch (err) {
+    console.error('SSO server session exception:', err)
   }
 
-  // Fallback
-  return NextResponse.redirect(`${requestUrl.origin}/?error=missing_tokens`)
+  // Fallback para autenticação no cliente se os cookies do servidor falharem
+  const clientFallback = new URL('/', request.url)
+  clientFallback.searchParams.set('access_token', access_token)
+  clientFallback.searchParams.set('refresh_token', refresh_token)
+  return NextResponse.redirect(clientFallback)
 }

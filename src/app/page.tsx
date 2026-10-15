@@ -12,27 +12,62 @@ export default function LoginPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // Check if user is already logged in
+    // 1. Verificar se recebeu tokens via URL (SSO direto)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      const access_token = url.searchParams.get('access_token') || new URLSearchParams(window.location.hash.substring(1)).get('access_token')
+      const refresh_token = url.searchParams.get('refresh_token') || new URLSearchParams(window.location.hash.substring(1)).get('refresh_token')
+
+      if (access_token && refresh_token) {
+        setLoading(true)
+        supabase.auth.setSession({ access_token, refresh_token }).then(({ data, error }) => {
+          if (!error && data?.session) {
+            window.location.href = '/inbox'
+          } else {
+            setLoading(false)
+            setError('Falha ao autenticar sessão única. Por favor faça o login manual.')
+          }
+        }).catch(() => {
+          setLoading(false)
+          setError('Erro ao validar credenciais do Hub.')
+        })
+        return
+      }
+    }
+
+    // 2. Verificar se já possui sessão ativa
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/inbox')
+      if (session) {
+        window.location.href = '/inbox'
+      }
     })
-  }, [router])
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const cleanEmail = email.trim().toLowerCase()
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      })
 
-    if (signInError) {
-      setError('Credenciais inválidas. Verifique seu e-mail e senha.')
+      if (signInError) {
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('E-mail ou senha incorretos. Verifique suas credenciais.')
+        } else {
+          setError(signInError.message || 'Erro ao realizar login.')
+        }
+        setLoading(false)
+      } else if (data?.session) {
+        window.location.href = '/inbox'
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado na conexão.')
       setLoading(false)
-    } else {
-      router.push('/inbox')
     }
   }
 
@@ -82,7 +117,7 @@ export default function LoginPage() {
                
                {error && (
                   <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl flex items-center gap-3">
-                     <AlertCircle className="hidden" /> {/* keeping space, no icon to save import */}
+                     <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
                      <p className="text-sm text-red-600 dark:text-red-400 font-bold">{error}</p>
                   </div>
                )}
@@ -97,15 +132,14 @@ export default function LoginPage() {
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         className="w-full py-4 pl-12 pr-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none text-[15px] font-medium transition-all text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
-                        placeholder="nome@mcschat.com.br"
+                        placeholder="valter@gestaologinpro.com"
                      />
                   </div>
                </div>
 
-               <div className="space-y-1.5 pt-2">
-                  <div className="flex items-center justify-between ml-1 mb-1.5">
+               <div className="space-y-1.5">
+                  <div className="flex justify-between items-center ml-1">
                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Senha</label>
-                     <a href="#" className="text-xs font-bold text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 transition-colors">Esqueceu a senha?</a>
                   </div>
                   <div className="relative">
                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500" />
@@ -120,29 +154,35 @@ export default function LoginPage() {
                   </div>
                </div>
 
-               <div className="pt-4">
-                  <button 
-                     type="submit"
-                     disabled={loading}
-                     className="w-full py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 flex items-center justify-center gap-2 group"
-                  >
-                     {loading ? (
+               <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group mt-2"
+               >
+                  {loading ? (
+                     <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                     ) : (
-                        <>
-                           Entrar no Sistema
-                           <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                        </>
-                     )}
-                  </button>
-               </div>
-               
-               <p className="text-center text-sm text-slate-500 dark:text-slate-400 font-medium mt-8">
-                  Sistema de uso restrito da MCS-Chat.
-               </p>
+                        <span>Autenticando...</span>
+                     </>
+                  ) : (
+                     <>
+                        <span>Entrar no Sistema</span>
+                        <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                     </>
+                  )}
+               </button>
+
             </form>
+
+            <div className="mt-8 text-center">
+               <p className="text-xs text-slate-400 dark:text-slate-500">
+                  Sistema de uso restrito da MCS Chat.
+               </p>
+            </div>
+
          </div>
       </div>
+
     </div>
   )
 }

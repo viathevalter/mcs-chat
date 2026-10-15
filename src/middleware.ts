@@ -1,15 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/config'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  // Create an unmodified response
+  // Create client with official Prod Supabase configuration
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
@@ -28,9 +29,6 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -39,7 +37,6 @@ export async function middleware(request: NextRequest) {
     !user &&
     request.nextUrl.pathname.startsWith('/inbox')
   ) {
-    // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

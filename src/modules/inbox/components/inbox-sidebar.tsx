@@ -2,26 +2,31 @@
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
-import { Search, Plus, User } from 'lucide-react'
+import { Search, Plus, User, Bot, BotOff, Building2, Layers } from 'lucide-react'
 import { useInbox } from '../hooks/use-inbox'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NewChatModal } from './new-chat-modal'
-
 import { useI18n } from '@/contexts/i18n-context'
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
 export default function InboxSidebar() {
   const { t } = useI18n()
-  const { conversations, loading, currentUserId } = useInbox()
+  const { 
+    conversations, 
+    departments, 
+    loading, 
+    currentUserId,
+    selectedDepartmentFilter,
+    setSelectedDepartmentFilter 
+  } = useInbox()
   const params = useParams()
   const activeId = params?.id as string
   const [isModalOpen, setIsModalOpen] = useState(false)
   
-  const [activeFilter, setActiveFilter] = useState<FilterType>('abertas')
+  const [activeFilter, setActiveFilter] = useState<FilterType>('todos')
   const [channelFilter, setChannelFilter] = useState<string[]>([])
-  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Derive unique channels from current conversation list
@@ -37,18 +42,28 @@ export default function InboxSidebar() {
 
   const filteredConversations = useMemo(() => {
     return conversations.filter(conv => {
-      // 1. Channel Filter
+      // 1. Department Filter
+      if (selectedDepartmentFilter !== 'all') {
+        if (selectedDepartmentFilter === 'unassigned') {
+          if (conv.department_id) return false
+        } else {
+          if (conv.department_id !== selectedDepartmentFilter) return false
+        }
+      }
+
+      // 2. Channel Filter
       if (channelFilter.length > 0 && conv.channel_id && !channelFilter.includes(conv.channel_id)) return false
       
-      // 2. Search Filter
+      // 3. Search Filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         const matchName = conv.contact_name?.toLowerCase().includes(query)
         const matchPhone = conv.contact_phone?.toLowerCase().includes(query)
-        if (!matchName && !matchPhone) return false
+        const matchCompany = conv.channel?.company_name?.toLowerCase().includes(query)
+        if (!matchName && !matchPhone && !matchCompany) return false
       }
 
-      // 3. Status Filter
+      // 4. Status Filter
       if (activeFilter === 'favoritos') { return conv.is_pinned === true; }
       if (activeFilter === 'minhas') {
         return conv.assigned_to === currentUserId && conv.status !== 'closed'
@@ -65,32 +80,31 @@ export default function InboxSidebar() {
       
       return true
     })
-  }, [conversations, activeFilter, channelFilter, searchQuery, currentUserId])
-
-  const openCount = conversations.filter(c => (!c.assigned_to || c.assigned_to === null) && c.status !== 'closed').length
+  }, [conversations, selectedDepartmentFilter, activeFilter, channelFilter, searchQuery, currentUserId])
 
   return (
     <>
-    <aside className="w-[370px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 bg-chat-surface-bg flex flex-col h-full z-40 transition-colors">
+    <aside className="w-[370px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-chat-surface-bg flex flex-col h-full z-40 transition-colors">
       {/* Header */}
-      <div className="h-20 px-4 border-b border-slate-100 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 flex items-center justify-between shrink-0">
-        <h1 className="text-[22px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+      <div className="h-16 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-950">
+        <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           {t('sidebar', 'inbox')}
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
+            {filteredConversations.length}
+          </span>
         </h1>
         <div className="flex items-center gap-1.5">
-
-           <Link href="/inbox/agenda" className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+           <Link href="/inbox/agenda" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               {t('inboxSidebar', 'agenda')}
            </Link>
-           <button onClick={() => setIsModalOpen(true)} className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none rounded-lg transition-colors flex items-center justify-center relative group" title={t('inboxSidebar', 'newChat')}>
+           <button onClick={() => setIsModalOpen(true)} className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors flex items-center justify-center" title={t('inboxSidebar', 'newChat')}>
              <Plus className="w-4 h-4" />
            </button>
         </div>
       </div>
 
-      {/* Search and Channel Bar */}
-      <div className="p-3 space-y-2">
+      {/* Search Bar */}
+      <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 bg-white dark:bg-slate-950">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input 
@@ -98,157 +112,128 @@ export default function InboxSidebar() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder={t('inboxSidebar', 'searchPlaceholder')}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 dark:text-slate-100"
           />
         </div>
-        {availableChannels.length > 0 && (
-          <div className="relative">
-             <button 
-               onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
-               className="w-full flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm px-3 py-2 text-slate-700 font-medium cursor-pointer shadow-sm hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-             >
-                <div className="flex items-center gap-2">
-                   <span className="text-[10px] uppercase font-bold text-slate-400 select-none shrink-0">{t('inboxSidebar', 'channel')}:</span>
-                   <span className="text-[13px] truncate">
-                     {channelFilter.length === 0 ? t('inboxSidebar', 'allChannels') : `${channelFilter.length} Selecionados`}
-                   </span>
-                </div>
-                <svg className={`w-4 h-4 text-emerald-600 transition-transform ${isChannelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-             </button>
-             
-             {isChannelDropdownOpen && (
-               <>
-                 <div className="fixed inset-0 z-40" onClick={() => setIsChannelDropdownOpen(false)}></div>
-                 <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl z-50 py-1 max-h-64 overflow-y-auto">
-                    <button 
-                      onClick={() => { setChannelFilter([]); setIsChannelDropdownOpen(false) }}
-                      className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors font-semibold border-b border-slate-100 dark:border-slate-800"
-                    >
-                       💡 {t('inboxSidebar', 'allChannels')}
-                    </button>
-                    {availableChannels.map(c => {
-                       const isSelected = channelFilter.includes(c.id)
-                       return (
-                         <button 
-                           key={c.id} 
-                           onClick={(e) => {
-                             e.preventDefault()
-                             setChannelFilter(prev => isSelected ? prev.filter(id => id !== c.id) : [...prev, c.id])
-                           }}
-                           className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                         >
-                            <div className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}>
-                               {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" /></svg>}
-                            </div>
-                            <span className={`truncate text-left flex-1 ${isSelected ? 'font-bold text-emerald-800 dark:text-emerald-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>{c.name}</span>
-                         </button>
-                       )
-                    })}
-                 </div>
-               </>
-             )}
-          </div>
-        )}
       </div>
 
-      {/* Sub Nav / Filters */}
-      <div className="px-4 pt-1 flex flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] items-center gap-3 text-[12.5px] whitespace-nowrap font-semibold border-b border-slate-100 pb-0">
-        <button 
-          onClick={() => setActiveFilter('minhas')}
-          className={`${activeFilter === 'minhas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
+      {/* Filtros por Departamento (Abas Rápidas) */}
+      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200/60 dark:border-slate-800 flex items-center gap-1 overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setSelectedDepartmentFilter('all')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+            selectedDepartmentFilter === 'all'
+              ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+          }`}
         >
-          {t('inboxSidebar', 'mine')}
+          Todos
         </button>
-        <button 
-          onClick={() => setActiveFilter('favoritos')}
-          className={`${activeFilter === 'favoritos' ? 'text-yellow-600 border-b-2 border-yellow-600' : 'text-slate-500 hover:text-yellow-600 border-b-2 border-transparent'} pb-2 transition-colors flex items-center gap-1`}
+
+        {departments.map(dept => (
+          <button
+            key={dept.id}
+            onClick={() => setSelectedDepartmentFilter(dept.id)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+              selectedDepartmentFilter === dept.id
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+            }`}
+          >
+            {dept.name}
+          </button>
+        ))}
+
+        <button
+          onClick={() => setSelectedDepartmentFilter('unassigned')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+            selectedDepartmentFilter === 'unassigned'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+          }`}
         >
-          <span className="text-yellow-500 text-[10px]">⭐</span> {t('inboxSidebar', 'favorites') || 'Favoritos'}
-        </button>
-        <button 
-          onClick={() => setActiveFilter('abertas')}
-          className={`${activeFilter === 'abertas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors flex items-center`}
-        >
-          {t('inboxSidebar', 'open')}
-          <span className={`text-[10px] ml-1 px-1.5 py-0.5 rounded-full ${activeFilter === 'abertas' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-            {openCount}
-          </span>
-        </button>
-        <button 
-          onClick={() => setActiveFilter('todos')}
-          className={`${activeFilter === 'todos' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
-        >
-          {t('inboxSidebar', 'all')}
-        </button>
-        <button 
-          onClick={() => setActiveFilter('fechadas')}
-          className={`${activeFilter === 'fechadas' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-emerald-600 border-b-2 border-transparent'} pb-2 transition-colors`}
-        >
-          {t('inboxSidebar', 'closed')}
+          Sem Depto
         </button>
       </div>
 
-      {/* Chat List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      {/* Lista de Conversas */}
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
         {loading ? (
-          <p className="text-center text-sm text-slate-400 mt-10">{t('inboxSidebar', 'loading')}</p>
+          <div className="p-8 text-center text-xs text-slate-400">
+            Carregando conversas...
+          </div>
         ) : filteredConversations.length === 0 ? (
-          <p className="text-center text-xs text-slate-400 mt-10">{t('inboxSidebar', 'noConversations')}</p>
+          <div className="p-8 text-center text-xs text-slate-400">
+            Nenhuma conversa encontrada neste departamento.
+          </div>
         ) : (
-          filteredConversations.map(conv => (
-            <Link key={conv.id} href={`/inbox/${conv.id}`}>
-              <div className={`p-3 rounded-lg cursor-pointer transition-colors border group ${activeId === conv.id ? 'bg-emerald-50 border-emerald-100' : 'hover:bg-slate-50 border-transparent hover:border-slate-100'}`}>
-                <div className="flex gap-3 items-center">
-                 {conv.contact_avatar_url ? (
-                   <img src={conv.contact_avatar_url} alt="Avatar" className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200" />
-                 ) : (
-                   <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200 dark:border-slate-700">
-                     <User className="w-5 h-5" />
-                   </div>
-                 )}
-                 <div className="flex-1 min-w-0">
-                   <div className="flex justify-between items-start mb-1">
-                     <h3 className={`font-medium text-sm truncate pr-2 ${activeId === conv.id ? 'text-emerald-900' : 'text-slate-800 dark:text-slate-200'}`}>
-                        {conv.contact_name || conv.contact_phone}{conv.is_pinned && <span className="text-yellow-500 text-[10px] ml-1">⭐</span>}
-                     </h3>
-                     <span className="text-[10px] text-slate-400 whitespace-nowrap pt-1">
-                       {conv.last_message_at ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR }) : ''}
-                     </span>
-                   </div>
-                   <div className="flex justify-between items-center">
-                     <div className="flex items-center gap-2 min-w-0 pr-2">
-                       <p className="text-xs text-slate-500 truncate">{conv.contact_phone}</p>
-                       {conv.channel && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 max-w-[80px] truncate uppercase" title={`Via ${conv.channel.name}`}>
-                             {conv.channel.name}
-                          </span>
-                       )}
-                     </div>
-                     {/* Optimistic UI update: hide badge if it's the currently active open conversation wrapper */}
-                     {conv.unread_count > 0 && activeId !== conv.id && (
-                       <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
-                          {conv.unread_count}
-                       </div>
-                     )}
-                   </div>
-                 </div>
+          filteredConversations.map(conv => {
+            const isSelected = activeId === conv.id
+            const formattedTime = conv.last_message_at 
+              ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })
+              : ''
+
+            return (
+              <Link
+                key={conv.id}
+                href={`/inbox/${conv.id}`}
+                className={`block p-3.5 transition-colors relative ${
+                  isSelected 
+                    ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-l-4 border-emerald-500' 
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-900/60'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Avatar */}
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center shrink-0 overflow-hidden font-bold text-slate-600 dark:text-slate-300 text-sm">
+                    {conv.contact_avatar_url ? (
+                      <img src={conv.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                        {conv.contact_name || conv.contact_phone}
+                      </span>
+                      <span className="text-[10px] text-slate-400 shrink-0">{formattedTime}</span>
+                    </div>
+
+                    {/* Badges de Empresa, Departamento e Bot */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {conv.channel?.company_name && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {conv.channel.company_name}
+                        </span>
+                      )}
+
+                      {conv.department?.name && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                          {conv.department.name}
+                        </span>
+                      )}
+
+                      {conv.bot_status === 'active' ? (
+                        <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center gap-0.5" title="IA Ativa">
+                          <Bot className="w-2.5 h-2.5" /> IA
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center gap-0.5" title="Atendimento Humano">
+                          <BotOff className="w-2.5 h-2.5" /> Humano
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {/* TAGS RENDERING */}
-                {(conv.tags && conv.tags.length > 0) && (
-                   <div className="flex flex-wrap gap-1 mt-2 pl-12">
-                     {conv.tags.map((tag: any, idx: number) => (
-                       <span key={idx} className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] shadow-sm" style={{ backgroundColor: tag.color }}>
-                         {tag.name}
-                       </span>
-                     ))}
-                   </div>
-                )}
-              </div>
-            </Link>
-          ))
+              </Link>
+            )
+          })
         )}
       </div>
     </aside>
+
     <NewChatModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>
   )

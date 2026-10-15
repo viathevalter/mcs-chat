@@ -1,20 +1,19 @@
 "use client"
-import { useState } from 'react'
-import { 
-  User, 
-  Briefcase, 
-  Building2, 
-  Calendar, 
-  FileText, 
-  Bot, 
-  BotOff, 
-  ArrowRightLeft, 
-  ShieldCheck, 
-  CheckCircle2, 
-  XCircle, 
-  Phone, 
-  Loader2, 
-  Sparkles,
+import { useState, useEffect } from 'react'
+import {
+  User,
+  Briefcase,
+  Building2,
+  Calendar,
+  FileText,
+  Bot,
+  BotOff,
+  ArrowRightLeft,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  Phone,
+  Loader2,
   Layers,
   ExternalLink,
   History,
@@ -23,7 +22,9 @@ import {
   UserMinus,
   Plus,
   UserCheck,
-  Check
+  Check,
+  StickyNote,
+  Send
 } from 'lucide-react'
 import { useConversationContext } from '../hooks/use-context'
 import { supabase } from '@/lib/supabase/client'
@@ -33,8 +34,14 @@ import Link from 'next/link'
 export default function ChatContextPanel({ conversationId }: { conversationId: string }) {
   const { t } = useI18n()
   const { context, setContext, loading } = useConversationContext(conversationId)
-  const [updatingDept, setUpdatingDept] = useState(false)
-  const [updatingAgent, setUpdatingAgent] = useState(false)
+  const [activeTab, setActiveTab] = useState<'dados' | 'tarefas' | 'notas' | 'agenda'>('dados')
+
+  // Transfer Modal / Box State
+  const [showTransferBox, setShowTransferBox] = useState(false)
+  const [transferDeptId, setTransferDeptId] = useState('')
+  const [transferUserId, setTransferUserId] = useState('')
+  const [transferReason, setTransferReason] = useState('')
+  const [submittingTransfer, setSubmittingTransfer] = useState(false)
   const [updatingBot, setUpdatingBot] = useState(false)
 
   // Operational Actions State (Etapa 3: MCS Chat <-> MCS Personal Bridge)
@@ -58,62 +65,116 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   const [submittingTask, setSubmittingTask] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
 
+  // Notes & Schedule State
+  const [internalNotes, setInternalNotes] = useState<any[]>([])
+  const [newNoteText, setNewNoteText] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+
+  const [scheduleTitle, setScheduleTitle] = useState('')
+  const [scheduleDateTime, setScheduleDateTime] = useState('')
+  const [savingSchedule, setSavingSchedule] = useState(false)
+
+  useEffect(() => {
+    if (context?.conversation) {
+      setTransferDeptId(context.conversation.department_id || '')
+      setTransferUserId(context.conversation.assigned_to || '')
+    }
+  }, [context?.conversation?.department_id, context?.conversation?.assigned_to])
+
+  useEffect(() => {
+    if (!conversationId) return
+    supabase
+      .from('chat_messages')
+      .select('id, content, sender_name, sender_department, created_at')
+      .eq('conversation_id', conversationId)
+      .eq('message_type', 'internal_note')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setInternalNotes(data)
+      })
+  }, [conversationId])
+
   if (loading) {
-     return (
-       <aside className="w-[380px] flex-shrink-0 bg-white dark:bg-slate-900 flex flex-col items-center justify-center h-full border-l border-slate-200 dark:border-slate-800 hidden lg:flex">
-          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mb-3" />
-          <p className="text-xs font-medium text-slate-500">Carregando ficha do trabalhador...</p>
-       </aside>
-     )
+    return (
+      <aside className="w-[380px] flex-shrink-0 bg-white dark:bg-slate-900 flex flex-col items-center justify-center h-full border-l border-slate-200 dark:border-slate-800 hidden lg:flex">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mb-3" />
+        <p className="text-xs font-medium text-slate-500">Carregando ficha do trabalhador...</p>
+      </aside>
+    )
   }
 
   if (!context) {
-     return (
-       <aside className="w-[380px] flex-shrink-0 bg-white dark:bg-slate-900 flex flex-col items-center p-8 text-center h-full border-l border-slate-200 dark:border-slate-800 hidden lg:flex">
-          <p className="text-xs text-slate-500">Nenhum contexto disponível</p>
-       </aside>
-     )
+    return (
+      <aside className="w-[380px] flex-shrink-0 bg-white dark:bg-slate-900 flex flex-col items-center p-8 text-center h-full border-l border-slate-200 dark:border-slate-800 hidden lg:flex">
+        <p className="text-xs text-slate-500">Nenhum contexto disponível</p>
+      </aside>
+    )
   }
 
   const { worker, conversation, company, departments, coreDepartments = [], users = [], workerTasks = [], allocations } = context
 
-  const isActiveWorker = worker?.status_trabajador?.toLowerCase() === 'ativo' || worker?.status_trabajador?.toLowerCase() === 'active'
+  const isActiveWorker =
+    worker?.status_trabajador?.toLowerCase() === 'ativo' || worker?.status_trabajador?.toLowerCase() === 'active'
   const isAltaSeguridad = worker?.status_seguridad?.toUpperCase() === 'ALTA'
   const resolvedEmpresaId = company?.id || worker?.empresa_id || conversation?.company_id || null
 
-  const handleDepartmentChange = async (newDeptId: string) => {
-    setUpdatingDept(true)
-    const { error } = await supabase
-      .from('chat_conversations')
-      .update({ department_id: newDeptId || null })
-      .eq('id', conversationId)
+  const handleConfirmTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmittingTransfer(true)
+    try {
+      const selectedDept = departments.find((d) => d.id === transferDeptId)
+      const selectedUser = users.find((u: any) => u.id === transferUserId)
+      const assignedName = selectedUser ? selectedUser.name || selectedUser.email : null
 
-    if (!error) {
-      const selectedDept = departments.find(d => d.id === newDeptId)
+      const { error } = await supabase
+        .from('chat_conversations')
+        .update({
+          department_id: transferDeptId || null,
+          assigned_to: transferUserId || null,
+          assigned_to_name: assignedName,
+          status: 'open'
+        })
+        .eq('id', conversationId)
+
+      if (error) throw error
+
       setContext((prev: any) => ({
         ...prev,
-        conversation: { ...prev.conversation, department_id: newDeptId, department: selectedDept }
+        conversation: {
+          ...prev.conversation,
+          department_id: transferDeptId || null,
+          department: selectedDept || null,
+          assigned_to: transferUserId || null,
+          assigned_to_name: assignedName
+        }
       }))
-    }
-    setUpdatingDept(false)
-  }
 
-  const handleAgentChange = async (newAgentId: string) => {
-    setUpdatingAgent(true)
-    const { error } = await supabase
-      .from('chat_conversations')
-      .update({ assigned_to: newAgentId || null })
-      .eq('id', conversationId)
+      // Log visual Bloco de Atendimento divider in chat timeline
+      const targetParts: string[] = []
+      if (selectedDept?.name) targetParts.push(`Setor ${selectedDept.name}`)
+      if (assignedName) targetParts.push(`Atendente ${assignedName}`)
+      const targetSummary = targetParts.length > 0 ? targetParts.join(' • ') : 'Fila Geral'
+      const reasonSuffix = transferReason.trim() ? ` — Motivo: "${transferReason.trim()}"` : ''
 
-    if (!error) {
-      setContext((prev: any) => ({
-        ...prev,
-        conversation: { ...prev.conversation, assigned_to: newAgentId || null }
-      }))
-      setFeedbackMsg(newAgentId ? 'Atendente atribuído na mesma conversa!' : 'Conversa liberada para a fila.')
-      setTimeout(() => setFeedbackMsg(null), 3500)
+      await supabase.from('chat_messages').insert({
+        conversation_id: conversationId,
+        direction: 'outbound',
+        sender_name: assignedName || 'Transferência MCS',
+        sender_department: selectedDept?.name || 'Operações',
+        message_type: 'system_block',
+        content: `🔄 BLOCO TRANSFERIDO PARA: ${targetSummary}${reasonSuffix}`,
+        status: 'sent'
+      })
+
+      setShowTransferBox(false)
+      setTransferReason('')
+      setFeedbackMsg(`✅ Conversa transferida para ${targetSummary}!`)
+      setTimeout(() => setFeedbackMsg(null), 4000)
+    } catch (err: any) {
+      setFeedbackMsg(`Erro ao transferir: ${err.message}`)
+    } finally {
+      setSubmittingTransfer(false)
     }
-    setUpdatingAgent(false)
   }
 
   const handleBotStatusToggle = async () => {
@@ -156,21 +217,21 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
       if (error) throw error
 
-      // Also log official notice in chat messages
       await supabase.from('chat_messages').insert({
         conversation_id: conversationId,
         direction: 'outbound',
         sender_name: 'Sistema MCS (Aviso Prévio)',
-        message_type: 'text',
-        content: `📋 [FLUXO DE BAIXA INICIADO - ${(data as any)?.codigo || 'PLAYBOOK'}]\nRegra de Aviso Prévio (15 dias): ${
-          cumprira15Dias ? 'Cumprirá os 15 dias' : 'Saída imediata (sujeito a desconto nas horas finais)'
-        }\nÚltimo dia previsto: ${ultimoDia}`,
+        sender_department: 'RH',
+        message_type: 'system_block',
+        content: `📋 FLUXO DE BAIXA INICIADO (${(data as any)?.codigo || 'PLAYBOOK'}) — Aviso Prévio 15d: ${
+          cumprira15Dias ? 'Cumprirá 15 dias' : 'Saída imediata (desconto nas horas)'
+        } • Último dia: ${ultimoDia}`,
         status: 'sent'
       })
 
       setShowResignForm(false)
       setResignNotes('')
-      setFeedbackMsg('✅ Playbook de Demissão/Aviso Prévio disparado para RH, Operações, Seguridade, Logística e Financeiro!')
+      setFeedbackMsg('✅ Playbook de Demissão/Aviso Prévio disparado para todos os setores!')
       setTimeout(() => setFeedbackMsg(null), 5000)
     } catch (err: any) {
       setFeedbackMsg(`Erro: ${err.message || 'Falha ao iniciar baixa'}`)
@@ -234,480 +295,770 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
     }
   }
 
+  const handleAddInternalNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newNoteText.trim() || savingNote) return
+    setSavingNote(true)
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conversationId,
+          direction: 'outbound',
+          sender_name: conversation?.assigned_to_name || 'Equipe MCS',
+          sender_department: conversation?.department?.name || 'Interno',
+          message_type: 'internal_note',
+          content: newNoteText.trim(),
+          status: 'sent'
+        })
+        .select('id, content, sender_name, sender_department, created_at')
+        .single()
+
+      if (!error && data) {
+        setInternalNotes((prev) => [data, ...prev])
+        setNewNoteText('')
+        setFeedbackMsg('✅ Nota privada salva na conversa!')
+        setTimeout(() => setFeedbackMsg(null), 3000)
+      }
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  const handleAddQuickSchedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!scheduleTitle.trim() || !scheduleDateTime || !resolvedEmpresaId) return
+    setSavingSchedule(true)
+    try {
+      const { error } = await supabase
+        .schema('core_operacoes')
+        .rpc('criar_tarefa_direta', {
+          p_empresa_id: resolvedEmpresaId,
+          p_title: `📅 [Retorno Agendado] ${scheduleTitle.trim()}`,
+          p_description: `Follow-up agendado no MCS Chat para ${worker?.nome || conversation?.contact_name}`,
+          p_department_id: null,
+          p_assigned_to_user_id: conversation?.assigned_to || null,
+          p_priority: 'high',
+          p_scheduled_for: new Date(scheduleDateTime).toISOString(),
+          p_worker_id: worker?.id || null,
+          p_pedido_id: conversation?.pedido_id || null,
+          p_client_id: null,
+          p_conversation_id: conversationId,
+          p_task_origin: 'chat',
+          p_created_by: null
+        })
+
+      if (error) throw error
+      setScheduleTitle('')
+      setScheduleDateTime('')
+      setFeedbackMsg('✅ Agendamento criado no Command Center!')
+      setTimeout(() => setFeedbackMsg(null), 3500)
+    } catch (err: any) {
+      setFeedbackMsg(`Erro ao agendar: ${err.message}`)
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  const scheduledTasks = (workerTasks || []).filter((t: any) => Boolean(t.scheduled_for))
+
   return (
-    <aside className="w-[380px] flex-shrink-0 bg-slate-50/50 dark:bg-slate-900 flex flex-col h-full overflow-y-auto hidden lg:flex border-l border-slate-200 dark:border-slate-800 select-none custom-scrollbar">
-      
-      {/* Header com Foto e Identificação */}
-      <div className="flex flex-col items-center pt-6 pb-4 px-5 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-        <div className="relative mb-3">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden ring-4 ring-slate-100 dark:ring-slate-800">
+    <aside className="w-[380px] flex-shrink-0 bg-slate-50/50 dark:bg-slate-900 flex flex-col h-full overflow-hidden hidden lg:flex border-l border-slate-200 dark:border-slate-800 select-none">
+      {/* Compact CRM-Style Worker Header */}
+      <div className="p-4 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-start gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center text-xl font-bold shadow-md overflow-hidden ring-2 ring-slate-100 dark:ring-slate-800 shrink-0">
             {worker?.foto ? (
               <img src={worker.foto} alt="Foto" className="w-full h-full object-cover" />
             ) : conversation?.contact_avatar_url ? (
               <img src={conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
             ) : (
-              <User className="w-9 h-9 text-white/90" />
+              <User className="w-7 h-7 text-white/90" />
             )}
           </div>
-        </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap justify-center mb-1">
-          {/* Status Trabalhador Badge */}
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm ${
-            isActiveWorker 
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300' 
-              : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300'
-          }`}>
-            {isActiveWorker ? <CheckCircle2 className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
-            {worker?.status_trabajador || 'Ativo'}
-          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 flex-wrap mb-1">
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                  isActiveWorker
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}
+              >
+                {isActiveWorker ? <CheckCircle2 className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
+                {worker?.status_trabajador || 'Ativo'}
+              </span>
 
-          {/* Status Seguridade Social Badge */}
-          {worker?.status_seguridad && (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm ${
-              isAltaSeguridad
-                ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300'
-                : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300'
-            }`}>
-              <ShieldCheck className="w-2.5 h-2.5" />
-              Seguridad: {worker.status_seguridad}
-            </span>
-          )}
-        </div>
-
-        <h3 className="text-base font-bold text-slate-800 dark:text-white text-center line-clamp-1">
-          {worker?.nome || conversation?.contact_name || 'Contato WhatsApp'}
-        </h3>
-
-        {worker?.cod_colab && (
-          <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-            Cód: {worker.cod_colab}
-          </p>
-        )}
-        
-        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 font-mono">
-          <Phone className="w-3 h-3 text-slate-400" />
-          {conversation?.contact_phone || 'Sem número'}
-        </p>
-
-        {worker?.documento && (
-          <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md mt-1.5 border border-slate-200 dark:border-slate-700">
-            DNI/NIE: {worker.documento}
-          </span>
-        )}
-
-        {/* Link para Ficha no MCS Personal */}
-        {worker?.id && (
-          <a 
-            href={`https://mcs.gestaologinpro.com/workers/${worker.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <span>Ver Ficha no MCS Personal</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-      </div>
-
-      {/* Feedback Banner */}
-      {feedbackMsg && (
-        <div className="mx-4 mt-3 p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 text-center">
-          {feedbackMsg}
-        </div>
-      )}
-
-      {/* Ações de Controle: Bot IA, Departamento & Atendente Responsável (Mesma Conversa) */}
-      <div className="p-4 space-y-3 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-        
-        {/* Controle do Bot de IA */}
-        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              conversation?.bot_status === 'active' 
-                ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400' 
-                : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
-            }`}>
-              {conversation?.bot_status === 'active' ? <Bot className="w-4 h-4" /> : <BotOff className="w-4 h-4" />}
+              {worker?.status_seguridad && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                    isAltaSeguridad
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}
+                >
+                  <ShieldCheck className="w-2.5 h-2.5" />
+                  {worker.status_seguridad}
+                </span>
+              )}
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                {conversation?.bot_status === 'active' ? 'IA Ativa no Chat' : 'IA Pausada (Humano)'}
-              </p>
-              <p className="text-[10px] text-slate-400">
-                {conversation?.bot_status === 'active' ? 'Triagem automática' : 'Atendimento manual'}
-              </p>
+
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate">
+              {worker?.nome || conversation?.contact_name || 'Contato WhatsApp'}
+            </h3>
+
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+              <span className="font-mono flex items-center gap-1">
+                <Phone className="w-2.5 h-2.5 text-slate-400" />
+                {conversation?.contact_phone || 'Sem número'}
+              </span>
+              {worker?.documento && (
+                <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700">
+                  {worker.documento}
+                </span>
+              )}
             </div>
           </div>
+        </div>
 
+        {/* 2 Top Action Buttons: Transferir Bloco & Ver Ficha MCS */}
+        <div className="grid grid-cols-2 gap-2 mt-3">
           <button
-            onClick={handleBotStatusToggle}
-            disabled={updatingBot}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-              conversation?.bot_status === 'active'
-                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+            type="button"
+            onClick={() => setShowTransferBox(!showTransferBox)}
+            className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              showTransferBox
+                ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
+                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800'
             }`}
           >
-            {updatingBot ? '...' : conversation?.bot_status === 'active' ? 'Pausar IA' : 'Ativar IA'}
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>Transferir</span>
           </button>
-        </div>
 
-        {/* Transferência de Departamento */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <ArrowRightLeft className="w-3 h-3 text-slate-400" />
-            Departamento Atual
-          </label>
-          <div className="relative">
-            <select
-              value={conversation?.department_id || ''}
-              onChange={(e) => handleDepartmentChange(e.target.value)}
-              disabled={updatingDept}
-              className="w-full text-xs font-medium bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+          {worker?.id ? (
+            <a
+              href={`https://mcs.gestaologinpro.com/workers/${worker.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
             >
-              <option value="">Fila Geral (Sem departamento)</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Transferência para Pessoa Específica (Ex: Especialista de Retenção / Aviso Prévio) mantendo o MESMO NÚMERO */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-            <UserCheck className="w-3 h-3" />
-            Atendente Responsável (Mesmo Número)
-          </label>
-          <div className="relative">
-            <select
-              value={conversation?.assigned_to || ''}
-              onChange={(e) => handleAgentChange(e.target.value)}
-              disabled={updatingAgent}
-              className="w-full text-xs font-semibold bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl px-3 py-2 text-indigo-900 dark:text-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="">Qualquer atendente do setor</option>
-              {users.map((u: any) => (
-                <option key={u.id} value={u.id}>
-                  👤 {u.name || u.email}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Botões de Ação Operacional Direta (Playbook de Baixa 15d + Nova Tarefa Direta) */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Gatilhos Operacionais (MCS Personal)
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowResignForm(!showResignForm)
-                setShowTaskForm(false)
-              }}
-              className="py-2 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <UserMinus className="w-3.5 h-3.5 shrink-0" />
-              <span>Baixa / 15 Dias</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowTaskForm(!showTaskForm)
-                setShowResignForm(false)
-              }}
-              className="py-2 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 shrink-0" />
-              <span>Criar Tarefa</span>
-            </button>
-          </div>
-
-          {/* Formulário Inline: Iniciar Baixa / Carta de Renúncia (15 dias) */}
-          {showResignForm && (
-            <form onSubmit={handleStartResignationFlow} className="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-2.5 mt-2">
-              <div className="text-[11px] font-bold text-purple-900 dark:text-purple-200">
-                🚪 Pedido de Demissão & Aviso Prévio (15d)
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Cumprirá os 15 dias de Aviso Prévio?
-                </label>
-                <select
-                  value={cumprira15Dias ? 'sim' : 'nao'}
-                  onChange={e => setCumprira15Dias(e.target.value === 'sim')}
-                  className="w-full text-xs rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
-                >
-                  <option value="sim">✅ Sim - Cumpre 15 dias (Sem desconto)</option>
-                  <option value="nao">⚠️ Não - Saída imediata (Descontar horas)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Último Dia Trabalhado
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={ultimoDia}
-                  onChange={e => setUltimoDia(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  value={resignNotes}
-                  onChange={e => setResignNotes(e.target.value)}
-                  placeholder="Motivo / Resumo da tentativa de retenção..."
-                  className="w-full text-xs rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={submittingResign}
-                className="w-full py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors cursor-pointer"
-              >
-                {submittingResign ? 'Disparando Playbook...' : 'Disparar Playbook nos Setores'}
-              </button>
-            </form>
+              <span>Ficha MCS</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <div className="py-1.5 px-3 bg-slate-50 text-slate-400 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center">
+              Sem Ficha Vinculada
+            </div>
           )}
+        </div>
 
-          {/* Formulário Inline: Criar Tarefa Direta para Setor ou Pessoa */}
-          {showTaskForm && (
-            <form onSubmit={handleCreateDirectTaskFromChat} className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 space-y-2.5 mt-2">
-              <div className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200">
-                ⚡ Nova Tarefa para Setor ou Pessoa
-              </div>
+        {/* Inline Transfer Box (Creates Bloco de Atendimento in Chat) */}
+        {showTransferBox && (
+          <form
+            onSubmit={handleConfirmTransfer}
+            className="mt-3 p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2.5 animate-in fade-in slide-in-from-top-1"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                Transferir Bloco de Atendimento
+              </span>
+            </div>
 
-              <input
-                type="text"
-                required
-                value={taskTitle}
-                onChange={e => setTaskTitle(e.target.value)}
-                placeholder="Título da tarefa (ex: Verificar alojamento...)"
-                className="w-full text-xs rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
-              />
-
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Setor de Destino</label>
               <select
-                value={taskDeptId}
-                onChange={e => setTaskDeptId(e.target.value)}
-                className="w-full text-xs rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
+                value={transferDeptId}
+                onChange={(e) => setTransferDeptId(e.target.value)}
+                className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
               >
-                <option value="">Selecione o Setor no MCS Personal...</option>
-                {coreDepartments.map((d: any) => (
-                  <option key={d.id} value={d.id}>
-                    🏢 {d.name} ({d.code})
+                <option value="">Fila Geral (Sem setor específico)</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    📂 {dept.name}
                   </option>
                 ))}
               </select>
+            </div>
 
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                Funcionário Responsável (Mesmo Número)
+              </label>
               <select
-                value={taskUserId}
-                onChange={e => setTaskUserId(e.target.value)}
-                className="w-full text-xs rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
+                value={transferUserId}
+                onChange={(e) => setTransferUserId(e.target.value)}
+                className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
               >
-                <option value="">Qualquer pessoa do setor</option>
+                <option value="">Qualquer funcionário do setor</option>
                 {users.map((u: any) => (
                   <option key={u.id} value={u.id}>
                     👤 {u.name || u.email}
                   </option>
                 ))}
               </select>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={taskPriority}
-                  onChange={e => setTaskPriority(e.target.value as any)}
-                  className="w-full text-xs rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2 py-1.5"
+            <div>
+              <input
+                type="text"
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                placeholder="Motivo / Resumo para o próximo atendente..."
+                className="w-full text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={submittingTransfer}
+              className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+            >
+              {submittingTransfer ? 'Transferindo...' : 'Confirmar Transferência no Chat'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Feedback Banner */}
+      {feedbackMsg && (
+        <div className="mx-3 mt-2 p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 text-center shrink-0">
+          {feedbackMsg}
+        </div>
+      )}
+
+      {/* 4 Horizontal CRM Tabs */}
+      <div className="grid grid-cols-4 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 px-2 pt-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveTab('dados')}
+          className={`py-2.5 text-[11px] font-bold border-b-2 transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+            activeTab === 'dados'
+              ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <User className="w-3.5 h-3.5" />
+          <span>Dados</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('tarefas')}
+          className={`py-2.5 text-[11px] font-bold border-b-2 transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+            activeTab === 'tarefas'
+              ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          <span>Tarefas</span>
+          {workerTasks.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-indigo-100 text-indigo-700">
+              {workerTasks.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('notas')}
+          className={`py-2.5 text-[11px] font-bold border-b-2 transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+            activeTab === 'notas'
+              ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <StickyNote className="w-3.5 h-3.5" />
+          <span>Notas</span>
+          {internalNotes.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-100 text-amber-700">
+              {internalNotes.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('agenda')}
+          className={`py-2.5 text-[11px] font-bold border-b-2 transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+            activeTab === 'agenda'
+              ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Agenda</span>
+        </button>
+      </div>
+
+      {/* Tab Content Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+        {/* TAB 1: DADOS & ALOCAÇÃO */}
+        {activeTab === 'dados' && (
+          <>
+            {/* Resumo do Atendimento Atual */}
+            <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-semibold">Setor Atual:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {conversation?.department?.name || 'Fila Geral'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-semibold">Atendente:</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                  {conversation?.assigned_to_name || 'Não atribuído'}
+                </span>
+              </div>
+            </div>
+
+            {/* Empresa Contratante */}
+            <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Empresa Contratante</p>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {worker?.contratante || company?.trade_name || company?.nome || conversation?.worker_company_name || 'Grupo MCS'}
+                  </p>
+                </div>
+              </div>
+              {company?.invoice_logo_url && (
+                <img src={company.invoice_logo_url} alt="Logo" className="h-6 w-auto object-contain max-w-[60px]" />
+              )}
+            </div>
+
+            {/* Cliente / Obra Alocada */}
+            <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-bold uppercase text-slate-400">
+                      {isActiveWorker ? 'Cliente / Obra Atual' : 'Última Obra / Cliente'}
+                    </p>
+                    {worker?.cod_cliente && (
+                      <span className="text-[10px] text-slate-400 font-mono">Cód: {worker.cod_cliente}</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5">
+                    {worker?.cliente || conversation?.worker_client_name || 'Não informado / Em trânsito'}
+                  </p>
+
+                  {(worker?.funcion || conversation?.worker_function_name) && (
+                    <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                      <Layers className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="font-semibold">{worker?.funcion || conversation?.worker_function_name}</span>
+                    </div>
+                  )}
+
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
+                    <span>
+                      Início: <strong className="text-slate-700 dark:text-slate-300">{worker?.data_ingresso || '-'}</strong>
+                    </span>
+                    {worker?.data_baixa && (
+                      <span>
+                        Saída: <strong className="text-rose-600 dark:text-rose-400">{worker.data_baixa}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Controle do Bot de IA */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    conversation?.bot_status === 'active'
+                      ? 'bg-blue-100 text-blue-600'
+                      : 'bg-amber-100 text-amber-600'
+                  }`}
                 >
-                  <option value="normal">Prioridade Normal</option>
-                  <option value="high">Alta</option>
-                  <option value="urgent">Urgente 🔥</option>
-                </select>
-
-                <input
-                  type="datetime-local"
-                  value={taskScheduledFor}
-                  onChange={e => setTaskScheduledFor(e.target.value)}
-                  className="w-full text-[11px] rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2 py-1.5"
-                  title="Programar para data/hora"
-                />
+                  {conversation?.bot_status === 'active' ? <Bot className="w-4 h-4" /> : <BotOff className="w-4 h-4" />}
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                    {conversation?.bot_status === 'active' ? 'IA Ativa no Chat' : 'IA Pausada (Humano)'}
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {conversation?.bot_status === 'active' ? 'Triagem automática' : 'Atendimento manual'}
+                  </p>
+                </div>
               </div>
 
+              <button
+                onClick={handleBotStatusToggle}
+                disabled={updatingBot}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                  conversation?.bot_status === 'active'
+                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {updatingBot ? '...' : conversation?.bot_status === 'active' ? 'Pausar IA' : 'Ativar IA'}
+              </button>
+            </div>
+
+            {/* Histórico de Alocações Anteriores */}
+            {allocations && allocations.length > 0 && (
+              <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                  <History className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Histórico de Alocações</span>
+                </div>
+                <div className="space-y-1.5">
+                  {allocations.map((item, idx) => (
+                    <div
+                      key={item.id || idx}
+                      className="text-[11px] p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+                    >
+                      <div className="flex items-center justify-between font-medium">
+                        <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[190px]">
+                          {item.cliente_nome || item.empresa_nome || 'Obra'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {item.effective_date ? new Date(item.effective_date).toLocaleDateString('pt-BR') : ''}
+                        </span>
+                      </div>
+                      {item.comments && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1 italic">
+                          "{item.comments}"
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Botão de Campanha Segmentada para a Obra */}
+            {worker?.cliente && (
+              <div className="pt-1">
+                <Link
+                  href={`/inbox/automations?client=${encodeURIComponent(worker.cliente)}&company=${encodeURIComponent(worker.contratante || '')}`}
+                  className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-2xs"
+                >
+                  <Megaphone className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Criar Campanha para "{worker.cliente}"</span>
+                </Link>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* TAB 2: TAREFAS & BAIXA (PLAYBOOKS MCS PERSONAL) */}
+        {activeTab === 'tarefas' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResignForm(!showResignForm)
+                  setShowTaskForm(false)
+                }}
+                className="py-2 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <UserMinus className="w-3.5 h-3.5 shrink-0" />
+                <span>Baixa / 15 Dias</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTaskForm(!showTaskForm)
+                  setShowResignForm(false)
+                }}
+                className="py-2 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span>Nova Tarefa</span>
+              </button>
+            </div>
+
+            {showResignForm && (
+              <form
+                onSubmit={handleStartResignationFlow}
+                className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 space-y-2.5"
+              >
+                <div className="text-[11px] font-bold text-purple-900">
+                  🚪 Pedido de Demissão & Aviso Prévio (15d)
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Cumprirá os 15 dias de Aviso Prévio?
+                  </label>
+                  <select
+                    value={cumprira15Dias ? 'sim' : 'nao'}
+                    onChange={(e) => setCumprira15Dias(e.target.value === 'sim')}
+                    className="w-full text-xs rounded-lg border border-purple-200 bg-white px-2.5 py-1.5"
+                  >
+                    <option value="sim">✅ Sim - Cumpre 15 dias (Sem desconto)</option>
+                    <option value="nao">⚠️ Não - Saída imediata (Descontar horas)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Último Dia Trabalhado
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={ultimoDia}
+                    onChange={(e) => setUltimoDia(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-purple-200 bg-white px-2.5 py-1.5"
+                  />
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    value={resignNotes}
+                    onChange={(e) => setResignNotes(e.target.value)}
+                    placeholder="Motivo / Resumo da tentativa de retenção..."
+                    className="w-full text-xs rounded-lg border border-purple-200 bg-white px-2.5 py-1.5"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingResign}
+                  className="w-full py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {submittingResign ? 'Disparando Playbook...' : 'Disparar Playbook nos Setores'}
+                </button>
+              </form>
+            )}
+
+            {showTaskForm && (
+              <form
+                onSubmit={handleCreateDirectTaskFromChat}
+                className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-2.5"
+              >
+                <div className="text-[11px] font-bold text-indigo-900">⚡ Nova Tarefa para Setor ou Pessoa</div>
+
+                <input
+                  type="text"
+                  required
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  placeholder="Título da tarefa (ex: Enviar EPI...)"
+                  className="w-full text-xs rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5"
+                />
+
+                <select
+                  value={taskDeptId}
+                  onChange={(e) => setTaskDeptId(e.target.value)}
+                  className="w-full text-xs rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5"
+                >
+                  <option value="">Selecione o Setor no MCS Personal...</option>
+                  {coreDepartments.map((d: any) => (
+                    <option key={d.id} value={d.id}>
+                      🏢 {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={taskUserId}
+                  onChange={(e) => setTaskUserId(e.target.value)}
+                  className="w-full text-xs rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5"
+                >
+                  <option value="">Qualquer pessoa do setor</option>
+                  {users.map((u: any) => (
+                    <option key={u.id} value={u.id}>
+                      👤 {u.name || u.email}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={taskPriority}
+                    onChange={(e) => setTaskPriority(e.target.value as any)}
+                    className="w-full text-xs rounded-lg border border-indigo-200 bg-white px-2 py-1.5"
+                  >
+                    <option value="normal">Prioridade Normal</option>
+                    <option value="high">Alta</option>
+                    <option value="urgent">Urgente 🔥</option>
+                  </select>
+
+                  <input
+                    type="datetime-local"
+                    value={taskScheduledFor}
+                    onChange={(e) => setTaskScheduledFor(e.target.value)}
+                    className="w-full text-[11px] rounded-lg border border-indigo-200 bg-white px-2 py-1.5"
+                    title="Programar para data/hora"
+                  />
+                </div>
+
+                <textarea
+                  rows={2}
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  placeholder="Detalhes adicionais..."
+                  className="w-full text-xs rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5"
+                />
+
+                <button
+                  type="submit"
+                  disabled={submittingTask}
+                  className="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {submittingTask ? 'Enviando...' : 'Enviar Tarefa para MCS Personal'}
+                </button>
+              </form>
+            )}
+
+            {/* Lista de Tarefas Pendentes */}
+            <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
+                ⚡ Tarefas Pendentes ({workerTasks.length})
+              </span>
+
+              {workerTasks.length === 0 ? (
+                <p className="text-xs text-slate-400 py-3 text-center">Nenhuma tarefa pendente para este trabalhador.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {workerTasks.map((tItem: any) => (
+                    <div
+                      key={tItem.id}
+                      className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                          {tItem.department?.name || 'Setor'}
+                        </span>
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 leading-snug">
+                          {tItem.title}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteWorkerTask(tItem.id)}
+                        className="p-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-700 shrink-0 cursor-pointer"
+                        title="Concluir tarefa"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* TAB 3: NOTAS INTERNAS */}
+        {activeTab === 'notas' && (
+          <div className="space-y-3">
+            <form onSubmit={handleAddInternalNote} className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
+              <label className="block text-[11px] font-bold text-amber-900">
+                🔒 Adicionar Nota Interna do Trabalhador
+              </label>
               <textarea
-                rows={2}
-                value={taskDesc}
-                onChange={e => setTaskDesc(e.target.value)}
-                placeholder="Detalhes adicionais..."
-                className="w-full text-xs rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-2.5 py-1.5"
+                rows={3}
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                placeholder="Escreva uma observação interna (visível apenas para a equipe MCS)..."
+                className="w-full text-xs rounded-lg border border-amber-200 bg-white p-2 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={savingNote || !newNoteText.trim()}
+                className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Send className="w-3 h-3" />
+                <span>{savingNote ? 'Salvando...' : 'Salvar Nota Privada'}</span>
+              </button>
+            </form>
+
+            <div className="space-y-2">
+              {internalNotes.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">Nenhuma nota interna registrada nesta conversa.</p>
+              ) : (
+                internalNotes.map((note) => (
+                  <div key={note.id} className="p-3 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-800">
+                      <span>
+                        👤 {note.sender_name || 'Equipe'} {note.sender_department ? `• ${note.sender_department}` : ''}
+                      </span>
+                      <span>
+                        {note.created_at ? new Date(note.created_at).toLocaleDateString('pt-BR') : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-950 whitespace-pre-wrap">{note.content}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: AGENDA & FOLLOW-UP */}
+        {activeTab === 'agenda' && (
+          <div className="space-y-3">
+            <form onSubmit={handleAddQuickSchedule} className="p-3 bg-white dark:bg-slate-950 border border-slate-200 rounded-xl space-y-2.5 shadow-xs">
+              <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Agendar Retorno / Lembrete</span>
+              </div>
+
+              <input
+                type="text"
+                required
+                value={scheduleTitle}
+                onChange={(e) => setScheduleTitle(e.target.value)}
+                placeholder="Ex: Confirmar assinatura do contrato..."
+                className="w-full text-xs rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5"
+              />
+
+              <input
+                type="datetime-local"
+                required
+                value={scheduleDateTime}
+                onChange={(e) => setScheduleDateTime(e.target.value)}
+                className="w-full text-xs rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5"
               />
 
               <button
                 type="submit"
-                disabled={submittingTask}
-                className="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                disabled={savingSchedule}
+                className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
               >
-                {submittingTask ? 'Enviando...' : 'Enviar Tarefa para MCS Personal'}
+                {savingSchedule ? 'Agendando...' : 'Agendar Follow-up'}
               </button>
             </form>
-          )}
-        </div>
 
-      </div>
-
-      {/* Ficha Completa do Trabalhador & Alocações */}
-      <div className="p-4 space-y-3 flex-1">
-        
-        {/* Tarefas Ativas deste Trabalhador no MCS Personal */}
-        {workerTasks && workerTasks.length > 0 && (
-          <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                ⚡ Tarefas Pendentes ({workerTasks.length})
+            <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200 space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                📅 Próximos Compromissos ({scheduledTasks.length})
               </span>
-            </div>
-            <div className="space-y-1.5">
-              {workerTasks.map((tItem: any) => (
-                <div
-                  key={tItem.id}
-                  className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                      {tItem.department?.name || 'Setor'}
-                    </span>
-                    <p className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 mt-1 leading-snug">
-                      {tItem.title}
+              {scheduledTasks.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">Nenhum retorno programado.</p>
+              ) : (
+                scheduledTasks.map((st: any) => (
+                  <div key={st.id} className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                    <p className="font-bold text-slate-800">{st.title}</p>
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                      ⏰ {new Date(st.scheduled_for).toLocaleString('pt-BR')}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCompleteWorkerTask(tItem.id)}
-                    className="p-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 shrink-0 cursor-pointer"
-                    title="Concluir tarefa"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
-          Alocação e Obras
-        </h4>
-
-        {/* Empresa Contratante */}
-        <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Empresa Contratante</p>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                {worker?.contratante || company?.trade_name || company?.nome || 'Stocco / MCS'}
-              </p>
-            </div>
-          </div>
-          {company?.invoice_logo_url && (
-            <img src={company.invoice_logo_url} alt="Logo" className="h-6 w-auto object-contain max-w-[60px]" />
-          )}
-        </div>
-
-        {/* Cliente / Última Obra Alocada */}
-        <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-          <div className="flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center shrink-0">
-              <Briefcase className="w-4 h-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase text-slate-400">
-                  {isActiveWorker ? 'Cliente / Obra Atual' : 'Última Obra / Cliente'}
-                </p>
-                {worker?.cod_cliente && (
-                  <span className="text-[10px] text-slate-400 font-mono">Cód: {worker.cod_cliente}</span>
-                )}
-              </div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5">
-                {worker?.cliente || 'Não informado / Em trânsito'}
-              </p>
-
-              {/* Função / Cargo */}
-              {worker?.funcion && (
-                <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-600 dark:text-slate-300">
-                  <Layers className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="font-semibold">{worker.funcion}</span>
-                </div>
+                ))
               )}
-
-              {/* Datas de Ingresso e Baixa */}
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
-                <span>Início: <strong className="text-slate-700 dark:text-slate-300">{worker?.data_ingresso || '-'}</strong></span>
-                {worker?.data_baixa && (
-                  <span>Saída: <strong className="text-rose-600 dark:text-rose-400">{worker.data_baixa}</strong></span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Histórico de Alocações Anteriores */}
-        {allocations && allocations.length > 0 && (
-          <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">
-              <History className="w-3.5 h-3.5 text-slate-400" />
-              <span>Histórico de Alocações</span>
-            </div>
-            <div className="space-y-1.5">
-              {allocations.map((item, idx) => (
-                <div key={item.id || idx} className="text-[11px] p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between font-medium">
-                    <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[190px]">
-                      {item.cliente_nome || item.empresa_nome || 'Obra'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {item.effective_date ? new Date(item.effective_date).toLocaleDateString('pt-BR') : ''}
-                    </span>
-                  </div>
-                  {item.comments && (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1 italic">
-                      "{item.comments}"
-                    </p>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         )}
-
-        {/* Botão de Campanha Segmentada para a Obra */}
-        {worker?.cliente && (
-          <div className="pt-2">
-            <Link
-              href={`/inbox/automations?client=${encodeURIComponent(worker.cliente)}&company=${encodeURIComponent(worker.contratante || '')}`}
-              className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
-            >
-              <Megaphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Criar Campanha para "{worker.cliente}"</span>
-            </Link>
-          </div>
-        )}
-
       </div>
     </aside>
   )

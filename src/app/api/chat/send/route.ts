@@ -5,7 +5,7 @@ import { evolutionApi } from '@/lib/whatsapp/evolution-api'
 export async function POST(req: Request) {
   try {
     const reqData = await req.json()
-    const { conversationId, text, messageType = 'text', mediaUrl, fileName, senderName } = reqData
+    const { conversationId, text, messageType = 'text', mediaUrl, fileName, senderName, senderDepartment, senderUserId } = reqData
     if (!conversationId || (!text && !mediaUrl)) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     if (convError || !conv) throw new Error('Conversation not found')
 
-    const isInternalNote = messageType === 'internal_note'
+    const isInternalNote = messageType === 'internal_note' || messageType === 'system_block'
 
     // Fetch Avatar if missing
     let newlyFetchedAvatar = undefined;
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
        } catch(e) {}
     }
 
-    // Only hit UAZ API if it's not an internal note
+    // Only hit UAZ API if it's not an internal note or system_block
     if (!isInternalNote) {
       const channelData = conv.channel as any
       const instanceName = channelData?.name
@@ -99,13 +99,18 @@ export async function POST(req: Request) {
       direction: isInternalNote ? 'internal' : 'outbound',
       content: messageType === 'audio' ? '[Mensagem de Voz]' : text,
       media_url: messageType === 'audio' ? `data:audio/webm;base64,${text}` : mediaUrl || null,
-      message_type: isInternalNote ? 'internal_note' : messageType,
+      message_type: messageType,
       sender_name: senderName || (isInternalNote ? 'RH (Nota Interna)' : 'RH (Atendente)'),
+      sender_department: senderDepartment || null,
+      sender_user_id: senderUserId || null,
       status: isInternalNote ? 'delivered' : 'sent'
     })
 
     // Update the conversation's last_message_at so the sidebar instantly re-renders via Realtime
-    const updatePayload: any = { last_message_at: new Date().toISOString() };
+    const updatePayload: any = {
+      last_message_at: new Date().toISOString(),
+      last_message_text: messageType === 'audio' ? '🎵 Áudio' : text
+    };
     if (newlyFetchedAvatar) updatePayload.contact_avatar_url = newlyFetchedAvatar;
 
     await supabase.from('chat_conversations').update(updatePayload).eq('id', conversationId);

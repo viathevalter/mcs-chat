@@ -1,6 +1,36 @@
 "use client"
 import { useState, useRef, useEffect } from 'react'
-import { Send, Paperclip, MoreVertical, Phone, Clock, CheckCircle2, Check, CheckCheck, PanelRightClose, PanelRightOpen, LockOpen, LockKeyhole, Smile, Zap, Loader2, Image as ImageIcon, FileText, X, Languages, Star, Tag, CornerUpLeft, Trash2 } from 'lucide-react'
+import {
+  Send,
+  Paperclip,
+  MoreVertical,
+  Clock,
+  CheckCircle2,
+  Check,
+  CheckCheck,
+  PanelRightClose,
+  PanelRightOpen,
+  LockOpen,
+  LockKeyhole,
+  Lock,
+  Smile,
+  Zap,
+  Loader2,
+  Image as ImageIcon,
+  FileText,
+  X,
+  Languages,
+  Star,
+  Tag,
+  CornerUpLeft,
+  Trash2,
+  Globe,
+  Bot,
+  Building2,
+  Briefcase,
+  ArrowRightLeft,
+  UserCheck
+} from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
 import { format, isToday, isYesterday, isSameDay } from 'date-fns'
@@ -13,6 +43,204 @@ import { useI18n } from '@/contexts/i18n-context'
 import { translateOutboundMessage } from '@/app/actions/translation-actions'
 import { BilingualMessage } from './bilingual-message'
 import { useRouter } from 'next/navigation'
+
+function FlagSpain({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-es-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-es-clip)">
+        <rect width="32" height="32" fill="#c60b1e" />
+        <rect y="8" width="32" height="16" fill="#ffc400" />
+        <circle cx="10" cy="16" r="3" fill="#c60b1e" opacity="0.9" />
+      </g>
+    </svg>
+  )
+}
+
+function FlagUSA({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-us-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-us-clip)">
+        <rect width="32" height="32" fill="#ffffff" />
+        <rect y="0" width="32" height="5" fill="#b22234" />
+        <rect y="9" width="32" height="5" fill="#b22234" />
+        <rect y="18" width="32" height="5" fill="#b22234" />
+        <rect y="27" width="32" height="5" fill="#b22234" />
+        <rect width="14" height="16" fill="#3c3b6e" />
+        <circle cx="4" cy="5" r="1" fill="#ffffff" />
+        <circle cx="10" cy="5" r="1" fill="#ffffff" />
+        <circle cx="7" cy="9" r="1" fill="#ffffff" />
+        <circle cx="4" cy="13" r="1" fill="#ffffff" />
+        <circle cx="10" cy="13" r="1" fill="#ffffff" />
+      </g>
+    </svg>
+  )
+}
+
+function FlagBrazil({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-br-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-br-clip)">
+        <rect width="32" height="32" fill="#009b3a" />
+        <polygon points="16,5 28,16 16,27 4,16" fill="#fedf00" />
+        <circle cx="16" cy="16" r="5.5" fill="#002776" />
+        <path d="M 11 16 Q 16 13 21 17" stroke="#ffffff" strokeWidth="1.2" fill="none" />
+      </g>
+    </svg>
+  )
+}
+
+function FlagItaly({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-it-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-it-clip)">
+        <rect width="10.66" height="32" fill="#009246" />
+        <rect x="10.66" width="10.66" height="32" fill="#ffffff" />
+        <rect x="21.33" width="10.67" height="32" fill="#ce2b37" />
+      </g>
+    </svg>
+  )
+}
+
+function FlagFrance({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-fr-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-fr-clip)">
+        <rect width="10.66" height="32" fill="#0055a4" />
+        <rect x="10.66" width="10.66" height="32" fill="#ffffff" />
+        <rect x="21.33" width="10.67" height="32" fill="#ef4135" />
+      </g>
+    </svg>
+  )
+}
+
+function FlagGermany({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`${className} shrink-0 rounded-full shadow-xs`} fill="none">
+      <clipPath id="flag-de-clip"><circle cx="16" cy="16" r="16" /></clipPath>
+      <g clipPath="url(#flag-de-clip)">
+        <rect width="32" height="10.66" fill="#000000" />
+        <rect y="10.66" width="32" height="10.66" fill="#dd0000" />
+        <rect y="21.33" width="32" height="10.67" fill="#ffce00" />
+      </g>
+    </svg>
+  )
+}
+
+function renderFlagIcon(key: string, className = "w-5 h-5") {
+  switch (key) {
+    case 'Spanish': return <FlagSpain className={className} />
+    case 'English': return <FlagUSA className={className} />
+    case 'Portuguese': return <FlagBrazil className={className} />
+    case 'Italian': return <FlagItaly className={className} />
+    case 'French': return <FlagFrance className={className} />
+    case 'German': return <FlagGermany className={className} />
+    default: return <span>🌐</span>
+  }
+}
+
+const TARGET_LANG_MAP: Record<string, {
+  label: string
+  nativeName: string
+  flag: string
+  short: string
+  shortcut: string
+  containerClass: string
+  topTabsClass: string
+  bannerClass: string
+  bannerBorder: string
+  buttonClass: string
+  activeBtnClass: string
+}> = {
+  Spanish: {
+    label: 'Espanhol',
+    nativeName: 'Español',
+    flag: '🇪🇸',
+    short: 'ES',
+    shortcut: '1',
+    containerClass: 'bg-orange-50/50 dark:bg-orange-950/20 border-orange-300 dark:border-orange-600/70 ring-1 ring-orange-400/40 shadow-sm shadow-orange-500/10',
+    topTabsClass: 'bg-orange-500/10 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800/60',
+    bannerClass: 'bg-orange-100/80 dark:bg-orange-950/50 text-orange-950 dark:text-orange-100',
+    bannerBorder: 'border-orange-300 dark:border-orange-800',
+    buttonClass: 'bg-[#ea580c] hover:bg-[#c2410c] text-white shadow-xs',
+    activeBtnClass: 'bg-[#ea580c] border-[#c2410c] text-white font-bold shadow-md ring-2 ring-orange-500/20',
+  },
+  English: {
+    label: 'Inglês',
+    nativeName: 'English',
+    flag: '🇺🇸',
+    short: 'US',
+    shortcut: '2',
+    containerClass: 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-300 dark:border-blue-600/70 ring-1 ring-blue-400/40 shadow-sm shadow-blue-500/10',
+    topTabsClass: 'bg-blue-500/10 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/60',
+    bannerClass: 'bg-blue-100/80 dark:bg-blue-950/50 text-blue-950 dark:text-blue-100',
+    bannerBorder: 'border-blue-300 dark:border-blue-800',
+    buttonClass: 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs',
+    activeBtnClass: 'bg-[#2563eb] border-[#1d4ed8] text-white font-bold shadow-md ring-2 ring-blue-500/20',
+  },
+  Portuguese: {
+    label: 'Português',
+    nativeName: 'Português',
+    flag: '🇧🇷',
+    short: 'BR',
+    shortcut: '3',
+    containerClass: 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-600/70 ring-1 ring-emerald-400/40 shadow-sm shadow-emerald-500/10',
+    topTabsClass: 'bg-emerald-500/10 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60',
+    bannerClass: 'bg-emerald-100/80 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-100',
+    bannerBorder: 'border-emerald-300 dark:border-emerald-800',
+    buttonClass: 'bg-[#16a34a] hover:bg-[#15803d] text-white shadow-xs',
+    activeBtnClass: 'bg-[#16a34a] border-[#15803d] text-white font-bold shadow-md ring-2 ring-emerald-500/20',
+  },
+  Italian: {
+    label: 'Italiano',
+    nativeName: 'Italiano',
+    flag: '🇮🇹',
+    short: 'IT',
+    shortcut: '4',
+    containerClass: 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400 dark:border-emerald-600/70 ring-1 ring-emerald-400/40 shadow-sm shadow-emerald-500/10',
+    topTabsClass: 'bg-emerald-500/10 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60',
+    bannerClass: 'bg-emerald-100/80 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-100',
+    bannerBorder: 'border-emerald-300 dark:border-emerald-800',
+    buttonClass: 'bg-[#059669] hover:bg-[#047857] text-white shadow-xs',
+    activeBtnClass: 'bg-[#059669] border-[#047857] text-white font-bold shadow-md ring-2 ring-emerald-500/20',
+  },
+  French: {
+    label: 'Francês',
+    nativeName: 'Français',
+    flag: '🇫🇷',
+    short: 'FR',
+    shortcut: '5',
+    containerClass: 'bg-sky-50/50 dark:bg-sky-950/20 border-sky-300 dark:border-sky-600/70 ring-1 ring-sky-400/40 shadow-sm shadow-sky-500/10',
+    topTabsClass: 'bg-sky-500/10 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/60',
+    bannerClass: 'bg-sky-100/80 dark:bg-sky-950/50 text-sky-950 dark:text-sky-100',
+    bannerBorder: 'border-sky-300 dark:border-sky-800',
+    buttonClass: 'bg-[#0284c7] hover:bg-[#0369a1] text-white shadow-xs',
+    activeBtnClass: 'bg-[#0284c7] border-[#0369a1] text-white font-bold shadow-md ring-2 ring-sky-500/20',
+  },
+  German: {
+    label: 'Alemão',
+    nativeName: 'Deutsch',
+    flag: '🇩🇪',
+    short: 'DE',
+    shortcut: '6',
+    containerClass: 'bg-amber-100/30 dark:bg-yellow-950/20 border-yellow-400 dark:border-yellow-700/60 ring-1 ring-yellow-400/40 shadow-sm shadow-yellow-500/10',
+    topTabsClass: 'bg-yellow-500/10 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-800/60',
+    bannerClass: 'bg-yellow-100/80 dark:bg-yellow-950/50 text-yellow-950 dark:text-yellow-100',
+    bannerBorder: 'border-yellow-300 dark:border-yellow-800',
+    buttonClass: 'bg-[#b45309] hover:bg-[#92400e] text-white shadow-xs',
+    activeBtnClass: 'bg-[#b45309] border-[#92400e] text-white font-bold shadow-md ring-2 ring-amber-600/20',
+  },
+}
+
+function getTargetLangDisplay(lang: string) {
+  const info = TARGET_LANG_MAP[lang]
+  if (info) return `${info.flag} ${info.label}`
+  return lang
+}
 
 interface ChatAreaProps {
   conversationId: string
@@ -36,15 +264,17 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [isSending, setIsSending] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
+  const [showAiMenu, setShowAiMenu] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  
+  const [currentUserName, setCurrentUserName] = useState<string>('Atendente MCS')
+  const [currentUserDept, setCurrentUserDept] = useState<string>('Operações')
+
   const [replyingTo, setReplyingTo] = useState<any | null>(null)
   const [translatorActive, setTranslatorActive] = useState(false)
-  const [showTranslationMenu, setShowTranslationMenu] = useState(false)
-  const [myLang, setMyLang] = useState("Português (Brasil)")
-  const [targetLang, setTargetLang] = useState("English") // Config padrão
+  const [myLang, setMyLang] = useState("Portuguese")
+  const [targetLang, setTargetLang] = useState("Spanish") // Padrão Espanha / Trabalhadores
   const [isTranslatingOutbound, setIsTranslatingOutbound] = useState(false)
 
   // Tags States
@@ -53,66 +283,107 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [newTagColor, setNewTagColor] = useState('#ef4444')
 
   const tagColors = [
-    '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', 
+    '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
     '#0ea5e9', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'
   ]
-
-  const handleAddTag = async () => {
-    if (!newTagName.trim() || !context?.conversation) return;
-    const newTag = { id: Date.now().toString(), name: newTagName.trim(), color: newTagColor };
-    const currentTags = context.conversation.tags || [];
-    
-    if(currentTags.find((t:any) => t.name.toLowerCase() === newTag.name.toLowerCase())) {
-        return; // Tag already exists
-    }
-    
-    const updatedTags = [...currentTags, newTag];
-    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null);
-
-    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId);
-    if(error){
-        setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null);
-    } else {
-        setNewTagName('');
-    }
-  };
-
-  const handleRemoveTag = async (tagName: string) => {
-    if (!context?.conversation) return;
-    const currentTags = context.conversation.tags || [];
-    const updatedTags = currentTags.filter((t:any) => t.name !== tagName);
-    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null);
-
-    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId);
-    if(error){
-        setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null);
-    }
-  };
-
-  
-
-  // Novas states para Ferramentas
-  const togglePin = async () => {
-     if (!context?.conversation) return;
-     const newStatus = !context.conversation.is_pinned;
-     await supabase.from('chat_conversations').update({ is_pinned: newStatus }).eq('id', conversationId);
-  }
 
   const [showEmoji, setShowEmoji] = useState(false)
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [attachment, setAttachment] = useState<{file: File, type: 'image' | 'document', previewUrl?: string} | null>(null)
+  const [attachment, setAttachment] = useState<{ file: File; type: 'image' | 'document'; previewUrl?: string } | null>(null)
 
   const docInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Load saved translator config + current user info
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null))
+    try {
+      const saved = localStorage.getItem('mcs_chat_translator_config')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed.active === 'boolean') setTranslatorActive(parsed.active)
+        if (parsed.myLang) setMyLang(parsed.myLang)
+        if (parsed.targetLang && TARGET_LANG_MAP[parsed.targetLang]) setTargetLang(parsed.targetLang)
+      }
+    } catch {}
+
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user
+      if (!user) return
+      setCurrentUserId(user.id)
+
+      const { data: mcsUser } = await supabase
+        .from('mcs_users')
+        .select('id, name, display_name, full_name, email, department_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      const resolvedName =
+        mcsUser?.display_name ||
+        mcsUser?.name ||
+        mcsUser?.full_name ||
+        user.user_metadata?.full_name ||
+        user.email?.split('@')[0] ||
+        'Atendente MCS'
+      setCurrentUserName(resolvedName)
+
+      if (mcsUser?.department_id) {
+        const { data: dept } = await supabase
+          .from('mcs_departments')
+          .select('name')
+          .eq('id', mcsUser.department_id)
+          .maybeSingle()
+        if (dept?.name) setCurrentUserDept(dept.name)
+      }
+    })
+
     fetchQuickReplies()
   }, [])
+
+  const updateTranslator = (updates: { active?: boolean; myLang?: string; targetLang?: string }) => {
+    const nextActive = updates.active !== undefined ? updates.active : translatorActive
+    const nextMyLang = updates.myLang !== undefined ? updates.myLang : myLang
+    const nextTargetLang = updates.targetLang !== undefined ? updates.targetLang : targetLang
+
+    setTranslatorActive(nextActive)
+    setMyLang(nextMyLang)
+    setTargetLang(nextTargetLang)
+    try {
+      localStorage.setItem(
+        'mcs_chat_translator_config',
+        JSON.stringify({ active: nextActive, myLang: nextMyLang, targetLang: nextTargetLang })
+      )
+    } catch {}
+  }
+
+  // Keyboard shortcuts Alt+Shift+1..6 and Alt+Shift+T (CRM Standard)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.shiftKey) {
+        const code = e.code
+        const keyMap: Record<string, string> = {
+          Digit1: 'Spanish', Numpad1: 'Spanish',
+          Digit2: 'English', Numpad2: 'English',
+          Digit3: 'Portuguese', Numpad3: 'Portuguese',
+          Digit4: 'Italian', Numpad4: 'Italian',
+          Digit5: 'French', Numpad5: 'French',
+          Digit6: 'German', Numpad6: 'German',
+        }
+        if (keyMap[code]) {
+          e.preventDefault()
+          updateTranslator({ active: true, targetLang: keyMap[code] })
+        } else if (code === 'KeyT' || code === 'Digit0' || code === 'Numpad0') {
+          e.preventDefault()
+          updateTranslator({ active: !translatorActive })
+        }
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [translatorActive, myLang, targetLang])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -123,89 +394,140 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (data) setQuickReplies(data)
   }
 
+  const handleAddTag = async () => {
+    if (!newTagName.trim() || !context?.conversation) return
+    const newTag = { id: Date.now().toString(), name: newTagName.trim(), color: newTagColor }
+    const currentTags = context.conversation.tags || []
+
+    if (currentTags.find((t: any) => t.name.toLowerCase() === newTag.name.toLowerCase())) {
+      return
+    }
+
+    const updatedTags = [...currentTags, newTag]
+    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null)
+
+    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId)
+    if (error) {
+      setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null)
+    } else {
+      setNewTagName('')
+    }
+  }
+
+  const handleRemoveTag = async (tagName: string) => {
+    if (!context?.conversation) return
+    const currentTags = context.conversation.tags || []
+    const updatedTags = currentTags.filter((t: any) => t.name !== tagName)
+    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null)
+
+    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId)
+    if (error) {
+      setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null)
+    }
+  }
+
+  const togglePin = async () => {
+    if (!context?.conversation) return
+    const newStatus = !context.conversation.is_pinned
+    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, is_pinned: newStatus } } : null)
+    await supabase.from('chat_conversations').update({ is_pinned: newStatus }).eq('id', conversationId)
+  }
+
+  const resolvedSenderDept = context?.conversation?.department?.name || currentUserDept || 'Operações'
+
   const handleTranslateAndSend = async () => {
     if (!text.trim() || isSending || isTranslatingOutbound) return
     setIsTranslatingOutbound(true)
     const rawContent = text
     setText('')
     try {
-       const res = await translateOutboundMessage(rawContent, targetLang)
-       if (res.success && res.translation) {
-           await sendMessage(res.translation, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
-       } else {
-           setText(rawContent)
-       }
+      const res = await translateOutboundMessage(rawContent, targetLang)
+      if (res.success && res.translation) {
+        await sendMessage(res.translation, activeTab === 'note' ? 'internal_note' : 'text', {
+          quoted: replyingTo?.id,
+          senderName: currentUserName,
+          senderDepartment: resolvedSenderDept,
+          senderUserId: currentUserId || undefined
+        })
+      } else {
+        setText(rawContent)
+      }
     } finally {
-       setIsTranslatingOutbound(false)
-       setReplyingTo(null)
+      setIsTranslatingOutbound(false)
+      setReplyingTo(null)
     }
   }
 
   const handleDeleteMessage = async (msg: any) => {
-    if (!confirm(t('chatArea', 'confirmDelete') || 'Deseja realmente apagar esta mensagem para todos?')) return;
-    
-    // Optimistic UI
-    const originalContent = msg.content;
-    const originalStatus = msg.status;
-    
+    if (!confirm(t('chatArea', 'confirmDelete') || 'Deseja realmente apagar esta mensagem para todos?')) return
+
     try {
-        // Usa a Rota Nativa do Kotrik (que busca url e api_token do chat_channels)
-        const res = await fetch('/api/chat/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messageId: msg.id,
-                externalId: msg.external_id || msg.id
-            })
-        });
-        
-        // Se a API externa falhar, garantiremos que, usando o fallback, vamos no mínimo remover da UI
-        if (!res.ok) {
-           console.warn('API de delete externa falhou. Removendo apenas local.');
-           await supabase.from('chat_messages').update({ content: '🚫 Mensagem apagada', status: 'deleted' }).eq('id', msg.id);
-        }
-    } catch(err) {
-        console.error('Falha ao apagar msg', err);
+      const res = await fetch('/api/chat/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId: msg.id,
+          externalId: msg.external_id || msg.id
+        })
+      })
+
+      if (!res.ok) {
+        await supabase.from('chat_messages').update({ content: '🚫 Mensagem apagada', status: 'deleted' }).eq('id', msg.id)
+      }
+    } catch (err) {
+      console.error('Falha ao apagar msg', err)
     }
   }
 
   const handleSend = async () => {
     if ((!text.trim() && !attachment) || isSending || isUploading) return
     setIsSending(true)
-    
-    try {
-        if (attachment) {
-            setIsUploading(true)
-            const fileExt = attachment.file.name.split('.').pop() || 'png';
-            const fileName = `chat_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            
-            const { error: uploadError } = await supabase.storage.from('chat_media').upload(fileName, attachment.file);
-            if (uploadError) throw uploadError;
-            
-            const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName);
-            
-            await sendMessage(text.trim() || '', attachment.type, { mediaUrl: publicUrl, fileName: attachment.file.name, quoted: replyingTo?.id })
-            
-            setAttachment(null)
-            setText('')
-            setReplyingTo(null)
-            setShowQuickReplies(false)
-            setShowEmoji(false)
-            setIsUploading(false)
-            return;
-        }
 
-        await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text', { quoted: replyingTo?.id })
+    try {
+      if (attachment) {
+        setIsUploading(true)
+        const fileExt = attachment.file.name.split('.').pop() || 'png'
+        const fileName = `chat_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
+
+        const { error: uploadError } = await supabase.storage.from('chat_media').upload(fileName, attachment.file)
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage.from('chat_media').getPublicUrl(fileName)
+
+        await sendMessage(text.trim() || '', attachment.type, {
+          mediaUrl: publicUrl,
+          fileName: attachment.file.name,
+          quoted: replyingTo?.id,
+          senderName: currentUserName,
+          senderDepartment: resolvedSenderDept,
+          senderUserId: currentUserId || undefined
+        })
+
+        setAttachment(null)
         setText('')
+        setReplyingTo(null)
         setShowQuickReplies(false)
         setShowEmoji(false)
-        setReplyingTo(null)
-    } catch (err) {
-        console.error('Erro ao enviar anexo:', err)
-        alert(t('chatArea', 'error'))
-    } finally {
-        setIsSending(false)
         setIsUploading(false)
+        return
+      }
+
+      await sendMessage(text, activeTab === 'note' ? 'internal_note' : 'text', {
+        quoted: replyingTo?.id,
+        senderName: currentUserName,
+        senderDepartment: resolvedSenderDept,
+        senderUserId: currentUserId || undefined
+      })
+      setText('')
+      setShowQuickReplies(false)
+      setShowEmoji(false)
+      setReplyingTo(null)
+    } catch (err) {
+      console.error('Erro ao enviar anexo:', err)
+      alert(t('chatArea', 'error'))
+    } finally {
+      setIsSending(false)
+      setIsUploading(false)
     }
   }
 
@@ -213,7 +535,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (isSending) return
     setIsSending(true)
     try {
-      await sendMessage(base64Audio, 'audio')
+      await sendMessage(base64Audio, 'audio', {
+        senderName: currentUserName,
+        senderDepartment: resolvedSenderDept,
+        senderUserId: currentUserId || undefined
+      })
     } finally {
       setIsSending(false)
     }
@@ -222,8 +548,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
     const file = e.target.files?.[0]
     if (!file) return
-    
-    // Limites (16MB fotos/videos | 100MB Documentação)
+
     const maxSize = type === 'image' ? 16 * 1024 * 1024 : 100 * 1024 * 1024
     if (file.size > maxSize) {
       alert(type === 'image' ? t('chatArea', 'maxImageLimit') : t('chatArea', 'maxDocLimit'))
@@ -231,42 +556,75 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
 
     setShowAttach(false)
-    let previewUrl;
+    let previewUrl
     if (type === 'image') {
-       previewUrl = URL.createObjectURL(file);
+      previewUrl = URL.createObjectURL(file)
     }
-    setAttachment({ file, type, previewUrl });
+    setAttachment({ file, type, previewUrl })
     if (e.target) e.target.value = ''
   }
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    const items = e.clipboardData?.items
+    if (!items) return
 
     for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-            e.preventDefault();
-            const file = items[i].getAsFile();
-            if (!file) continue;
-            
-            const maxSize = 16 * 1024 * 1024;
-            if (file.size > maxSize) {
-              alert(t('chatArea', 'maxImageLimit'));
-              return;
-            }
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault()
+        const file = items[i].getAsFile()
+        if (!file) continue
 
-            const previewUrl = URL.createObjectURL(file);
-            setAttachment({ file, type: 'image', previewUrl });
-            break; // Handle only the first image
+        const maxSize = 16 * 1024 * 1024
+        if (file.size > maxSize) {
+          alert(t('chatArea', 'maxImageLimit'))
+          return
         }
+
+        const previewUrl = URL.createObjectURL(file)
+        setAttachment({ file, type: 'image', previewUrl })
+        break
+      }
     }
-  };
+  }
 
   const handleAssign = async () => {
     if (!currentUserId || isAssigning) return
     setIsAssigning(true)
     try {
-      await supabase.from('chat_conversations').update({ assigned_to: currentUserId, status: 'open' }).eq('id', conversationId)
+      await supabase
+        .from('chat_conversations')
+        .update({
+          assigned_to: currentUserId,
+          assigned_to_name: currentUserName,
+          status: 'open'
+        })
+        .eq('id', conversationId)
+
+      setContext((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              conversation: {
+                ...prev.conversation,
+                assigned_to: currentUserId,
+                assigned_to_name: currentUserName,
+                status: 'open'
+              }
+            }
+          : null
+      )
+
+      // Registra o Bloco de Atendimento no histórico do Chat
+      await sendMessage(
+        `🔄 BLOCO DE ATENDIMENTO INICIADO — ${currentUserName} (${resolvedSenderDept}) assumiu a conversa`,
+        'system_block',
+        {
+          senderName: currentUserName,
+          senderDepartment: resolvedSenderDept,
+          senderUserId: currentUserId
+        }
+      )
+
       router.refresh()
     } finally {
       setIsAssigning(false)
@@ -277,7 +635,19 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (isAssigning) return
     setIsAssigning(true)
     try {
-      await supabase.from('chat_conversations').update({ status: 'closed', assigned_to: null }).eq('id', conversationId)
+      await sendMessage(
+        `✅ BLOCO DE ATENDIMENTO ENCERRADO por ${currentUserName} (${resolvedSenderDept})`,
+        'system_block',
+        {
+          senderName: currentUserName,
+          senderDepartment: resolvedSenderDept,
+          senderUserId: currentUserId || undefined
+        }
+      )
+      await supabase
+        .from('chat_conversations')
+        .update({ status: 'closed', assigned_to: null, assigned_to_name: null })
+        .eq('id', conversationId)
       router.replace('/inbox')
     } catch (error) {
       console.error('Erro ao encerrar:', error)
@@ -292,7 +662,6 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
   const handleSelectQuickReply = (content: string) => {
     setText((prev) => {
-      // Remove o atalho digitado (ex: /bomdia) se houver
       const replaced = prev.replace(/\/[a-z0-9_-]*$/i, '')
       return replaced + content
     })
@@ -300,11 +669,16 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     textareaRef.current?.focus()
   }
 
+  const handleAiQuickDraft = (draftText: string) => {
+    setText(draftText)
+    setShowAiMenu(false)
+    setTimeout(() => textareaRef.current?.focus(), 50)
+  }
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setText(val)
-    
-    // Trigger para mostrar quick replies
+
     const latestWordMatch = val.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
     if (latestWordMatch) {
       setShowQuickReplies(true)
@@ -315,218 +689,242 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
   const currentMatch = text.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
   const currentShortcutStr = currentMatch ? currentMatch[2].toLowerCase() : ''
-  const filteredReplies = currentShortcutStr 
-    ? quickReplies.filter(r => r.shortcut && r.shortcut.toLowerCase().startsWith(currentShortcutStr))
+  const filteredReplies = currentShortcutStr
+    ? quickReplies.filter((r) => r.shortcut && r.shortcut.toLowerCase().startsWith(currentShortcutStr))
     : quickReplies
 
   const conversation = context?.conversation
   const isMine = conversation?.assigned_to === currentUserId
   const isClosed = conversation?.status === 'closed'
+  const isPrivateNote = activeTab === 'note'
+  const activeLangTheme = TARGET_LANG_MAP[targetLang] || TARGET_LANG_MAP.Spanish
+
+  const workerCompany =
+    context?.worker?.contratante ||
+    context?.company?.trade_name ||
+    context?.company?.nome ||
+    conversation?.worker_company_name ||
+    null
+
+  const workerClient =
+    context?.worker?.cliente ||
+    conversation?.worker_client_name ||
+    null
 
   return (
     <div className="flex flex-col h-full bg-[var(--chat-area-bg)] relative transition-colors duration-300">
-      <div className="h-20 flex-shrink-0 bg-chat-surface-bg/80 backdrop-blur-md border-b border-chat-inbound-border px-6 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-emerald-200 rotate-3 hover:rotate-0 transition-all duration-300 overflow-hidden">
-               {context?.conversation?.contact_avatar_url ? (
-                  <img src={context.conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-               ) : (
-                  (context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()
-               )}
-             </div>
-             <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white"></div>
+      {/* Top Conversation Header */}
+      <div className="h-20 flex-shrink-0 bg-chat-surface-bg/90 backdrop-blur-md border-b border-chat-inbound-border px-5 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="relative shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-base shadow-md shadow-emerald-200 overflow-hidden">
+              {context?.worker?.foto ? (
+                <img src={context.worker.foto} alt="Foto" className="w-full h-full object-cover" />
+              ) : context?.conversation?.contact_avatar_url ? (
+                <img src={context.conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                (context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()
+              )}
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white"></div>
           </div>
-          <div>
-            <h2 className="font-bold text-slate-800 text-lg tracking-tight leading-tight">
-              {context?.worker?.nome || context?.conversation?.contact_name || context?.conversation?.contact_phone || 'Painel de Atendimento'}
-            </h2>
-            <div className="flex items-center gap-2 mt-0.5">
-               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 tracking-wider uppercase border border-slate-200">WhatsApp</span>
-               {context?.conversation?.contact_phone && (
-                 <span className="text-xs font-medium text-slate-500">{context.conversation.contact_phone}</span>
-               )}
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight leading-tight truncate">
+                {context?.worker?.nome || context?.conversation?.contact_name || context?.conversation?.contact_phone || 'Painel de Atendimento'}
+              </h2>
+              {workerCompany && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shrink-0">
+                  <Building2 className="w-2.5 h-2.5" />
+                  {workerCompany}
+                </span>
+              )}
+              {workerClient && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 max-w-[180px] truncate shrink-0">
+                  <Briefcase className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">{workerClient}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {context?.conversation?.contact_phone && (
+                <span className="text-xs font-mono font-medium text-slate-500">{context.conversation.contact_phone}</span>
+              )}
+              {conversation?.department?.name && (
+                <span
+                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border"
+                  style={{
+                    backgroundColor: `${conversation.department.color || '#6366f1'}15`,
+                    color: conversation.department.color || '#6366f1',
+                    borderColor: `${conversation.department.color || '#6366f1'}40`
+                  }}
+                >
+                  📂 {conversation.department.name}
+                </span>
+              )}
+              {conversation?.assigned_to_name && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                  <UserCheck className="w-2.5 h-2.5" />
+                  {conversation.assigned_to_name}
+                </span>
+              )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2 shrink-0">
           {isClosed ? (
-            <span className="px-4 py-2 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-2">
-               <LockKeyhole className="w-3.5 h-3.5" />
-               {t('chatArea', 'closedTicket')}
+            <span className="px-3.5 py-1.5 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5">
+              <LockKeyhole className="w-3.5 h-3.5" />
+              {t('chatArea', 'closedTicket')}
             </span>
           ) : isMine ? (
-            <button onClick={handleClose} disabled={isAssigning} className="px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
-               <CheckCircle2 className="w-3.5 h-3.5" />
-               {t('chatArea', 'endChat')}
+            <button
+              onClick={handleClose}
+              disabled={isAssigning}
+              className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {t('chatArea', 'endChat')}
             </button>
           ) : (
-            <button onClick={handleAssign} disabled={isAssigning} className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
-               <LockOpen className="w-3.5 h-3.5" />
-               {t('chatArea', 'takeChat')}
-            </button>
-          )}
-
-          
-    {/* BOTOES TAG, FAVORITO E AUTO IA */}
-    <div className="relative">
-      <button onClick={() => setShowTagsMenu(!showTagsMenu)} className="px-3 py-1.5 ml-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 hidden md:flex">
-         <Tag className="w-3.5 h-3.5" /> Tags
-      </button>
-      
-      {showTagsMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowTagsMenu(false)}></div>
-          <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 shadow-2xl rounded-xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
-            <div className="mb-4">
-              <span className="font-bold text-slate-700 dark:text-slate-200 block text-sm mb-2 flex items-center gap-2">
-                <Tag className="w-4 h-4" /> Etiquetas do Contato
-              </span>
-              
-              <div className="flex flex-wrap gap-2 min-h-[30px] p-2 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-800">
-                {(context?.conversation?.tags || []).length === 0 && <p className="text-xs text-slate-400 w-full italic">Nenhuma etiqueta atribuída.</p>}
-                {(context?.conversation?.tags || []).map((tag:any, idx:number) => (
-                  <span key={idx} className="px-2 py-1 rounded text-[11px] font-bold text-white flex items-center gap-1 shadow-sm" style={{ backgroundColor: tag.color }}>
-                    {tag.name}
-                    <button onClick={() => handleRemoveTag(tag.name)} className="hover:bg-black/20 rounded-full p-0.5 ml-1 transition-colors">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-            
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-2">Nova Etiqueta</span>
-              <div className="flex gap-2 mb-3 w-full">
-                <input 
-                  type="text" 
-                  placeholder="Ex: Lead Novo" 
-                  value={newTagName}
-                  onChange={(e) => setNewTagName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                  className="flex-1 min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                />
-                <button 
-                  onClick={handleAddTag} 
-                  disabled={!newTagName.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
-                >
-                  Add
-                </button>
-              </div>
-              <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
-                {tagColors.map(color => (
-                  <button 
-                    key={color}
-                    onClick={() => setNewTagColor(color)}
-                    className="w-5 h-5 rounded-full transition-all flex items-center justify-center shrink-0"
-                    style={{ 
-                      backgroundColor: color, 
-                      scale: newTagColor === color ? '1.2' : '1',
-                      boxShadow: newTagColor === color ? `0 0 0 2px white, 0 0 0 3px ${color}` : 'none'
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-    
-    <button onClick={togglePin} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${context?.conversation?.is_pinned ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 border-yellow-200 dark:border-yellow-900/50' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-       <Star className={`w-3.5 h-3.5 ${context?.conversation?.is_pinned ? 'fill-yellow-400' : ''}`} /> {t('chatArea', 'favorite') || 'Fixar'}
-    </button>
-    <div className="relative">
-      <button onClick={() => setShowTranslationMenu(!showTranslationMenu)} className={`px-3 py-1.5 ml-1 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${translatorActive ? 'bg-orange-500 text-white border-orange-600 shadow-sm shadow-orange-200' : 'bg-white text-orange-500 border-orange-200 hover:bg-orange-50'}`}>
-         <Languages className="w-3.5 h-3.5" /> Auto-A.I 
-      </button>
-      {showTranslationMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowTranslationMenu(false)}></div>
-          <div className="absolute top-full right-0 mt-2 w-[290px] bg-white shadow-2xl rounded-xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
-            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-3">
-              <div>
-                <span className="font-bold text-slate-700 block text-[13px]">Auto Translation</span>
-                <span className="text-[11px] text-slate-500">Tradução simultânea via OpenAI.</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer group">
-                <input type="checkbox" className="sr-only peer" checked={translatorActive} onChange={() => setTranslatorActive(!translatorActive)} />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500 group-hover:after:scale-95"></div>
-              </label>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Meu Idioma (Leitura)</label>
-                <select 
-                   value={myLang} 
-                   onChange={e => setMyLang(e.target.value)} 
-                   className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm bg-white"
-                >
-                    <option value="Português (Brasil)">Português (Brasil)</option>
-                    <option value="English">English</option>
-                    <option value="Spanish">Español</option>
-                    <option value="French">Français</option>
-                    <option value="German">Deutsch</option>
-                    <option value="Italian">Italiano</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Idioma do Cliente (Envio)</label>
-                <select 
-                   value={targetLang} 
-                   onChange={e => setTargetLang(e.target.value)} 
-                   className="w-full text-sm border border-slate-200 rounded-lg p-2.5 text-slate-700 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 shadow-sm bg-white"
-                >
-                    <option value="English">English</option>
-                    <option value="Spanish">Español</option>
-                    <option value="French">Français</option>
-                    <option value="German">Deutsch</option>
-                    <option value="Italian">Italiano</option>
-                    <option value="Português (Brasil)">Português (Brasil)</option>
-                </select>
-              </div>
-            </div>
-            <div className="mt-4 p-2.5 bg-blue-50/80 border border-blue-100 text-blue-800 text-[11px] rounded-lg flex gap-2.5 items-start leading-relaxed shadow-sm">
-               <span className="mt-0.5 text-lg">💡</span> <span>A IA detectará automaticamente o idioma que escreverem para você. Você só precisa dizer o idioma deles para que o botão de <strong>"Traduzir"</strong> mande corretamente.</span>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  {togglePanel && (
-            <button 
-              onClick={togglePanel}
-              className="hidden" 
-              title={isPanelOpen ? t('chatArea', 'hideDetails') : t('chatArea', 'showDetails')}
+            <button
+              onClick={handleAssign}
+              disabled={isAssigning}
+              className="px-3.5 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-               {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+              <LockOpen className="w-3.5 h-3.5" />
+              {t('chatArea', 'takeChat')}
             </button>
           )}
 
-          <div className="w-px h-6 bg-slate-200 mx-1"></div>
-          <button onClick={togglePanel} className={`p-2.5 rounded-xl transition-all ${isPanelOpen ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`} title="Detalhes do Contato">
-            <MoreVertical className="w-5 h-5" />
+          {/* Botão Tags */}
+          <div className="relative">
+            <button
+              onClick={() => setShowTagsMenu(!showTagsMenu)}
+              className="px-2.5 py-1.5 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-50 hidden md:flex cursor-pointer"
+            >
+              <Tag className="w-3.5 h-3.5" /> Tags
+            </button>
+
+            {showTagsMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowTagsMenu(false)}></div>
+                <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 shadow-2xl rounded-xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+                  <div className="mb-4">
+                    <span className="font-bold text-slate-700 dark:text-slate-200 block text-sm mb-2 flex items-center gap-2">
+                      <Tag className="w-4 h-4" /> Etiquetas do Contato
+                    </span>
+                    <div className="flex flex-wrap gap-2 min-h-[30px] p-2 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-800">
+                      {(context?.conversation?.tags || []).length === 0 && (
+                        <p className="text-xs text-slate-400 w-full italic">Nenhuma etiqueta atribuída.</p>
+                      )}
+                      {(context?.conversation?.tags || []).map((tag: any, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-1 rounded text-[11px] font-bold text-white flex items-center gap-1 shadow-sm"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                          <button onClick={() => handleRemoveTag(tag.name)} className="hover:bg-black/20 rounded-full p-0.5 ml-1 transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-2">Nova Etiqueta</span>
+                    <div className="flex gap-2 mb-3 w-full">
+                      <input
+                        type="text"
+                        placeholder="Ex: Pendente EPI"
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                        className="flex-1 min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                      />
+                      <button
+                        onClick={handleAddTag}
+                        disabled={!newTagName.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
+                      {tagColors.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setNewTagColor(color)}
+                          className="w-5 h-5 rounded-full transition-all flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: color,
+                            scale: newTagColor === color ? '1.2' : '1',
+                            boxShadow: newTagColor === color ? `0 0 0 2px white, 0 0 0 3px ${color}` : 'none'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={togglePin}
+            className={`px-2.5 py-1.5 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              context?.conversation?.is_pinned
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 border-yellow-200 dark:border-yellow-900/50'
+                : 'bg-white dark:bg-slate-900 border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${context?.conversation?.is_pinned ? 'fill-yellow-400' : ''}`} />
+            <span className="hidden sm:inline">{t('chatArea', 'favorite') || 'Fixar'}</span>
+          </button>
+
+          <div className="w-px h-6 bg-slate-200 mx-0.5"></div>
+          <button
+            onClick={togglePanel}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${
+              isPanelOpen ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Detalhes do Trabalhador"
+          >
+            {isPanelOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6" onClick={() => {setShowEmoji(false); setShowAttach(false); setShowQuickReplies(false);}}>
+      {/* Chat Messages Timeline */}
+      <div
+        className="flex-1 overflow-y-auto p-6 space-y-4"
+        onClick={() => {
+          setShowEmoji(false)
+          setShowAttach(false)
+          setShowQuickReplies(false)
+          setShowAiMenu(false)
+        }}
+      >
         {loading && <p className="text-center text-slate-400 text-sm mt-10">{t('chatArea', 'loadingMessages')}</p>}
         {messages.length === 0 && !loading && (
           <div className="text-center text-slate-400 text-sm mt-10">{t('chatArea', 'noMessages')}</div>
         )}
-        
+
         {messages.map((msg, index) => {
           const isOutbound = msg.direction === 'outbound' || msg.direction === 'internal'
           const isNote = msg.message_type === 'internal_note'
+          const isSystemBlock = msg.message_type === 'system_block'
           const messageDate = msg.created_at ? new Date(msg.created_at) : null
           const time = messageDate ? format(messageDate, 'HH:mm') : ''
-          
+
           let showDateSeparator = false
           let dateLabel = ''
-          
+
           if (messageDate) {
             if (index === 0) {
               showDateSeparator = true
@@ -536,7 +934,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 showDateSeparator = true
               }
             }
-            
+
             if (showDateSeparator) {
               if (isToday(messageDate)) {
                 dateLabel = 'Hoje'
@@ -547,103 +945,233 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               }
             }
           }
-          
+
+          // Detect automatic visual block separator when a different internal agent/sector speaks
+          const prevOutbound = [...messages.slice(0, index)]
+            .reverse()
+            .find((m) => m.direction === 'outbound' && m.message_type !== 'system_block')
+          const currentSenderKey = `${msg.sender_name || ''}|${(msg as any).sender_department || ''}`
+          const prevSenderKey = prevOutbound ? `${prevOutbound.sender_name || ''}|${(prevOutbound as any).sender_department || ''}` : ''
+          const showAgentSwitchBanner =
+            isOutbound &&
+            !isSystemBlock &&
+            !isNote &&
+            prevOutbound &&
+            prevSenderKey !== currentSenderKey &&
+            msg.sender_name &&
+            prevOutbound.sender_name !== msg.sender_name &&
+            messages[index - 1]?.message_type !== 'system_block'
+
+          if (isSystemBlock) {
+            return (
+              <div key={msg.id} className="my-4">
+                {showDateSeparator && (
+                  <div className="flex justify-center my-4">
+                    <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
+                      {dateLabel}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-center my-3">
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 shadow-xs max-w-xl text-center">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200 tracking-wide">
+                      {msg.content}
+                    </span>
+                    <span className="text-[10px] font-mono text-indigo-500 dark:text-indigo-400 shrink-0">{time}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          const senderDisplayName = msg.sender_name || (isOutbound ? currentUserName : (context?.worker?.nome || conversation?.contact_name || 'Trabalhador'))
+          const senderDeptBadge = (msg as any).sender_department || (isOutbound ? resolvedSenderDept : null)
+
           return (
-            <div key={msg.id} className={`mb-4 animate-in fade-in slide-in-from-bottom-2 ${isOutbound ? 'pr-2' : 'pl-2'}`}>
+            <div key={msg.id} className={`mb-3 animate-in fade-in slide-in-from-bottom-2 ${isOutbound ? 'pr-2' : 'pl-2'}`}>
               {showDateSeparator && (
                 <div className="flex justify-center my-4">
-                  <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">{dateLabel}</span>
+                  <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
+                    {dateLabel}
+                  </span>
                 </div>
               )}
-              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
-                <div className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-600' : 'bg-chat-icon-bg text-chat-icon-text') : 'bg-chat-icon-bg text-chat-icon-text opacity-80'}`} title={msg.sender_name || 'Desconhecido'}>
-                  {isOutbound ? (msg.sender_name?.substring(0, 2).toUpperCase() || 'RH') : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
+
+              {showAgentSwitchBanner && (
+                <div className="flex items-center justify-center my-3">
+                  <div className="flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold uppercase tracking-wider">
+                    <span>👤 Bloco de Atendimento: {senderDisplayName}</span>
+                    {senderDeptBadge && <span>• Setor {senderDeptBadge}</span>}
+                  </div>
                 </div>
-                
+              )}
+
+              <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
+                <div
+                  className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white shadow-2xs ${
+                    isOutbound
+                      ? isNote
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-600 text-white'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                  title={senderDisplayName}
+                >
+                  {senderDisplayName.substring(0, 2).toUpperCase()}
+                </div>
+
                 <div className="relative group max-w-full flex items-center">
-                  <div className={`absolute top-0 ${isOutbound ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex items-center transition-opacity z-10 whitespace-nowrap`}>
-                    <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors">
-                        <CornerUpLeft className="w-3 h-3" />
+                  <div
+                    className={`absolute top-0 ${
+                      isOutbound ? 'right-full mr-2' : 'left-full ml-2'
+                    } opacity-0 group-hover:opacity-100 flex items-center transition-opacity z-10 whitespace-nowrap`}
+                  >
+                    <button
+                      onClick={() => setReplyingTo(msg)}
+                      className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"
+                    >
+                      <CornerUpLeft className="w-3 h-3" />
                     </button>
                     {isOutbound && (
-                        <button onClick={() => handleDeleteMessage(msg)} className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1" title="Apagar Mensagem">
-                            <Trash2 className="w-3 h-3" />
-                        </button>
+                      <button
+                        onClick={() => handleDeleteMessage(msg)}
+                        className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1"
+                        title="Apagar Mensagem"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     )}
                   </div>
 
-                  <div className={`pointer-events-auto px-3.5 py-2 shadow-sm ${isOutbound ? (isNote ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl rounded-br-xs shadow-amber-200/50' : 'bg-[var(--chat-outbound-bg-start)] text-[var(--chat-outbound-fg)] border border-[var(--chat-outbound-border)] rounded-2xl rounded-br-xs shadow-sm') : 'bg-[var(--chat-inbound-bg)] border border-[var(--chat-inbound-border)] rounded-2xl rounded-bl-xs text-[var(--chat-inbound-fg)] shadow-sm'}`}>
-                    
-                    {(msg as any).quoted && (() => {
-           const qMsg = messages.find((m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted);
-           return (
-             <div className="w-full mb-1 p-1.5 bg-black/5 dark:bg-white/10 rounded border-l-4 border-emerald-500/60 text-xs cursor-pointer hover:bg-black/10 transition-colors">
-                <span className="font-bold text-emerald-700 block mb-0.5">{qMsg ? (qMsg.direction === 'outbound' ? 'Você' : 'Contato') : 'Mensagem'}</span>
-                <span className="text-slate-600 dark:text-slate-300 line-clamp-1 truncate">{qMsg?.content || '...'}</span>
-             </div>
-           )
-       })()}
-   {msg.media_url && msg.message_type === 'image' && (
-                  <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
-                  </div>
-                )}
+                  <div
+                    className={`pointer-events-auto px-3.5 py-2 shadow-sm ${
+                      isOutbound
+                        ? isNote
+                          ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl rounded-br-xs shadow-amber-200/50'
+                          : 'bg-[var(--chat-outbound-bg-start)] text-[var(--chat-outbound-fg)] border border-[var(--chat-outbound-border)] rounded-2xl rounded-br-xs shadow-sm'
+                        : 'bg-[var(--chat-inbound-bg)] border border-[var(--chat-inbound-border)] rounded-2xl rounded-bl-xs text-[var(--chat-inbound-fg)] shadow-sm'
+                    }`}
+                  >
+                    {/* Header de Identificação de Quem Está Falando e Qual Setor */}
+                    {isOutbound && (
+                      <div className="flex items-center gap-1.5 mb-1 pb-0.5 border-b border-black/5 dark:border-white/10 text-[10px] font-bold">
+                        <span className={isNote ? 'text-amber-800' : 'text-emerald-800 dark:text-emerald-300'}>
+                          👤 {senderDisplayName}
+                        </span>
+                        {senderDeptBadge && (
+                          <span className="px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[9px] uppercase tracking-wider opacity-85">
+                            {senderDeptBadge}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
-                {msg.media_url && msg.message_type === 'document' && (
-                  <a href={msg.media_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-white/20 rounded-xl mb-1 mt-1 mx-1 hover:bg-white/30 transition">
-                    <div className="p-2 bg-white/50 rounded-lg shrink-0">
-                       <FileText className="w-6 h-6" />
+                    {(msg as any).quoted &&
+                      (() => {
+                        const qMsg = messages.find(
+                          (m: any) => m.id === (msg as any).quoted || m.external_id === (msg as any).quoted
+                        )
+                        return (
+                          <div className="w-full mb-1 p-1.5 bg-black/5 dark:bg-white/10 rounded border-l-4 border-emerald-500/60 text-xs cursor-pointer hover:bg-black/10 transition-colors">
+                            <span className="font-bold text-emerald-700 block mb-0.5">
+                              {qMsg ? (qMsg.direction === 'outbound' ? qMsg.sender_name || 'Você' : 'Trabalhador') : 'Mensagem'}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300 line-clamp-1 truncate">
+                              {qMsg?.content || '...'}
+                            </span>
+                          </div>
+                        )
+                      })()}
+
+                    {msg.media_url && msg.message_type === 'image' && (
+                      <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
+                      </div>
+                    )}
+
+                    {msg.media_url && msg.message_type === 'document' && (
+                      <a
+                        href={msg.media_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 p-3 bg-white/20 rounded-xl mb-1 mt-1 mx-1 hover:bg-white/30 transition"
+                      >
+                        <div className="p-2 bg-white/50 rounded-lg shrink-0">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <span className="text-sm font-medium underline underline-offset-2">{t('chatArea', 'downloadDoc')}</span>
+                      </a>
+                    )}
+
+                    {msg.media_url && msg.message_type === 'audio' && (
+                      <CustomAudioPlayer
+                        src={msg.media_url}
+                        isOutbound={isOutbound && !isNote}
+                        senderInitials={senderDisplayName.substring(0, 2).toUpperCase()}
+                      />
+                    )}
+
+                    {msg.content &&
+                      msg.content !== '[Mídia UAZ]' &&
+                      msg.content !== '[Mensagem de Voz]' &&
+                      (translatorActive && !isNote && !['audio', 'video', 'image', 'document'].includes(msg.message_type) ? (
+                        <BilingualMessage msg={msg} translationActive={translatorActive} myLang={myLang} />
+                      ) : (
+                        <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap px-0.5">{msg.content}</p>
+                      ))}
+
+                    <div
+                      className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${
+                        isOutbound
+                          ? isNote
+                            ? 'text-amber-700'
+                            : 'text-chat-outbound-fg opacity-80'
+                          : 'text-chat-inbound-fg opacity-60'
+                      }`}
+                    >
+                      <span className="text-[10px] font-medium">
+                        {time} {isNote && '• 🔒 Nota Interna'}
+                      </span>
+                      {isOutbound && !isNote && (
+                        msg.status === 'error' ? (
+                          <span className="text-[10px] text-red-400">{t('chatArea', 'error')}</span>
+                        ) : msg.status === 'read' ? (
+                          <CheckCheck className="w-4 h-4 text-sky-500" />
+                        ) : msg.status === 'delivered' ? (
+                          <CheckCheck className="w-4 h-4" />
+                        ) : msg.status === 'sending' ? (
+                          <Clock className="w-3.5 h-3.5" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )
+                      )}
                     </div>
-                    <span className="text-sm font-medium underline underline-offset-2">{t('chatArea', 'downloadDoc')}</span>
-                  </a>
-                )}
-                
-                {msg.media_url && msg.message_type === 'audio' && (
-                  <CustomAudioPlayer 
-                     src={msg.media_url} 
-                     isOutbound={isOutbound && !isNote} 
-                     senderInitials={isOutbound ? 'RH' : (msg.sender_name?.substring(0, 2).toUpperCase() || 'TR')}
-                  />
-                )}
-
-                {msg.content && msg.content !== '[Mídia UAZ]' && msg.content !== '[Mensagem de Voz]' && (
-    translatorActive && !isNote && (!['audio', 'video', 'image', 'document'].includes(msg.message_type)) ? (
-        <BilingualMessage msg={msg} translationActive={translatorActive} myLang={myLang} />
-    ) : (
-        <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap px-1">{msg.content}</p>
-    )
-)}
-                <div className={`flex justify-end gap-1 mt-0.5 opacity-60 grouphover:opacity-100 transition-opacity ${isOutbound ? (isNote ? 'text-amber-700' : 'text-chat-outbound-fg opacity-80') : 'text-chat-inbound-fg opacity-60'}`}>
-                   <span className="text-[10px] font-medium">{time} {isNote && t('chatArea', 'internalNoteTag')}</span>
-                   {isOutbound && !isNote && (
-                      msg.status === 'error' ? <span className="text-[10px] text-red-400">{t('chatArea', 'error')}</span> :
-                      msg.status === 'read' ? <CheckCheck className="w-4 h-4 text-sky-500" /> :
-                      msg.status === 'delivered' ? <CheckCheck className="w-4 h-4" /> :
-                      msg.status === 'sending' ? <Clock className="w-3.5 h-3.5" /> :
-                      <Check className="w-4 h-4" />
-                   )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-        )
-      })}
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 bg-chat-surface-bg/80 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
-        
+      {/* CRM-Style Footer Composer with Flag Pills & Dynamic Language Theme */}
+      <div className="p-3 bg-chat-surface-bg/90 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
         {/* Quick Replies Popup */}
         {showQuickReplies && quickReplies.length > 0 && (
-          <div className="absolute bottom-full left-4 mb-2 w-80 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden transform transition-all pb-1 max-h-72 overflow-y-auto">
+          <div className="absolute bottom-full left-4 mb-2 w-80 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden transform transition-all pb-1 max-h-72 overflow-y-auto z-50">
             <div className="p-3 border-b border-slate-100 bg-slate-50/80 sticky top-0 flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('quickReplies', 'title')}</span>
-              <button onClick={() => setShowQuickReplies(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowQuickReplies(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
             </div>
             <div className="p-1">
-              {filteredReplies.length === 0 && <div className="p-4 text-xs text-center text-slate-400">{t('quickReplies', 'noShortcutFound')}</div>}
+              {filteredReplies.length === 0 && (
+                <div className="p-4 text-xs text-center text-slate-400">{t('quickReplies', 'noShortcutFound')}</div>
+              )}
               {filteredReplies.map((reply) => (
                 <button
                   key={reply.id}
@@ -652,7 +1180,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-emerald-800">{reply.title}</span>
-                    {reply.shortcut && <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 font-semibold border border-slate-200 rounded">{reply.shortcut}</span>}
+                    {reply.shortcut && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 font-semibold border border-slate-200 rounded">
+                        {reply.shortcut}
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs text-slate-500 truncate">{reply.content}</span>
                 </button>
@@ -663,38 +1195,38 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
         {/* Emoji Picker Popup */}
         {showEmoji && (
-          <div className="absolute bottom-full left-4 mb-2 shadow-2xl rounded-2xl overflow-hidden border border-slate-200">
+          <div className="absolute bottom-full left-4 mb-2 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 z-50">
             <EmojiPicker onEmojiClick={onEmojiClick} theme={Theme.AUTO} searchPlaceholder="Buscar emoji..." />
           </div>
         )}
 
         {/* Attachment Options Popup */}
         {showAttach && (
-          <div className="absolute bottom-full left-20 mb-2 w-56 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden p-1.5 animate-in fade-in slide-in-from-bottom-2">
-             <button
-                onClick={() => { photoInputRef.current?.click() }}
-                className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700"
-             >
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                   <ImageIcon className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <span className="block text-sm font-semibold">{t('chatArea', 'photos')}</span>
-                  <span className="block text-xs text-slate-500">{t('chatArea', 'maxImageLimit')}</span>
-                </div>
-             </button>
-             <button
-                onClick={() => { docInputRef.current?.click() }}
-                className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700 mt-1"
-             >
-                <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
-                   <FileText className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <span className="block text-sm font-semibold">{t('chatArea', 'documents')}</span>
-                  <span className="block text-xs text-slate-500">{t('chatArea', 'maxDocLimit')}</span>
-                </div>
-             </button>
+          <div className="absolute bottom-full left-20 mb-2 w-56 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden p-1.5 animate-in fade-in slide-in-from-bottom-2 z-50">
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700"
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="block text-sm font-semibold">{t('chatArea', 'photos')}</span>
+                <span className="block text-xs text-slate-500">{t('chatArea', 'maxImageLimit')}</span>
+              </div>
+            </button>
+            <button
+              onClick={() => docInputRef.current?.click()}
+              className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-700 mt-1"
+            >
+              <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="block text-sm font-semibold">{t('chatArea', 'documents')}</span>
+                <span className="block text-xs text-slate-500">{t('chatArea', 'maxDocLimit')}</span>
+              </div>
+            </button>
           </div>
         )}
 
@@ -702,117 +1234,358 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         <input type="file" ref={photoInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => handleFileUpload(e, 'image')} />
         <input type="file" ref={docInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={(e) => handleFileUpload(e, 'document')} />
 
-        <div className="max-w-5xl mx-auto flex flex-col gap-2 relative">
-           {/* Uploading indicator */}
-           {isUploading && (
-             <div className="absolute -top-10 left-0 bg-emerald-50 text-emerald-700 text-xs px-4 py-2 font-bold rounded-full border border-emerald-200 flex items-center gap-2 animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                {t('chatArea', 'uploading')}
-             </div>
-           )}
+        <div className="max-w-6xl mx-auto flex flex-col gap-1.5 relative">
+          {isUploading && (
+            <div className="absolute -top-10 left-0 bg-emerald-50 text-emerald-700 text-xs px-4 py-2 font-bold rounded-full border border-emerald-200 flex items-center gap-2 animate-pulse">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              {t('chatArea', 'uploading')}
+            </div>
+          )}
 
-   {replyingTo && (
-    <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2.5 mx-2 text-sm relative shadow-sm">
-      <button onClick={() => setReplyingTo(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-      <span className="font-bold text-emerald-600 text-xs mb-0.5">{replyingTo.direction === 'outbound' ? 'Você' : (context?.conversation?.contact_name || 'Contato')}</span>
-      <span className="text-slate-500 text-xs truncate max-w-[85%]">{replyingTo.content || 'Mídia'}</span>
-    </div>
-  )}
+          {replyingTo && (
+            <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2.5 mx-1 text-sm relative shadow-sm">
+              <button onClick={() => setReplyingTo(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+              <span className="font-bold text-emerald-600 text-xs mb-0.5">
+                {replyingTo.direction === 'outbound' ? replyingTo.sender_name || 'Você' : context?.conversation?.contact_name || 'Trabalhador'}
+              </span>
+              <span className="text-slate-500 text-xs truncate max-w-[85%]">{replyingTo.content || 'Mídia'}</span>
+            </div>
+          )}
 
-  {attachment && (
-    <div className="relative mx-2 mb-1 p-2 bg-slate-100/50 rounded-xl border border-slate-200 w-max max-w-[300px] shadow-sm">
-      <button onClick={() => setAttachment(null)} className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md border hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors z-10"><X className="w-4 h-4" /></button>
-      {attachment.type === 'image' ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={attachment.previewUrl} className="max-h-32 object-contain rounded-lg" alt="Preview"/>
-      ) : (
-        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
-           <FileText className="w-6 h-6 text-emerald-500" />
-           <span className="text-sm font-medium text-slate-700 max-w-[150px] truncate">{attachment.file.name}</span>
-        </div>
-      )}
-    </div>
-  )}
-  {/* Tabs Responder / Privada */}
-           <div className="flex items-center gap-6 px-2 text-[13px] font-semibold text-slate-500">
-              <button 
-                onClick={() => setActiveTab('reply')}
-                className={`${activeTab === 'reply' ? 'text-slate-800 border-emerald-600' : 'hover:text-slate-800 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
+          {attachment && (
+            <div className="relative mx-1 mb-1 p-2 bg-slate-100/50 rounded-xl border border-slate-200 w-max max-w-[300px] shadow-sm">
+              <button
+                onClick={() => setAttachment(null)}
+                className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md border hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors z-10"
               >
-                 {t('chatArea', 'reply')}
+                <X className="w-4 h-4" />
               </button>
-              <button 
-                onClick={() => setActiveTab('note')}
-                className={`${activeTab === 'note' ? 'text-amber-600 border-amber-600' : 'hover:text-amber-600 border-transparent'} border-b-2 pb-1 flex items-center gap-1.5 transition-colors`}
+              {attachment.type === 'image' ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={attachment.previewUrl} className="max-h-32 object-contain rounded-lg" alt="Preview" />
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                  <FileText className="w-6 h-6 text-emerald-500" />
+                  <span className="text-sm font-medium text-slate-700 max-w-[150px] truncate">{attachment.file.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Main Input Container (Colorido dinamicamente pelo idioma selecionado - Padrão CRM) */}
+          <div
+            className={`relative flex flex-col border rounded-xl shadow-sm transition-all duration-300 overflow-hidden ${
+              isPrivateNote
+                ? 'bg-amber-50/60 border-amber-300'
+                : translatorActive && activeLangTheme
+                ? activeLangTheme.containerClass
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            {/* Top Bar: Responder | Mensagem Privada | Instruir IA + Barra de Bandeiras Circulares */}
+            <div
+              className={`flex items-center justify-between p-1.5 border-b transition-colors duration-300 ${
+                isPrivateNote
+                  ? 'border-amber-200 bg-amber-100/40'
+                  : translatorActive && activeLangTheme
+                  ? activeLangTheme.topTabsClass
+                  : 'border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50'
+              } overflow-x-auto gap-2`}
+            >
+              <div className="flex items-center gap-1 shrink-0 relative">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('reply')}
+                  className={`px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors whitespace-nowrap cursor-pointer ${
+                    !isPrivateNote
+                      ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-xs font-bold'
+                      : 'text-slate-500 font-medium hover:text-slate-800 hover:bg-black/5'
+                  }`}
+                >
+                  Responder
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('note')}
+                  className={`px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    isPrivateNote
+                      ? 'bg-amber-500 text-white shadow-xs font-bold'
+                      : 'text-slate-500 font-medium hover:text-slate-800 hover:bg-black/5'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Mensagem Privada</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAiMenu(!showAiMenu)}
+                  className="px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors flex items-center gap-1.5 whitespace-nowrap text-purple-600 dark:text-purple-400 font-bold hover:bg-purple-50 dark:hover:bg-purple-950/40 cursor-pointer"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Instruir IA</span>
+                </button>
+
+                {showAiMenu && (
+                  <div className="absolute top-full left-0 mt-1.5 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-2 z-50">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
+                      Templates Operacionais MCS
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAiQuickDraft(
+                            'Hola! Para avanzar con tu alta y contrato en la obra, por favor envíanos foto de tu DNI/NIE, número de Seguridad Social y certificado bancario (IBAN).'
+                          )
+                        }
+                        className="text-left text-xs p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium text-slate-700 dark:text-slate-200"
+                      >
+                        📄 Solicitar Documentação de Contratação (ES)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAiQuickDraft(
+                            'Hola! Te confirmamos los datos de incorporación en la obra y ubicación del alojamiento. Confírmanos por favor tu talla de EPI y calzado de seguridad.'
+                          )
+                        }
+                        className="text-left text-xs p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium text-slate-700 dark:text-slate-200"
+                      >
+                        🦺 Confirmar Incorporação, Alojamento e EPI (ES)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAiQuickDraft(
+                            'Hola! Te recordamos que según contrato el preaviso de baja voluntaria es de 15 días. ¿Confirmas que cumplirás los 15 días de preaviso?'
+                          )
+                        }
+                        className="text-left text-xs p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium text-slate-700 dark:text-slate-200"
+                      >
+                        🚪 Confirmar Regra de 15 Dias (Aviso Prévio)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAiQuickDraft(
+                            'Hola! Por favor envíanos el parte de horas firmado de esta semana para procesarlo en el cierre de facturación y nómina.'
+                          )
+                        }
+                        className="text-left text-xs p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium text-slate-700 dark:text-slate-200"
+                      >
+                        ⏱️ Solicitar Parte de Horas Semanal (ES)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Seletores Rápidos de Idioma e Tradutor com Bandeiras Circulares (Padrão CRM) */}
+              {!isPrivateNote && (
+                <div className="flex items-center gap-1.5 ml-auto shrink-0 overflow-x-auto py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => updateTranslator({ active: !translatorActive })}
+                    className={`h-8 px-2.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer ${
+                      translatorActive
+                        ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-blue-500/20'
+                        : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                    }`}
+                    title="Ligar/Desligar Tradutor (Atalho: Alt+Shift+T)"
+                  >
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">{translatorActive ? 'Tradutor ON' : 'Tradutor OFF'}</span>
+                  </button>
+
+                  {Object.entries(TARGET_LANG_MAP).map(([key, item]) => {
+                    const isSelected = translatorActive && targetLang === key
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => updateTranslator({ active: true, targetLang: key })}
+                        className={`h-8 px-2 rounded-xl transition-all flex items-center gap-1.5 border shadow-2xs shrink-0 select-none cursor-pointer ${
+                          isSelected
+                            ? item.activeBtnClass
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                        title={`Traduzir para ${item.nativeName} (Atalho: Alt+Shift+${item.shortcut})`}
+                      >
+                        <div className="shrink-0 drop-shadow-2xs">
+                          {renderFlagIcon(key, "w-4 h-4 sm:w-[18px] sm:h-[18px]")}
+                        </div>
+                        <div className="flex flex-col text-left leading-none justify-center">
+                          <span
+                            className={`text-[10px] sm:text-[11px] font-bold tracking-tight leading-none ${
+                              isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-200'
+                            }`}
+                          >
+                            {item.short}
+                          </span>
+                          <span
+                            className={`text-[8px] sm:text-[8.5px] font-medium leading-none mt-0.5 whitespace-nowrap ${
+                              isSelected ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {item.nativeName}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Banner de Tradução Ativa em Destaque (Design CRM) */}
+            {translatorActive && !isPrivateNote && (
+              <div
+                className={`${activeLangTheme.bannerClass} ${activeLangTheme.bannerBorder} border-b px-3.5 py-1.5 flex items-center justify-between text-xs transition-colors duration-300`}
               >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                 {t('chatArea', 'privateNote')}
-              </button>
-           </div>
-           
-           {/* Input Box */}
-           <div className={`flex items-end gap-2 p-1.5 rounded-2xl border shadow-sm focus-within:shadow-md transition-all ${activeTab === 'note' ? 'bg-amber-50/50 border-amber-200 focus-within:border-amber-400' : 'bg-chat-inbound-bg border-chat-inbound-border focus-within:border-chat-outbound-border'}`}>
-             
-             {/* Ações Rápidas (Esquerda) */}
-             <div className="flex items-center gap-0.5 shrink-0 self-end mb-1">
-               <button onClick={() => setShowQuickReplies(!showQuickReplies)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showQuickReplies ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'quickReplies')}>
-                 <Zap className="w-5 h-5" />
-               </button>
-               <button onClick={() => setShowEmoji(!showEmoji)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showEmoji ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'emoji')}>
-                 <Smile className="w-5 h-5" />
-               </button>
-               <button onClick={() => setShowAttach(!showAttach)} className={`p-2 hover:bg-slate-50 rounded-xl transition-colors shrink-0 ${showAttach ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-600'}`} title={t('chatArea', 'attach')}>
-                 <Paperclip className="w-5 h-5" />
-               </button>
-               <div className="flex items-center justify-center -ml-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="w-2 h-2 rounded-full bg-current shrink-0 animate-pulse"></span>
+                  <span className="font-medium opacity-90">Traduzindo envio para:</span>
+                  <span className="inline-flex items-center gap-1.5 font-bold tracking-wide underline underline-offset-2">
+                    {renderFlagIcon(targetLang, "w-4 h-4")}
+                    <span>{activeLangTheme.nativeName}</span>
+                  </span>
+                  <span className="opacity-60 mx-1">•</span>
+                  <span className="text-[11px] opacity-85">Leitura em:</span>
+                  <select
+                    value={myLang}
+                    onChange={(e) => updateTranslator({ myLang: e.target.value })}
+                    className="text-[11px] font-bold bg-white/70 dark:bg-black/30 rounded px-1.5 py-0.5 border border-black/10 outline-none cursor-pointer"
+                  >
+                    <option value="Portuguese">🇧🇷 Português</option>
+                    <option value="Spanish">🇪🇸 Español</option>
+                    <option value="English">🇺🇸 English</option>
+                    <option value="Italian">🇮🇹 Italiano</option>
+                    <option value="French">🇫🇷 Français</option>
+                    <option value="German">🇩🇪 Deutsch</option>
+                  </select>
+                </div>
+                <span className="text-[10px] opacity-75 hidden xl:inline font-mono">
+                  Alt+Shift+1 (ES) | Alt+Shift+2 (EN) | Alt+Shift+3 (PT) | Alt+Shift+4 (IT) | Alt+Shift+5 (FR) | Alt+Shift+6 (DE) | Alt+Shift+T (OFF)
+                </span>
+              </div>
+            )}
+
+            {/* Textarea Input */}
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (e.ctrlKey || e.metaKey) {
+                    if (translatorActive && !isPrivateNote) {
+                      handleTranslateAndSend()
+                      return
+                    }
+                  }
+                  if (text.trim() || attachment) {
+                    handleSend()
+                  }
+                }
+              }}
+              onPaste={handlePaste}
+              className={`w-full bg-transparent px-4 py-2.5 max-h-32 min-h-[54px] resize-none focus:outline-none text-[14.5px] font-medium ${
+                isPrivateNote
+                  ? 'placeholder:text-amber-700/60 text-amber-950'
+                  : 'text-slate-800 dark:text-slate-100 placeholder-slate-400'
+              }`}
+              placeholder={
+                isPrivateNote
+                  ? '🔒 Escreva uma nota privada visível apenas para a equipe interna MCS...'
+                  : translatorActive
+                  ? `Digite em Português (ou seu idioma) e clique em "Traduzir p/ ${getTargetLangDisplay(targetLang)}" (Ctrl+Enter)...`
+                  : t('chatArea', 'typeMessage')
+              }
+              rows={1}
+            />
+
+            {/* Bottom Toolbar */}
+            <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickReplies(!showQuickReplies)}
+                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                    showQuickReplies ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
+                  }`}
+                  title={t('chatArea', 'quickReplies')}
+                >
+                  <Zap className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEmoji(!showEmoji)}
+                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                    showEmoji ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
+                  }`}
+                  title={t('chatArea', 'emoji')}
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAttach(!showAttach)}
+                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                    showAttach ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
+                  }`}
+                  title={t('chatArea', 'attach')}
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <div className="flex items-center justify-center -ml-0.5">
                   <AudioRecorder onSend={handleSendAudio} disabled={isSending || isUploading} />
-               </div>
-             </div>
-             
-             <div className="flex-1 flex overflow-hidden self-center border-l border-slate-200/60 pl-2 ml-1">
-               <textarea 
-                 ref={textareaRef}
-                 value={text}
-                 onChange={handleTextChange}
-                 onKeyDown={(e) => {
-                   if (e.key === 'Enter' && !e.shiftKey) {
-                     e.preventDefault()
-                     if (text.trim() || attachment) {
-                       handleSend()
-                     }
-                   }
-                 }}
-                 onPaste={handlePaste}
-                 className="w-full bg-transparent px-2 py-3 max-h-32 min-h-[44px] resize-none focus:outline-none text-[15px] text-slate-700 placeholder-slate-400 font-medium"
-                 placeholder={activeTab === 'note' ? t('chatArea', 'internalNote') : t('chatArea', 'typeMessage')}
-                 rows={1}
-               />
-             </div>
-             
-             {/* Botão Enviar (Direita) */}
-             <div className="shrink-0 self-end mb-1 mr-1 flex flex-col sm:flex-row items-center gap-1.5">
-               {translatorActive && activeTab !== 'note' && (
-                 <button 
-                   onClick={handleTranslateAndSend} 
-                   disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound} 
-                   className={`px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-[13px] font-bold shadow-sm hover:shadow-md rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
-                   title="Traduzir e Enviar"
-                 >
-                   {isTranslatingOutbound ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
-                   <span className="hidden sm:inline">Traduzir</span>
-                 </button>
-               )}
-               <button 
-                 onClick={handleSend} 
-                 disabled={isSending || (text.trim() === '' && !attachment) || isUploading || isTranslatingOutbound} 
-                 className={`px-4 py-2 text-white shadow-sm hover:shadow-md rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:scale-95 flex items-center gap-2 text-[13px] font-bold ${activeTab === 'note' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
-                 title={activeTab === 'note' ? t('chatArea', 'save') : t('chatArea', 'send')}
-               >
-                 <span className="hidden sm:inline">{activeTab === 'note' ? 'Salvar Nota' : 'Enviar'}</span>
-                 <Send className="w-4 h-4" />
-               </button>
-             </div>
-           </div>
+                </div>
+                <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 ml-2">
+                  Respondendo como <strong className="text-slate-600 dark:text-slate-300">{currentUserName}</strong> ({resolvedSenderDept})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {translatorActive && !isPrivateNote && (
+                  <button
+                    type="button"
+                    onClick={handleTranslateAndSend}
+                    disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound}
+                    className={`${activeLangTheme.buttonClass} font-bold shadow-sm h-8 text-[12.5px] px-3 rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
+                    title="Traduzir e Enviar (Atalho: Ctrl+Enter)"
+                  >
+                    {isTranslatingOutbound ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Traduzindo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Languages className="w-3.5 h-3.5" />
+                        <span>Traduzir p/ {getTargetLangDisplay(targetLang)}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={isSending || (text.trim() === '' && !attachment) || isUploading || isTranslatingOutbound}
+                  className={`h-8 px-3.5 text-white shadow-sm rounded-lg transition-all shrink-0 disabled:opacity-40 flex items-center gap-1.5 text-[12.5px] font-bold cursor-pointer ${
+                    isPrivateNote ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#00A884] hover:bg-[#008f6f]'
+                  }`}
+                  title={isPrivateNote ? 'Salvar Nota Privada' : 'Enviar direto sem traduzir (Atalho: Enter)'}
+                >
+                  <span>{isPrivateNote ? 'Salvar Nota' : 'Enviar'}</span>
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

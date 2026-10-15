@@ -713,25 +713,31 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
   return (
     <div className="flex flex-col h-full bg-[var(--chat-area-bg)] relative transition-colors duration-300">
-      {/* Top Conversation Header */}
-      <div className="h-20 flex-shrink-0 bg-chat-surface-bg/90 backdrop-blur-md border-b border-chat-inbound-border px-5 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
-        <div className="flex items-center gap-3.5 min-w-0">
+      {/* Top Conversation Header (Compacto para mais área de chat) */}
+      <div className="h-16 flex-shrink-0 bg-chat-surface-bg/90 backdrop-blur-md border-b border-chat-inbound-border px-4 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="relative shrink-0">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-base shadow-md shadow-emerald-200 overflow-hidden">
-              {context?.worker?.foto ? (
-                <img src={context.worker.foto} alt="Foto" className="w-full h-full object-cover" />
-              ) : context?.conversation?.contact_avatar_url ? (
-                <img src={context.conversation.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                (context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-sm overflow-hidden relative">
+              <span>
+                {(context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()}
+              </span>
+              {(context?.worker?.foto || context?.conversation?.contact_avatar_url) && (
+                <img
+                  src={context?.worker?.foto || context?.conversation?.contact_avatar_url}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
               )}
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white"></div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></div>
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight leading-tight truncate">
+              <h2 className="font-bold text-slate-800 dark:text-slate-100 text-sm tracking-tight leading-tight truncate">
                 {context?.worker?.nome || context?.conversation?.contact_name || context?.conversation?.contact_phone || 'Painel de Atendimento'}
               </h2>
               {workerCompany && (
@@ -741,20 +747,20 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </span>
               )}
               {workerClient && (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 max-w-[180px] truncate shrink-0">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 max-w-[200px] truncate shrink-0">
                   <Briefcase className="w-2.5 h-2.5 shrink-0" />
                   <span className="truncate">{workerClient}</span>
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {context?.conversation?.contact_phone && (
-                <span className="text-xs font-mono font-medium text-slate-500">{context.conversation.contact_phone}</span>
+                <span className="text-[11px] font-mono font-medium text-slate-500">{context.conversation.contact_phone}</span>
               )}
               {conversation?.department?.name && (
                 <span
-                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border"
+                  className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider border"
                   style={{
                     backgroundColor: `${conversation.department.color || '#6366f1'}15`,
                     color: conversation.department.color || '#6366f1',
@@ -765,7 +771,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </span>
               )}
               {conversation?.assigned_to_name && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
                   <UserCheck className="w-2.5 h-2.5" />
                   {conversation.assigned_to_name}
                 </span>
@@ -776,7 +782,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
         <div className="flex items-center gap-2 shrink-0">
           {isClosed ? (
-            <span className="px-3.5 py-1.5 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5">
+            <span className="px-3 py-1.5 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200 flex items-center gap-1.5">
               <LockKeyhole className="w-3.5 h-3.5" />
               {t('chatArea', 'closedTicket')}
             </span>
@@ -784,7 +790,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             <button
               onClick={handleClose}
               disabled={isAssigning}
-              className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               {t('chatArea', 'endChat')}
@@ -793,7 +799,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             <button
               onClick={handleAssign}
               disabled={isAssigning}
-              className="px-3.5 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <LockOpen className="w-3.5 h-3.5" />
               {t('chatArea', 'takeChat')}
@@ -902,7 +908,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
       {/* Chat Messages Timeline */}
       <div
-        className="flex-1 overflow-y-auto p-6 space-y-4"
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
         onClick={() => {
           setShowEmoji(false)
           setShowAttach(false)
@@ -964,16 +970,16 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
           if (isSystemBlock) {
             return (
-              <div key={msg.id} className="my-4">
+              <div key={msg.id} className="my-3">
                 {showDateSeparator && (
-                  <div className="flex justify-center my-4">
-                    <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
+                  <div className="flex justify-center my-3">
+                    <span className="px-4 py-1 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
                       {dateLabel}
                     </span>
                   </div>
                 )}
-                <div className="flex items-center justify-center my-3">
-                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 shadow-xs max-w-xl text-center">
+                <div className="flex items-center justify-center my-2">
+                  <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 shadow-xs max-w-xl text-center">
                     <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200 tracking-wide">
                       {msg.content}
@@ -989,17 +995,17 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           const senderDeptBadge = (msg as any).sender_department || (isOutbound ? resolvedSenderDept : null)
 
           return (
-            <div key={msg.id} className={`mb-3 animate-in fade-in slide-in-from-bottom-2 ${isOutbound ? 'pr-2' : 'pl-2'}`}>
+            <div key={msg.id} className={`mb-2.5 animate-in fade-in slide-in-from-bottom-2 ${isOutbound ? 'pr-1' : 'pl-1'}`}>
               {showDateSeparator && (
-                <div className="flex justify-center my-4">
-                  <span className="px-4 py-1.5 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
+                <div className="flex justify-center my-3">
+                  <span className="px-4 py-1 bg-slate-200/60 text-slate-500 font-bold text-[10px] tracking-widest rounded-full">
                     {dateLabel}
                   </span>
                 </div>
               )}
 
               {showAgentSwitchBanner && (
-                <div className="flex items-center justify-center my-3">
+                <div className="flex items-center justify-center my-2">
                   <div className="flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold uppercase tracking-wider">
                     <span>👤 Bloco de Atendimento: {senderDisplayName}</span>
                     {senderDeptBadge && <span>• Setor {senderDeptBadge}</span>}
@@ -1009,7 +1015,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
               <div className={`flex ${isOutbound ? 'justify-end flex-row-reverse' : 'justify-start'} items-end gap-2 max-w-[85%] ${isOutbound ? 'ml-auto' : ''}`}>
                 <div
-                  className={`w-8 h-8 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white shadow-2xs ${
+                  className={`w-7 h-7 rounded-full shrink-0 mb-1 flex items-center justify-center text-[10px] font-bold border border-white shadow-2xs ${
                     isOutbound
                       ? isNote
                         ? 'bg-amber-100 text-amber-700'
@@ -1157,8 +1163,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         <div ref={bottomRef} />
       </div>
 
-      {/* CRM-Style Footer Composer with Flag Pills & Dynamic Language Theme */}
-      <div className="p-3 bg-chat-surface-bg/90 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
+      {/* CRM-Style Footer Composer (Full Width, Compact Border) */}
+      <div className="px-2 py-1.5 bg-chat-surface-bg/95 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
         {/* Quick Replies Popup */}
         {showQuickReplies && quickReplies.length > 0 && (
           <div className="absolute bottom-full left-4 mb-2 w-80 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden transform transition-all pb-1 max-h-72 overflow-y-auto z-50">
@@ -1234,7 +1240,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         <input type="file" ref={photoInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => handleFileUpload(e, 'image')} />
         <input type="file" ref={docInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={(e) => handleFileUpload(e, 'document')} />
 
-        <div className="max-w-6xl mx-auto flex flex-col gap-1.5 relative">
+        <div className="w-full flex flex-col gap-1 relative">
           {isUploading && (
             <div className="absolute -top-10 left-0 bg-emerald-50 text-emerald-700 text-xs px-4 py-2 font-bold rounded-full border border-emerald-200 flex items-center gap-2 animate-pulse">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1243,8 +1249,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           )}
 
           {replyingTo && (
-            <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2.5 mx-1 text-sm relative shadow-sm">
-              <button onClick={() => setReplyingTo(null)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600">
+            <div className="flex flex-col bg-slate-50 border-l-4 border-emerald-500 rounded-lg p-2 mx-1 text-sm relative shadow-sm">
+              <button onClick={() => setReplyingTo(null)} className="absolute top-1.5 right-2 text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
               <span className="font-bold text-emerald-600 text-xs mb-0.5">
@@ -1264,19 +1270,19 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               </button>
               {attachment.type === 'image' ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={attachment.previewUrl} className="max-h-32 object-contain rounded-lg" alt="Preview" />
+                <img src={attachment.previewUrl} className="max-h-28 object-contain rounded-lg" alt="Preview" />
               ) : (
-                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
-                  <FileText className="w-6 h-6 text-emerald-500" />
-                  <span className="text-sm font-medium text-slate-700 max-w-[150px] truncate">{attachment.file.name}</span>
+                <div className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-200">
+                  <FileText className="w-5 h-5 text-emerald-500" />
+                  <span className="text-xs font-medium text-slate-700 max-w-[150px] truncate">{attachment.file.name}</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Main Input Container (Colorido dinamicamente pelo idioma selecionado - Padrão CRM) */}
+          {/* Main Input Container (Full Width, Compact) */}
           <div
-            className={`relative flex flex-col border rounded-xl shadow-sm transition-all duration-300 overflow-hidden ${
+            className={`relative flex flex-col border rounded-xl shadow-xs transition-all duration-300 overflow-hidden ${
               isPrivateNote
                 ? 'bg-amber-50/60 border-amber-300'
                 : translatorActive && activeLangTheme
@@ -1286,7 +1292,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           >
             {/* Top Bar: Responder | Mensagem Privada | Instruir IA + Barra de Bandeiras Circulares */}
             <div
-              className={`flex items-center justify-between p-1.5 border-b transition-colors duration-300 ${
+              className={`flex items-center justify-between px-2 py-1 border-b transition-colors duration-300 ${
                 isPrivateNote
                   ? 'border-amber-200 bg-amber-100/40'
                   : translatorActive && activeLangTheme
@@ -1298,9 +1304,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <button
                   type="button"
                   onClick={() => setActiveTab('reply')}
-                  className={`px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`px-2.5 py-1 text-[12px] rounded-[7px] transition-colors whitespace-nowrap cursor-pointer ${
                     !isPrivateNote
-                      ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-xs font-bold'
+                      ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-2xs font-bold'
                       : 'text-slate-500 font-medium hover:text-slate-800 hover:bg-black/5'
                   }`}
                 >
@@ -1309,19 +1315,19 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <button
                   type="button"
                   onClick={() => setActiveTab('note')}
-                  className={`px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  className={`px-2.5 py-1 text-[12px] rounded-[7px] transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                     isPrivateNote
-                      ? 'bg-amber-500 text-white shadow-xs font-bold'
+                      ? 'bg-amber-500 text-white shadow-2xs font-bold'
                       : 'text-slate-500 font-medium hover:text-slate-800 hover:bg-black/5'
                   }`}
                 >
-                  <Lock className="w-3.5 h-3.5" />
+                  <Lock className="w-3 h-3" />
                   <span>Mensagem Privada</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAiMenu(!showAiMenu)}
-                  className="px-3 py-1.5 text-[12.5px] rounded-[8px] transition-colors flex items-center gap-1.5 whitespace-nowrap text-purple-600 dark:text-purple-400 font-bold hover:bg-purple-50 dark:hover:bg-purple-950/40 cursor-pointer"
+                  className="px-2.5 py-1 text-[12px] rounded-[7px] transition-colors flex items-center gap-1.5 whitespace-nowrap text-purple-600 dark:text-purple-400 font-bold hover:bg-purple-50 dark:hover:bg-purple-950/40 cursor-pointer"
                 >
                   <Bot className="w-3.5 h-3.5" />
                   <span>Instruir IA</span>
@@ -1384,11 +1390,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
               {/* Seletores Rápidos de Idioma e Tradutor com Bandeiras Circulares (Padrão CRM) */}
               {!isPrivateNote && (
-                <div className="flex items-center gap-1.5 ml-auto shrink-0 overflow-x-auto py-0.5">
+                <div className="flex items-center gap-1 ml-auto shrink-0 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => updateTranslator({ active: !translatorActive })}
-                    className={`h-8 px-2.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer ${
+                    className={`h-7 px-2.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-2xs shrink-0 cursor-pointer ${
                       translatorActive
                         ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-blue-500/20'
                         : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
@@ -1406,7 +1412,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         key={key}
                         type="button"
                         onClick={() => updateTranslator({ active: true, targetLang: key })}
-                        className={`h-8 px-2 rounded-xl transition-all flex items-center gap-1.5 border shadow-2xs shrink-0 select-none cursor-pointer ${
+                        className={`h-7 px-2 rounded-lg transition-all flex items-center gap-1.5 border shadow-2xs shrink-0 select-none cursor-pointer ${
                           isSelected
                             ? item.activeBtnClass
                             : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 hover:border-slate-300'
@@ -1414,18 +1420,18 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         title={`Traduzir para ${item.nativeName} (Atalho: Alt+Shift+${item.shortcut})`}
                       >
                         <div className="shrink-0 drop-shadow-2xs">
-                          {renderFlagIcon(key, "w-4 h-4 sm:w-[18px] sm:h-[18px]")}
+                          {renderFlagIcon(key, "w-4 h-4")}
                         </div>
                         <div className="flex flex-col text-left leading-none justify-center">
                           <span
-                            className={`text-[10px] sm:text-[11px] font-bold tracking-tight leading-none ${
+                            className={`text-[10px] font-bold tracking-tight leading-none ${
                               isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-200'
                             }`}
                           >
                             {item.short}
                           </span>
                           <span
-                            className={`text-[8px] sm:text-[8.5px] font-medium leading-none mt-0.5 whitespace-nowrap ${
+                            className={`text-[8px] font-medium leading-none mt-0.5 whitespace-nowrap ${
                               isSelected ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'
                             }`}
                           >
@@ -1439,24 +1445,24 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               )}
             </div>
 
-            {/* Banner de Tradução Ativa em Destaque (Design CRM) */}
+            {/* Banner de Tradução Ativa em 1 Única Linha */}
             {translatorActive && !isPrivateNote && (
               <div
-                className={`${activeLangTheme.bannerClass} ${activeLangTheme.bannerBorder} border-b px-3.5 py-1.5 flex items-center justify-between text-xs transition-colors duration-300`}
+                className={`${activeLangTheme.bannerClass} ${activeLangTheme.bannerBorder} border-b px-3 py-1 flex items-center justify-between gap-3 text-[11px] transition-colors duration-300 whitespace-nowrap overflow-x-auto`}
               >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="w-2 h-2 rounded-full bg-current shrink-0 animate-pulse"></span>
-                  <span className="font-medium opacity-90">Traduzindo envio para:</span>
-                  <span className="inline-flex items-center gap-1.5 font-bold tracking-wide underline underline-offset-2">
-                    {renderFlagIcon(targetLang, "w-4 h-4")}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 animate-pulse"></span>
+                  <span className="font-medium opacity-90">Traduzindo envio p/:</span>
+                  <span className="inline-flex items-center gap-1 font-bold tracking-wide underline underline-offset-2">
+                    {renderFlagIcon(targetLang, "w-3.5 h-3.5")}
                     <span>{activeLangTheme.nativeName}</span>
                   </span>
-                  <span className="opacity-60 mx-1">•</span>
-                  <span className="text-[11px] opacity-85">Leitura em:</span>
+                  <span className="opacity-50 mx-0.5">•</span>
+                  <span className="text-[10.5px] opacity-85">Leitura:</span>
                   <select
                     value={myLang}
                     onChange={(e) => updateTranslator({ myLang: e.target.value })}
-                    className="text-[11px] font-bold bg-white/70 dark:bg-black/30 rounded px-1.5 py-0.5 border border-black/10 outline-none cursor-pointer"
+                    className="text-[10.5px] font-bold bg-white/80 dark:bg-black/30 rounded px-1.5 py-0.2 border border-black/10 outline-none cursor-pointer"
                   >
                     <option value="Portuguese">🇧🇷 Português</option>
                     <option value="Spanish">🇪🇸 Español</option>
@@ -1466,7 +1472,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                     <option value="German">🇩🇪 Deutsch</option>
                   </select>
                 </div>
-                <span className="text-[10px] opacity-75 hidden xl:inline font-mono">
+                <span className="text-[10px] opacity-75 font-mono shrink-0">
                   Alt+Shift+1 (ES) | Alt+Shift+2 (EN) | Alt+Shift+3 (PT) | Alt+Shift+4 (IT) | Alt+Shift+5 (FR) | Alt+Shift+6 (DE) | Alt+Shift+T (OFF)
                 </span>
               </div>
@@ -1492,7 +1498,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 }
               }}
               onPaste={handlePaste}
-              className={`w-full bg-transparent px-4 py-2.5 max-h-32 min-h-[54px] resize-none focus:outline-none text-[14.5px] font-medium ${
+              className={`w-full bg-transparent px-3 py-1.5 max-h-28 min-h-[40px] resize-none focus:outline-none text-[14px] font-medium ${
                 isPrivateNote
                   ? 'placeholder:text-amber-700/60 text-amber-950'
                   : 'text-slate-800 dark:text-slate-100 placeholder-slate-400'
@@ -1508,12 +1514,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             />
 
             {/* Bottom Toolbar */}
-            <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between px-2.5 pb-1.5 pt-0.5">
+              <div className="flex items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => setShowQuickReplies(!showQuickReplies)}
-                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                  className={`p-1.5 hover:bg-black/5 rounded-lg transition-colors shrink-0 cursor-pointer ${
                     showQuickReplies ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
                   }`}
                   title={t('chatArea', 'quickReplies')}
@@ -1523,7 +1529,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <button
                   type="button"
                   onClick={() => setShowEmoji(!showEmoji)}
-                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                  className={`p-1.5 hover:bg-black/5 rounded-lg transition-colors shrink-0 cursor-pointer ${
                     showEmoji ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
                   }`}
                   title={t('chatArea', 'emoji')}
@@ -1533,7 +1539,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <button
                   type="button"
                   onClick={() => setShowAttach(!showAttach)}
-                  className={`p-2 hover:bg-black/5 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                  className={`p-1.5 hover:bg-black/5 rounded-lg transition-colors shrink-0 cursor-pointer ${
                     showAttach ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
                   }`}
                   title={t('chatArea', 'attach')}
@@ -1548,13 +1554,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {translatorActive && !isPrivateNote && (
                   <button
                     type="button"
                     onClick={handleTranslateAndSend}
                     disabled={isSending || text.trim() === '' || isUploading || isTranslatingOutbound}
-                    className={`${activeLangTheme.buttonClass} font-bold shadow-sm h-8 text-[12.5px] px-3 rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
+                    className={`${activeLangTheme.buttonClass} font-bold shadow-xs h-7 text-[12px] px-2.5 rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
                     title="Traduzir e Enviar (Atalho: Ctrl+Enter)"
                   >
                     {isTranslatingOutbound ? (
@@ -1575,13 +1581,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   type="button"
                   onClick={handleSend}
                   disabled={isSending || (text.trim() === '' && !attachment) || isUploading || isTranslatingOutbound}
-                  className={`h-8 px-3.5 text-white shadow-sm rounded-lg transition-all shrink-0 disabled:opacity-40 flex items-center gap-1.5 text-[12.5px] font-bold cursor-pointer ${
+                  className={`h-7 px-3 text-white shadow-xs rounded-lg transition-all shrink-0 disabled:opacity-40 flex items-center gap-1.5 text-[12px] font-bold cursor-pointer ${
                     isPrivateNote ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#00A884] hover:bg-[#008f6f]'
                   }`}
                   title={isPrivateNote ? 'Salvar Nota Privada' : 'Enviar direto sem traduzir (Atalho: Enter)'}
                 >
                   <span>{isPrivateNote ? 'Salvar Nota' : 'Enviar'}</span>
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-3 h-3" />
                 </button>
               </div>
             </div>

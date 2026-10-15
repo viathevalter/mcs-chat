@@ -474,14 +474,20 @@ export default function InboxSidebar() {
                 >
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
-                    <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center shrink-0 overflow-hidden font-bold text-slate-600 dark:text-slate-300 text-xs shadow-2xs">
-                      {conv.contact_avatar_url ? (
-                        <img src={conv.contact_avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <span>{(conv.contact_name || conv.contact_phone || 'U').substring(0, 2).toUpperCase()}</span>
+                    <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 overflow-hidden font-bold text-xs shadow-2xs">
+                      <span>{(conv.contact_name || conv.contact_phone || 'U').substring(0, 2).toUpperCase()}</span>
+                      {conv.contact_avatar_url && (
+                        <img
+                          src={conv.contact_avatar_url}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
                       )}
                       {conv.is_pinned && (
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 text-white rounded-full flex items-center justify-center text-[8px]">
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 text-white rounded-full flex items-center justify-center text-[8px] z-10">
                           ★
                         </span>
                       )}

@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config"
 
 export async function POST(req: NextRequest) {
   try {
-    const { instanceName, companyId, companyName, departmentId, aiAgentId, apiUrl, apiToken } = await req.json()
+    const { instanceName, companyId, companyName, channelType, displayLabel, departmentId, aiAgentId, apiUrl, apiToken } = await req.json()
 
     if (!instanceName) {
       return NextResponse.json({ error: "Nome da instância é obrigatório." }, { status: 400 })
@@ -53,6 +53,13 @@ export async function POST(req: NextRequest) {
       console.warn("UAZ API init call error, saving channel in database:", e.message)
     }
 
+    const resolvedChannelType = channelType || 'workers'
+    const resolvedDisplayLabel = displayLabel || (
+      companyName
+        ? `${companyName.toUpperCase()} • ${resolvedChannelType === 'clients' ? 'Clientes' : resolvedChannelType === 'general' ? 'Geral' : 'Trabalhadores'}`
+        : instanceName
+    )
+
     // Insert or Update chat_channels
     const { data: channel, error: dbError } = await supabase
       .from('chat_channels')
@@ -60,6 +67,8 @@ export async function POST(req: NextRequest) {
         name: instanceName,
         company_id: companyId || null,
         company_name: companyName || null,
+        channel_type: resolvedChannelType,
+        display_label: resolvedDisplayLabel,
         department_id: departmentId || null,
         ai_agent_id: aiAgentId || null,
         instance_name: instanceName,

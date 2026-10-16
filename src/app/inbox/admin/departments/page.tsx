@@ -1,38 +1,59 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Building2, Plus, Edit, Trash2, CheckCircle2, XCircle, Users, MessageSquare, Save, X, Search } from 'lucide-react'
+import { Building2, Plus, Edit, Trash2, CheckCircle2, XCircle, Users, MessageSquare, Save, X, Search, Phone, ExternalLink } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 
 export default function DepartmentsAdminPage() {
   const [departments, setDepartments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editingDept, setEditingDept] = useState<any | null>(null)
+  const [viewingMembersDept, setViewingMembersDept] = useState<any | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   const fetchDepartments = async () => {
     setLoading(true)
-    const { data: depts } = await supabase
-      .from('mcs_departments')
-      .select('*')
-      .order('name', { ascending: true })
+    const [
+      { data: depts },
+      { data: convCounts },
+      { data: members },
+      { data: channels }
+    ] = await Promise.all([
+      supabase.from('mcs_departments').select('*').order('name', { ascending: true }),
+      supabase.from('chat_conversations').select('department_id, status'),
+      supabase.from('mcs_department_members').select('id, department_id, nombrecompleto, usuario, correoempresarial, active, user_id').eq('active', true),
+      supabase.from('chat_channels').select('id, name, display_label, department_id, channel_type').eq('is_active', true)
+    ])
 
     if (depts) {
-      // Also get counts of conversations per department
-      const { data: convCounts } = await supabase
-        .from('chat_conversations')
-        .select('department_id')
-
       const countsMap: Record<string, number> = {}
       convCounts?.forEach((c: any) => {
-        if (c.department_id) {
+        if (c.department_id && c.status !== 'closed') {
           countsMap[c.department_id] = (countsMap[c.department_id] || 0) + 1
+        }
+      })
+
+      const membersMap: Record<string, any[]> = {}
+      members?.forEach((m: any) => {
+        if (m.department_id) {
+          if (!membersMap[m.department_id]) membersMap[m.department_id] = []
+          membersMap[m.department_id].push(m)
+        }
+      })
+
+      const channelsMap: Record<string, any[]> = {}
+      channels?.forEach((ch: any) => {
+        if (ch.department_id) {
+          if (!channelsMap[ch.department_id]) channelsMap[ch.department_id] = []
+          channelsMap[ch.department_id].push(ch)
         }
       })
 
       const enriched = depts.map(d => ({
         ...d,
-        conversation_count: countsMap[d.id] || 0
+        conversation_count: countsMap[d.id] || 0,
+        team_members: membersMap[d.id] || [],
+        linked_channels: channelsMap[d.id] || []
       }))
 
       setDepartments(enriched)
@@ -52,7 +73,6 @@ export default function DepartmentsAdminPage() {
 
     setIsSaving(true)
     if (editingDept.id) {
-      // Update
       const { error } = await supabase
         .from('mcs_departments')
         .update({
@@ -63,7 +83,6 @@ export default function DepartmentsAdminPage() {
 
       if (error) alert('Erro ao salvar: ' + error.message)
     } else {
-      // Create
       const { error } = await supabase
         .from('mcs_departments')
         .insert({
@@ -85,11 +104,11 @@ export default function DepartmentsAdminPage() {
     fetchDepartments()
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Deseja realmente remover este departamento? As conversas vinculadas ficarão sem departamento atribuído.')) {
-      const { error } = await supabase.from('mcs_departments').delete().eq('id', id)
+  const handleDelete = async (dept: any) => {
+    if (confirm(`Deseja desativar o departamento "${dept.name}"? (Sincronizado com o MCS-Personal)`)) {
+      const { error } = await supabase.from('mcs_departments').update({ active: false }).eq('id', dept.id)
       if (error) {
-        alert('Erro ao excluir: ' + error.message)
+        alert('Erro ao desativar: ' + error.message)
       } else {
         fetchDepartments()
       }
@@ -104,25 +123,87 @@ export default function DepartmentsAdminPage() {
     <div className="flex-1 overflow-y-auto p-8 relative">
       
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-emerald-600" />
-            Departamentos & Filas de Atendimento
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <Building2 className="w-6 h-6 text-emerald-600" />
+              Departamentos & Filas (Base Unificada MCS)
+            </h2>
+            <span className="px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+              🔗 Sincronizado com MCS-Personal
+            </span>
+          </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Gerencie os departamentos de atendimento (RH, Financeiro, Logística, Comercial) e o isolamento de chamados.
+            Estes departamentos são compartilhados em tempo real entre o <strong>MCS-Personal (Operações)</strong> e as <strong>Filas do MCS-Chat</strong>.
           </p>
         </div>
 
         <button
           onClick={() => setEditingDept({ name: '', active: true })}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-colors"
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-colors self-start cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Novo Departamento
         </button>
       </div>
+
+      {/* Modal Visualizar Integrantes do Departamento (do MCS-Personal) */}
+      {viewingMembersDept && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  Equipe do Setor: {viewingMembersDept.name}
+                </h3>
+                <p className="text-xs text-slate-500">Funcionários internos vinculados a este departamento no MCS-Personal</p>
+              </div>
+              <button onClick={() => setViewingMembersDept(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {viewingMembersDept.team_members.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-8">
+                  Nenhum funcionário interno alocado neste departamento ainda.
+                </p>
+              ) : (
+                viewingMembersDept.team_members.map((m: any) => (
+                  <div key={m.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 dark:text-white">{m.nombrecompleto}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {m.correoempresarial || m.usuario || 'Sem e-mail'}
+                      </div>
+                    </div>
+                    {m.user_id ? (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700">
+                        Com Login Vinculado
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-200 text-slate-600">
+                        Sem Login
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setViewingMembersDept(null)}
+                className="px-4 py-2 text-xs font-bold bg-slate-800 text-white rounded-xl"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal / Editor de Departamento */}
       {editingDept && (
@@ -158,7 +239,7 @@ export default function DepartmentsAdminPage() {
                 className="rounded text-emerald-600"
               />
               <label htmlFor="dept-active" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                Departamento Ativo
+                Departamento Ativo (visível no MCS-Personal e no MCS-Chat)
               </label>
             </div>
 
@@ -197,7 +278,7 @@ export default function DepartmentsAdminPage() {
       {/* Grid de Departamentos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <p className="text-xs text-slate-400">Carregando departamentos...</p>
+          <p className="text-xs text-slate-400">Carregando departamentos unificados...</p>
         ) : filteredDepartments.length === 0 ? (
           <div className="col-span-full p-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center">
             <p className="text-sm font-semibold text-slate-500">Nenhum departamento encontrado.</p>
@@ -233,29 +314,55 @@ export default function DepartmentsAdminPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-slate-500 py-2 border-t border-slate-100 dark:border-slate-800/60 mt-2">
+                <div className="flex items-center justify-between text-xs text-slate-500 py-2 border-t border-slate-100 dark:border-slate-800/60 mt-2">
                   <div className="flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{dept.conversation_count} conversas ativas</span>
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">{dept.conversation_count} conversas</span>
                   </div>
+                  <button
+                    onClick={() => setViewingMembersDept(dept)}
+                    className="flex items-center gap-1.5 text-indigo-600 hover:underline font-bold cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{dept.team_members.length} no time</span>
+                  </button>
                 </div>
+
+                {dept.linked_channels.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 flex flex-wrap gap-1">
+                    {dept.linked_channels.map((ch: any) => (
+                      <span key={ch.id} className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        📱 {ch.display_label || ch.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/60 mt-3">
                 <button
+                  onClick={() => setViewingMembersDept(dept)}
+                  className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors cursor-pointer"
+                  title="Ver Equipe deste Departamento"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => setEditingDept(dept)}
-                  className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors"
-                  title="Editar"
+                  className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                  title="Editar Nome"
                 >
                   <Edit className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={() => handleDelete(dept.id)}
-                  className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
-                  title="Excluir"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {dept.active && (
+                  <button
+                    onClick={() => handleDelete(dept)}
+                    className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+                    title="Desativar Departamento"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))

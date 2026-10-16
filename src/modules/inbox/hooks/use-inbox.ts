@@ -22,13 +22,33 @@ export interface Conversation {
   worker_function_name?: string | null
   is_pinned?: boolean
   tags?: any[]
-  channel?: { name: string; provider: string; company_name?: string } | null
+  channel?: {
+    id?: string
+    name: string
+    provider: string
+    company_name?: string
+    channel_type?: 'workers' | 'clients' | 'general' | string
+    display_label?: string
+    phone_number?: string
+  } | null
   department?: { id: string; name: string } | null
+}
+
+export interface ChatChannelInfo {
+  id: string
+  name: string
+  company_name?: string | null
+  channel_type?: 'workers' | 'clients' | 'general' | string
+  display_label?: string | null
+  phone_number?: string | null
+  status?: string | null
+  is_active?: boolean
 }
 
 export function useInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([])
+  const [channels, setChannels] = useState<ChatChannelInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserDepartmentId, setCurrentUserDepartmentId] = useState<string | null>(null)
@@ -53,7 +73,7 @@ export function useInbox() {
 
       let query = supabase
         .from('chat_conversations')
-        .select('*, channel:chat_channels(name, provider, company_name), department:mcs_departments(id, name)')
+        .select('*, channel:chat_channels(id, name, provider, company_name, channel_type, display_label, phone_number), department:mcs_departments(id, name)')
         .order('last_message_at', { ascending: false })
         .limit(250)
 
@@ -89,13 +109,21 @@ export function useInbox() {
 
   const loadUserPermissions = useCallback(async () => {
     try {
-      const { data: depts } = await supabase
-        .from('mcs_departments')
-        .select('id, name')
-        .eq('active', true)
-        .order('name', { ascending: true })
+      const [{ data: depts }, { data: chs }] = await Promise.all([
+        supabase
+          .from('mcs_departments')
+          .select('id, name')
+          .eq('active', true)
+          .order('name', { ascending: true }),
+        supabase
+          .from('chat_channels')
+          .select('id, name, company_name, channel_type, display_label, phone_number, status, is_active')
+          .eq('is_active', true)
+          .order('company_name', { ascending: true })
+      ])
 
       if (depts) setDepartments(depts)
+      if (chs) setChannels(chs)
 
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData?.user?.id
@@ -163,6 +191,7 @@ export function useInbox() {
   return {
     conversations,
     departments,
+    channels,
     loading,
     currentUserId,
     currentUserDepartmentId,

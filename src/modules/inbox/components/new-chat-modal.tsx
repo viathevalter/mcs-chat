@@ -56,7 +56,11 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   }, [isOpen])
 
   const fetchChannels = async () => {
-    const { data } = await supabase.from('chat_channels').select('id, name').eq('is_active', true).order('name')
+    const { data } = await supabase
+      .from('chat_channels')
+      .select('id, name, company_name, channel_type, display_label, phone_number')
+      .eq('is_active', true)
+      .order('company_name', { ascending: true })
     setChannels(data || [])
     if (data && data.length > 0) {
       setSelectedChannelId(data[0].id)
@@ -217,9 +221,15 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
               onChange={e => setSelectedChannelId(e.target.value)}
               className="w-full bg-white border border-emerald-200 rounded-xl py-2.5 px-3 text-[14px] font-medium text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
             >
-              {channels.map(ch => (
-                <option key={ch.id} value={ch.id}>{ch.name}</option>
-              ))}
+              {channels.map(ch => {
+                const icon = ch.channel_type === 'clients' ? '🏢' : ch.channel_type === 'general' ? '🚗' : '👷'
+                const label = ch.display_label || ch.name
+                return (
+                  <option key={ch.id} value={ch.id}>
+                    {icon} {label} {ch.phone_number ? `(+${ch.phone_number})` : ''}
+                  </option>
+                )
+              })}
             </select>
          </div>
 

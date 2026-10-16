@@ -704,6 +704,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     context?.company?.trade_name ||
     context?.company?.nome ||
     conversation?.worker_company_name ||
+    conversation?.channel?.company_name ||
     null
 
   const workerClient =
@@ -711,13 +712,28 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     conversation?.worker_client_name ||
     null
 
+  const channelType = conversation?.channel?.channel_type || (
+    (conversation?.channel?.name || '').toLowerCase().includes('cliente')
+      ? 'clients'
+      : ['centralcars', 'safetyprevi'].includes((conversation?.channel?.name || '').toLowerCase())
+        ? 'general'
+        : 'workers'
+  )
+  const channelDisplayLabel = conversation?.channel?.display_label || conversation?.channel?.name || null
+
   return (
     <div className="flex flex-col h-full bg-[var(--chat-area-bg)] relative transition-colors duration-300">
       {/* Top Conversation Header (Compacto para mais área de chat) */}
       <div className="h-16 flex-shrink-0 bg-chat-surface-bg/90 backdrop-blur-md border-b border-chat-inbound-border px-4 flex items-center justify-between shadow-[0_4px_24px_-12px_rgba(0,0,0,0.05)] z-20 sticky top-0 transition-colors duration-300">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-sm overflow-hidden relative">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm overflow-hidden relative ${
+              channelType === 'clients'
+                ? 'bg-gradient-to-br from-purple-600 to-indigo-600'
+                : channelType === 'general'
+                  ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                  : 'bg-gradient-to-br from-emerald-500 to-teal-600'
+            }`}>
               <span>
                 {(context?.worker?.nome || context?.conversation?.contact_name || 'RH').substring(0, 2).toUpperCase()}
               </span>
@@ -744,6 +760,28 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shrink-0">
                   <Building2 className="w-2.5 h-2.5" />
                   {workerCompany}
+                </span>
+              )}
+              {channelType === 'clients' ? (
+                <span
+                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shrink-0"
+                  title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
+                >
+                  🏢 Canal Clientes {conversation?.channel?.phone_number ? `(+${conversation.channel.phone_number.slice(-4)})` : ''}
+                </span>
+              ) : channelType === 'general' ? (
+                <span
+                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shrink-0"
+                  title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
+                >
+                  🚗 {channelDisplayLabel || 'Canal Geral'}
+                </span>
+              ) : (
+                <span
+                  className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1 shrink-0"
+                  title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
+                >
+                  👷 Canal Trabalhadores {conversation?.channel?.phone_number ? `(+${conversation.channel.phone_number.slice(-4)})` : ''}
                 </span>
               )}
               {workerClient && (

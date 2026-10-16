@@ -18,6 +18,7 @@ export default function InboxSidebar() {
   const { 
     conversations, 
     departments, 
+    channels,
     loading, 
     currentUserId,
     currentUserDepartmentId,
@@ -30,7 +31,9 @@ export default function InboxSidebar() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   
   const [activeFilter, setActiveFilter] = useState<FilterType>('abertas')
+  const [audienceFilter, setAudienceFilter] = useState<'all' | 'workers' | 'clients' | 'general'>('all')
   const [companyFilter, setCompanyFilter] = useState<string>('all')
+  const [channelIdFilter, setChannelIdFilter] = useState<string>('all')
   const [clientFilter, setClientFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -64,15 +67,39 @@ export default function InboxSidebar() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  // Helper to resolve conversation audience ('workers' | 'clients' | 'general')
+  const resolveConvAudience = (conv: any): 'workers' | 'clients' | 'general' => {
+    const chType = conv.channel?.channel_type
+    if (chType === 'clients' || chType === 'workers' || chType === 'general') {
+      return chType
+    }
+    const chName = (conv.channel?.name || '').toLowerCase()
+    if (chName.includes('cliente')) return 'clients'
+    if (chName.includes('centralcars') || chName.includes('safetyprevi')) return 'general'
+    return 'workers'
+  }
+
   // Derive unique companies (Wiseowe, Luminous, Stocco, etc.)
   const availableCompanies = useMemo(() => {
     const set = new Set<string>()
+    channels.forEach(ch => {
+      if (ch.company_name) set.add(ch.company_name.toUpperCase())
+    })
     conversations.forEach(c => {
       const comp = c.worker_company_name || c.channel?.company_name
       if (comp) set.add(comp.toUpperCase())
     })
     return Array.from(set).sort()
-  }, [conversations])
+  }, [conversations, channels])
+
+  // Channels filtered by selected company and audience
+  const availableChannels = useMemo(() => {
+    return channels.filter(ch => {
+      if (companyFilter !== 'all' && (ch.company_name || '').toUpperCase() !== companyFilter) return false
+      if (audienceFilter !== 'all' && (ch.channel_type || 'workers') !== audienceFilter) return false
+      return true
+    })
+  }, [channels, companyFilter, audienceFilter])
 
   // Derive unique clients / obras from conversations
   const availableClients = useMemo(() => {
@@ -85,6 +112,24 @@ export default function InboxSidebar() {
     return Array.from(set).sort()
   }, [conversations])
 
+  // Counts for audience pills (only open conversations)
+  const audienceCounts = useMemo(() => {
+    let all = 0
+    let workers = 0
+    let clients = 0
+    let general = 0
+    conversations.forEach(conv => {
+      const isClosed = conv.status === 'closed' || conv.status === 'resolved'
+      if (isClosed && activeFilter !== 'fechadas') return
+      all++
+      const aud = resolveConvAudience(conv)
+      if (aud === 'workers') workers++
+      else if (aud === 'clients') clients++
+      else general++
+    })
+    return { all, workers, clients, general }
+  }, [conversations, activeFilter])
+
   // Counts for tabs
   const tabCounts = useMemo(() => {
     let minhas = 0
@@ -94,6 +139,14 @@ export default function InboxSidebar() {
     let fechadas = 0
 
     conversations.forEach(conv => {
+      // Respect current audience / company / channel filter in tab badges
+      if (audienceFilter !== 'all' && resolveConvAudience(conv) !== audienceFilter) return
+      if (companyFilter !== 'all') {
+        const comp = (conv.worker_company_name || conv.channel?.company_name || '').toUpperCase()
+        if (comp !== companyFilter) return
+      }
+      if (channelIdFilter !== 'all' && conv.channel_id !== channelIdFilter) return
+
       const isClosed = conv.status === 'closed' || conv.status === 'resolved'
       if (conv.is_pinned) favoritos++
       if (isClosed) {
@@ -103,18 +156,27 @@ export default function InboxSidebar() {
         if (conv.assigned_to && conv.assigned_to === currentUserId) {
           minhas++
         }
-        // Abertas: sem dono ou do meu departamento
         if (!conv.assigned_to || (currentUserDepartmentId && conv.department_id === currentUserDepartmentId)) {
           abertas++
         }
       }
     })
     return { minhas, favoritos, abertas, todos, fechadas }
-  }, [conversations, currentUserId, currentUserDepartmentId])
+  }, [conversations, currentUserId, currentUserDepartmentId, audienceFilter, companyFilter, channelIdFilter])
 
   const filteredConversations = useMemo(() => {
     return conversations.filter(conv => {
-      // 1. Department Filter (Dropdown)
+      // 1. Audience Filter (Trabalhadores vs Clientes vs Geral)
+      if (audienceFilter !== 'all') {
+        if (resolveConvAudience(conv) !== audienceFilter) return false
+      }
+
+      // 2. Specific WhatsApp Channel Filter
+      if (channelIdFilter !== 'all') {
+        if (conv.channel_id !== channelIdFilter) return false
+      }
+
+      // 3. Department Filter (Dropdown)
       if (selectedDepartmentFilter !== 'all') {
         if (selectedDepartmentFilter === 'unassigned') {
           if (conv.department_id) return false
@@ -125,18 +187,18 @@ export default function InboxSidebar() {
         }
       }
 
-      // 2. Company / Channel Filter (Dropdown)
+      // 4. Company Filter (Dropdown)
       if (companyFilter !== 'all') {
         const comp = (conv.worker_company_name || conv.channel?.company_name || '').toUpperCase()
         if (comp !== companyFilter) return false
       }
 
-      // 3. Client / Obra Filter (Dropdown)
+      // 5. Client / Obra Filter (Dropdown)
       if (clientFilter !== 'all') {
         if ((conv.worker_client_name || '').trim() !== clientFilter) return false
       }
       
-      // 4. Search Filter (Name, Phone, Company, Client, Function)
+      // 6. Search Filter (Name, Phone, Company, Client, Function, Channel)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
         const matchName = conv.contact_name?.toLowerCase().includes(query)
@@ -144,12 +206,12 @@ export default function InboxSidebar() {
         const matchCompany = (conv.worker_company_name || conv.channel?.company_name || '').toLowerCase().includes(query)
         const matchClient = (conv.worker_client_name || '').toLowerCase().includes(query)
         const matchFunc = (conv.worker_function_name || '').toLowerCase().includes(query)
-        if (!matchName && !matchPhone && !matchCompany && !matchClient && !matchFunc) return false
-        // When actively searching, don't hide results due to status tab unless closed tab is selected
+        const matchChannel = (conv.channel?.display_label || conv.channel?.name || '').toLowerCase().includes(query)
+        if (!matchName && !matchPhone && !matchCompany && !matchClient && !matchFunc && !matchChannel) return false
         return true
       }
 
-      // 5. Status Tab Filter (CRM Pattern)
+      // 7. Status Tab Filter (CRM Pattern)
       const isClosed = conv.status === 'closed' || conv.status === 'resolved'
       if (activeFilter === 'favoritos') {
         return conv.is_pinned === true
@@ -159,7 +221,6 @@ export default function InboxSidebar() {
       }
       if (activeFilter === 'abertas') {
         if (isClosed) return false
-        // Se tem filtro de departamento específico selecionado, respeita ele; caso contrário mostra fila aberta
         return true
       }
       if (activeFilter === 'todos') {
@@ -171,7 +232,7 @@ export default function InboxSidebar() {
       
       return true
     })
-  }, [conversations, selectedDepartmentFilter, companyFilter, clientFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
+  }, [conversations, audienceFilter, channelIdFilter, selectedDepartmentFilter, companyFilter, clientFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
 
   const handleOpenOrCreateWorkerChat = async (worker: any) => {
     const cleanPhone = (worker.movil || '').replace(/\D/g, '')
@@ -189,16 +250,12 @@ export default function InboxSidebar() {
       return
     }
 
-    // Find matching channel for worker's company (or default first active channel)
-    const { data: channels } = await supabase
-      .from('chat_channels')
-      .select('id, name, company_name')
-      .eq('status', 'active')
-
+    // Prefer worker channel for worker's company
+    const workerChannels = channels.filter(ch => (ch.channel_type || 'workers') === 'workers')
     const matchedChannel =
-      channels?.find(ch =>
+      workerChannels.find(ch =>
         worker.contratante && ch.company_name?.toLowerCase().includes(worker.contratante.toLowerCase())
-      ) || channels?.[0]
+      ) || workerChannels[0] || channels[0]
 
     if (!matchedChannel) {
       alert('Nenhum canal WhatsApp ativo encontrado.')
@@ -231,7 +288,7 @@ export default function InboxSidebar() {
 
   return (
     <>
-      <aside className="w-[375px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors select-none">
+      <aside className="w-[385px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors select-none">
         {/* Header estilo CRM */}
         <div className="h-14 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
           <h1 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2 tracking-tight">
@@ -258,7 +315,7 @@ export default function InboxSidebar() {
           </div>
         </div>
 
-        {/* Busca + Seletores Dropdown Compactos (Fim dos Departamentos Cortados na Horizontal) */}
+        {/* Busca + Seletores de Público (Trabalhadores vs Clientes), Empresa, Canal e Setor */}
         <div className="p-3 space-y-2 border-b border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
           {/* Search Input */}
           <div className="relative">
@@ -281,13 +338,75 @@ export default function InboxSidebar() {
             )}
           </div>
 
-          {/* Linha de Dropdowns: Empresa (Wiseowe/Luminous/Stocco) + Departamento */}
+          {/* Seletor Rápido do Tipo de Canal: Todos | 👷 Trabalhadores | 🏢 Clientes | 🚗 Frota/EPI */}
+          <div className="grid grid-cols-4 gap-1 bg-slate-200/60 dark:bg-slate-900 p-1 rounded-xl text-[10.5px] font-bold">
+            <button
+              type="button"
+              onClick={() => { setAudienceFilter('all'); setChannelIdFilter('all') }}
+              className={`py-1.5 px-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                audienceFilter === 'all'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+              title="Todos os tipos de canais"
+            >
+              <span>Todos</span>
+              <span className="text-[9.5px] opacity-70">({audienceCounts.all})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setAudienceFilter('workers'); setChannelIdFilter('all') }}
+              className={`py-1.5 px-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                audienceFilter === 'workers'
+                  ? 'bg-teal-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-teal-700'
+              }`}
+              title="Canais de WhatsApp de Trabalhadores"
+            >
+              <span>👷 Trab.</span>
+              <span className="text-[9.5px] opacity-85">({audienceCounts.workers})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setAudienceFilter('clients'); setChannelIdFilter('all') }}
+              className={`py-1.5 px-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                audienceFilter === 'clients'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-purple-700'
+              }`}
+              title="Canais de WhatsApp de Clientes / Obras"
+            >
+              <span>🏢 Clientes</span>
+              <span className="text-[9.5px] opacity-85">({audienceCounts.clients})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setAudienceFilter('general'); setChannelIdFilter('all') }}
+              className={`py-1.5 px-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                audienceFilter === 'general'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-amber-700'
+              }`}
+              title="Canais Gerais (CentralCars, SafetyPrevi)"
+            >
+              <span>🚗 Geral</span>
+              <span className="text-[9.5px] opacity-85">({audienceCounts.general})</span>
+            </button>
+          </div>
+
+          {/* Linha de Dropdowns: Empresa + Setor */}
           <div className="grid grid-cols-2 gap-1.5">
             <select
               value={companyFilter}
-              onChange={e => setCompanyFilter(e.target.value)}
+              onChange={e => {
+                setCompanyFilter(e.target.value)
+                setChannelIdFilter('all')
+              }}
               className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
-              title="Filtrar por Empresa Contratante / Canal"
+              title="Filtrar por Empresa Contratante"
             >
               <option value="all">🏢 Todas Empresas</option>
               {availableCompanies.map(comp => (
@@ -301,7 +420,7 @@ export default function InboxSidebar() {
               value={selectedDepartmentFilter}
               onChange={e => setSelectedDepartmentFilter(e.target.value)}
               className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
-              title="Filtrar por Departamento"
+              title="Filtrar por Departamento / Fila"
             >
               <option value="all">📂 Todos Setores</option>
               {currentUserDepartmentId && (
@@ -316,24 +435,40 @@ export default function InboxSidebar() {
             </select>
           </div>
 
-          {/* Seletor Dropdown de Cliente / Obra */}
-          {availableClients.length > 0 && (
-            <div>
-              <select
-                value={clientFilter}
-                onChange={e => setClientFilter(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
-                title="Filtrar trabalhadores por Cliente / Obra"
-              >
-                <option value="all">🏗️ Todos os Clientes / Obras ({availableClients.length})</option>
-                {availableClients.map(cli => (
-                  <option key={cli} value={cli}>
-                    🏗️ {cli}
+          {/* Linha 2 de Dropdowns: Canal de WhatsApp Específico + Cliente/Obra */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <select
+              value={channelIdFilter}
+              onChange={e => setChannelIdFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
+              title="Filtrar por Número / Canal de WhatsApp Específico"
+            >
+              <option value="all">📱 Todos Canais WhatsApp ({availableChannels.length})</option>
+              {availableChannels.map(ch => {
+                const icon = ch.channel_type === 'clients' ? '🏢' : ch.channel_type === 'general' ? '🚗' : '👷'
+                const label = ch.display_label || ch.name
+                return (
+                  <option key={ch.id} value={ch.id}>
+                    {icon} {label} {ch.phone_number ? `(+${ch.phone_number.slice(-4)})` : ''}
                   </option>
-                ))}
-              </select>
-            </div>
-          )}
+                )
+              })}
+            </select>
+
+            <select
+              value={clientFilter}
+              onChange={e => setClientFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
+              title="Filtrar trabalhadores por Cliente / Obra"
+            >
+              <option value="all">🏗️ Clientes / Obras ({availableClients.length})</option>
+              {availableClients.map(cli => (
+                <option key={cli} value={cli}>
+                  🏗️ {cli}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Abas de Status no Padrão CRM: Minhas | Favoritos | Abertas | Todos | Fechados */}
           <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800 text-[11px] font-bold">
@@ -409,7 +544,7 @@ export default function InboxSidebar() {
           </div>
         </div>
 
-        {/* Resultados da Busca Global de Trabalhadores (Prevenção / Logística / RH procurando trabalhador de qualquer empresa) */}
+        {/* Resultados da Busca Global de Trabalhadores */}
         {searchQuery.trim().length >= 3 && globalWorkers.length > 0 && (
           <div className="bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-200 dark:border-indigo-800/60 px-3 py-2 max-h-48 overflow-y-auto">
             <div className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-1.5 flex items-center justify-between">
@@ -451,7 +586,7 @@ export default function InboxSidebar() {
           ) : filteredConversations.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400 space-y-1">
               <p className="font-semibold text-slate-600 dark:text-slate-300">Nenhuma conversa neste filtro</p>
-              <p className="text-[11px]">Use a busca acima para localizar qualquer trabalhador da Wiseowe, Stocco ou Luminous.</p>
+              <p className="text-[11px]">Use os filtros de Público (Trabalhadores / Clientes) ou busque acima.</p>
             </div>
           ) : (
             filteredConversations.map(conv => {
@@ -461,6 +596,8 @@ export default function InboxSidebar() {
                 : ''
               const companyBadge = conv.worker_company_name || conv.channel?.company_name
               const clientBadge = conv.worker_client_name
+              const convAudience = resolveConvAudience(conv)
+              const channelLabel = conv.channel?.display_label || conv.channel?.name
 
               return (
                 <Link
@@ -474,7 +611,13 @@ export default function InboxSidebar() {
                 >
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
-                    <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 overflow-hidden font-bold text-xs shadow-2xs">
+                    <div className={`relative w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 overflow-hidden font-bold text-xs shadow-2xs ${
+                      convAudience === 'clients'
+                        ? 'bg-gradient-to-tr from-purple-600 to-indigo-500'
+                        : convAudience === 'general'
+                          ? 'bg-gradient-to-tr from-amber-600 to-orange-500'
+                          : 'bg-gradient-to-tr from-emerald-600 to-teal-500'
+                    }`}>
                       <span>{(conv.contact_name || conv.contact_phone || 'U').substring(0, 2).toUpperCase()}</span>
                       {conv.contact_avatar_url && (
                         <img
@@ -513,11 +656,35 @@ export default function InboxSidebar() {
                         {conv.last_message_text || conv.contact_phone}
                       </p>
 
-                      {/* Badges de Empresa (Wiseowe/Luminous/Stocco), Cliente/Obra, Departamento e Atendente do Bloco */}
+                      {/* Badges de Empresa + Público do Canal (Trabalhadores vs Clientes), Cliente/Obra, Departamento e Atendente */}
                       <div className="flex items-center gap-1 flex-wrap">
                         {companyBadge && (
                           <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 uppercase">
                             {companyBadge}
+                          </span>
+                        )}
+
+                        {/* Badge de Tipo de Canal (Trabalhador vs Cliente) */}
+                        {convAudience === 'clients' ? (
+                          <span
+                            className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/70"
+                            title={`Canal de Clientes: ${channelLabel || ''}`}
+                          >
+                            🏢 Canal Clientes
+                          </span>
+                        ) : convAudience === 'general' ? (
+                          <span
+                            className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70"
+                            title={`Canal Geral: ${channelLabel || ''}`}
+                          >
+                            🚗 {conv.channel?.name === 'safetyprevi' ? 'EPI / Segurança' : 'Frota / Geral'}
+                          </span>
+                        ) : (
+                          <span
+                            className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 border border-teal-200/70 dark:border-teal-800/70"
+                            title={`Canal de Trabalhadores: ${channelLabel || ''}`}
+                          >
+                            👷 Trabalhador
                           </span>
                         )}
 

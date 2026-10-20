@@ -185,6 +185,14 @@ export default function ChannelsAdminPage() {
   const [isRematching, setIsRematching] = useState(false)
   const [isClearingAll, setIsClearingAll] = useState(false)
 
+  // Organized Import Modal state
+  const [importModalChannel, setImportModalChannel] = useState<any | null>(null)
+  const [importTokenInput, setImportTokenInput] = useState('')
+  const [importPreview, setImportPreview] = useState<any | null>(null)
+  const [isAnalyzingImport, setIsAnalyzingImport] = useState(false)
+  const [isExecutingImport, setIsExecutingImport] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+
   const handleConnectQr = async (channel: any) => {
     setSyncingChannelId(channel.id)
     try {
@@ -209,25 +217,73 @@ export default function ChannelsAdminPage() {
     }
   }
 
-  const handleSyncChannelChats = async (channel: any) => {
-    setSyncingChannelId(channel.id)
+  const runChannelPreview = async (channel: any, tokenOverride?: string) => {
+    setIsAnalyzingImport(true)
+    setImportError(null)
     try {
       const res = await fetch('/api/channels/uazapi/sync-chats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_channel', channelId: channel.id })
+        body: JSON.stringify({
+          action: 'preview_channel',
+          channelId: channel.id,
+          tokenOverride: tokenOverride || undefined
+        })
       })
       const data = await res.json()
       if (!res.ok) {
-        alert('Aviso ao sincronizar: ' + (data.error || 'Erro desconhecido'))
+        setImportError(data.error || 'Erro ao analisar conversas na UazAPI')
+        setImportPreview(null)
       } else {
-        alert(data.message || 'Sincronização concluída!')
+        setImportPreview(data)
+        fetchAllData()
       }
-      fetchAllData()
     } catch (err: any) {
-      alert('Erro ao sincronizar conversas: ' + err.message)
+      setImportError('Erro de conexão: ' + err.message)
     } finally {
-      setSyncingChannelId(null)
+      setIsAnalyzingImport(false)
+    }
+  }
+
+  const handleOpenImportModal = (channel: any) => {
+    const existingTk = channel.instance_token || channel.api_token || ''
+    setImportModalChannel(channel)
+    setImportTokenInput(existingTk)
+    setImportPreview(null)
+    setImportError(null)
+    if (existingTk) {
+      runChannelPreview(channel, existingTk)
+    }
+  }
+
+  const handleExecuteOrganizedImport = async (filterMode: 'matched_only' | 'recent_30d' | 'all') => {
+    if (!importModalChannel) return
+    setIsExecutingImport(true)
+    setImportError(null)
+    try {
+      const res = await fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_channel',
+          channelId: importModalChannel.id,
+          tokenOverride: importTokenInput || undefined,
+          filterMode,
+          importMessages: true
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportError(data.error || 'Erro ao importar conversas')
+      } else {
+        alert(data.message || 'Importação concluída com sucesso!')
+        setImportModalChannel(null)
+        fetchAllData()
+      }
+    } catch (err: any) {
+      setImportError('Erro ao importar: ' + err.message)
+    } finally {
+      setIsExecutingImport(false)
     }
   }
 
@@ -340,6 +396,165 @@ export default function ChannelsAdminPage() {
           </div>
           </div>
        </div>
+
+       {/* Modal de Importação Organizada de Conversas da UazAPI */}
+       {importModalChannel && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-2xl w-full space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                       <RefreshCw className={`w-5 h-5 text-indigo-600 ${isAnalyzingImport || isExecutingImport ? 'animate-spin' : ''}`} />
+                       Importador Organizado WhatsApp ({importModalChannel.display_label || importModalChannel.name})
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                       Instância UazAPI: <span className="font-mono font-bold">{importModalChannel.name}</span> {importModalChannel.phone_number ? `• +${importModalChannel.phone_number}` : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => setImportModalChannel(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                     <X className="w-5 h-5" />
+                  </button>
+               </div>
+
+               {/* Token da Instância se necessário */}
+               <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                    🔑 Token da Instância na UazAPI ({importModalChannel.name})
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={importTokenInput}
+                      onChange={e => setImportTokenInput(e.target.value)}
+                      placeholder="Cole aqui o token desta instância na UazAPI (ex: 995f0eb7-...)"
+                      className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    />
+                    <button
+                      onClick={() => runChannelPreview(importModalChannel, importTokenInput)}
+                      disabled={isAnalyzingImport || !importTokenInput.trim()}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                    >
+                      {isAnalyzingImport ? 'Analisando na UazAPI...' : 'Analisar Conversas'}
+                    </button>
+                  </div>
+               </div>
+
+               {importError && (
+                 <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                   ⚠️ {importError}
+                 </div>
+               )}
+
+               {isAnalyzingImport && (
+                 <div className="py-10 text-center space-y-2">
+                   <RefreshCw className="w-7 h-7 text-indigo-600 animate-spin mx-auto" />
+                   <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                     Consultando histórico na UazAPI e cruzando telefones com o cadastro de Trabalhadores (MCS)...
+                   </p>
+                 </div>
+               )}
+
+               {importPreview && !isAnalyzingImport && (
+                 <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                    {/* Cards de Resumo */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                       <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                          <div className="text-lg font-extrabold text-slate-800 dark:text-white">{importPreview.totalIndividualChats}</div>
+                          <div className="text-[11px] text-slate-500 font-medium">Conversas Individuais</div>
+                       </div>
+                       <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-center">
+                          <div className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">{importPreview.matchedWorkersCount}</div>
+                          <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">👷 Trabalhadores MCS</div>
+                       </div>
+                       <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-center">
+                          <div className="text-lg font-extrabold text-blue-700 dark:text-blue-300">{importPreview.recent30dCount}</div>
+                          <div className="text-[11px] text-blue-700 dark:text-blue-400 font-bold">📅 Ativas (Últ. 30 dias)</div>
+                       </div>
+                       <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-center">
+                          <div className="text-lg font-extrabold text-amber-700 dark:text-amber-300">{importPreview.unmatchedCount}</div>
+                          <div className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">❓ Sem Vínculo Automático</div>
+                       </div>
+                    </div>
+
+                    {/* Prévia dos Trabalhadores Encontrados */}
+                    {importPreview.sampleMatched?.length > 0 && (
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                        <div className="bg-emerald-50/70 dark:bg-emerald-950/30 px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          ✅ Prévia de Trabalhadores Identificados pelo Número ({importPreview.matchedWorkersCount} encontrados)
+                        </div>
+                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                          {importPreview.sampleMatched.map((m: any, idx: number) => (
+                            <div key={idx} className="px-3.5 py-2 flex items-center justify-between gap-2">
+                              <div>
+                                <span className="font-bold text-slate-800 dark:text-white">{m.workerName}</span>
+                                <span className="text-slate-400 font-mono ml-2">+{m.phone}</span>
+                                {m.lastMessage && (
+                                  <p className="text-[11px] text-slate-500 truncate max-w-md">{m.lastMessage}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {m.company && (
+                                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">
+                                    🏢 {m.company}
+                                  </span>
+                                )}
+                                {m.client && (
+                                  <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-bold max-w-[150px] truncate">
+                                    🏗️ {m.client}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botões de Importação Organizada */}
+                    <div className="space-y-2 pt-2">
+                       <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                         Escolha como deseja importar para o MCS Chat:
+                       </p>
+                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                          <button
+                            onClick={() => handleExecuteOrganizedImport('matched_only')}
+                            disabled={isExecutingImport}
+                            className="p-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-left transition-colors cursor-pointer shadow-sm"
+                          >
+                            <div className="text-xs font-extrabold">1. Apenas Trabalhadores ({importPreview.matchedWorkersCount})</div>
+                            <div className="text-[10px] text-emerald-100 mt-0.5">
+                              Recomendado: importa só quem já tem cadastro identificado no MCS.
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => handleExecuteOrganizedImport('recent_30d')}
+                            disabled={isExecutingImport}
+                            className="p-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-left transition-colors cursor-pointer shadow-sm"
+                          >
+                            <div className="text-xs font-extrabold">2. Ativas Últ. 30 Dias ({importPreview.recent30dCount})</div>
+                            <div className="text-[10px] text-indigo-100 mt-0.5">
+                              Importa conversas recentes (identificadas + novos números para vincular).
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => handleExecuteOrganizedImport('all')}
+                            disabled={isExecutingImport}
+                            className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-left transition-colors cursor-pointer shadow-sm"
+                          >
+                            <div className="text-xs font-extrabold">3. Todas Individuais ({importPreview.totalIndividualChats})</div>
+                            <div className="text-[10px] text-slate-300 mt-0.5">
+                              Importa todo o histórico individual da instância (ignora grupos).
+                            </div>
+                          </button>
+                       </div>
+                    </div>
+                 </div>
+               )}
+            </div>
+         </div>
+       )}
 
        {/* Modal QR Code */}
        {qrModalData && (
@@ -612,10 +827,10 @@ export default function ChannelsAdminPage() {
                           <span className="hidden lg:inline">QR Code</span>
                         </button>
                         <button
-                          onClick={() => handleSyncChannelChats(channel)}
+                          onClick={() => handleOpenImportModal(channel)}
                           disabled={syncingChannelId === channel.id}
                           className="px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer"
-                          title="Importar conversas deste número na UazAPI e cruzar automaticamente com Trabalhadores"
+                          title="Abrir Importador Organizado de Conversas desta instância na UazAPI"
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${syncingChannelId === channel.id ? 'animate-spin' : ''}`} />
                           <span className="hidden lg:inline">Importar & Cruzar</span>

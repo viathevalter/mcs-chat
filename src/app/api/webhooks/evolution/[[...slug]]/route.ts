@@ -30,28 +30,46 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       }
 
       // 1. Find the active channel
+      const cleanInst = (instanceName || '').trim()
       const { data: channels, error: channelError } = await supabase
         .from('chat_channels')
         .select('*')
-        .ilike('name', instanceName.trim())
+        .or(`name.ilike.${cleanInst},instance_name.ilike.${cleanInst}`)
         .eq('is_active', true)
         .limit(1)
 
       const channel = channels?.[0]
 
       if (!channel || channelError) {
-        // [DEBUG LOG INJECTION] Validate the true identity of the running key
-        const srKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-        console.warn(`[DEBUG AUDIT] SR Key loaded in Vercel ends in: ...${srKey.slice(-15)}`)
-
-        const { data: all } = await supabase.from('chat_channels').select('*')
-        console.warn(`[Webhook DEBUG] Total channels in DB visible to service_role:`, all?.length)
-        if (all && all.length > 0) {
-           console.warn(`[Webhook DEBUG] First 3 channels found in DB:`, all.slice(0, 3).map(c => ({ id: c.id, name: c.name, is_active: c.is_active })))
-        }
-        
         console.warn(`[Webhook] Channel ${instanceName} not found or inactive.`)
         return NextResponse.json({ success: true, message: 'Channel not configured' })
+      }
+
+      // 1.1 Auto-capture UazAPI instance token, BaseUrl, owner phone, and status = 'connected'
+      const webhookToken = body.token || body.instance?.token || null
+      const webhookBaseUrl = (body.BaseUrl || body.baseUrl || channel.api_url || 'https://mcs-chat.uazapi.com').replace(/\/$/, '')
+      const webhookOwnerPhone = body.owner ? String(body.owner).replace(/\D/g, '') : null
+      if (
+        channel.status !== 'connected' ||
+        (webhookToken && channel.api_token !== webhookToken) ||
+        (webhookOwnerPhone && !channel.phone_number)
+      ) {
+        await supabase
+          .from('chat_channels')
+          .update({
+            status: 'connected',
+            instance_name: cleanInst || channel.instance_name || channel.name,
+            api_url: webhookBaseUrl,
+            api_token: webhookToken || channel.api_token,
+            instance_token: webhookToken || channel.instance_token,
+            phone_number: webhookOwnerPhone || channel.phone_number,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', channel.id)
+
+        channel.api_token = webhookToken || channel.api_token
+        channel.instance_token = webhookToken || channel.instance_token
+        channel.api_url = webhookBaseUrl
       }
 
       // Extract Sender Info universally
@@ -70,13 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
         return NextResponse.json({ success: true, message: 'Ignored group or status' })
       }
 
-      // Prevent processing Echo messages if we just sent them ourselves via CRM
-      if (isFromMe && eventType !== 'messages.update') {
-         // return NextResponse.json({ success: true, message: 'Ignored fromMe' }) 
-         // For now we allow fromMe to sync messages sent natively from WhatsApp Web
-      }
-
-      const phone = remoteJid.replace(/@.*$/, '')
+      const phone = remoteJid.replace(/@.*$/, '').replace(/\D/g, '')
 
       // 2. Extract Data & Handle Media (UAZ & Evolution)
       let textContent = ''
@@ -100,13 +112,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
          else if (isDocument) messageTypeDb = 'document'
          else if (msgType) messageTypeDb = msgType
 
-         // Fallbacks
          if (typeof messageData?.content === 'string') {
             textContent = messageData.content
          } else if (typeof messageData?.content === 'object' && messageData.content !== null) {
             textContent = messageData.content.text || messageData.content.caption || messageData.message?.conversation || '[Mídia UAZ]'
          } else {
-            textContent = '[Formato Complexo]'
+            textContent = messageData?.text || '[Formato Complexo]'
          }
 
          // UAZ Media Download process implementation
@@ -116,7 +127,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             let pureId = messageData?.id || ''
             if (pureId.includes(':')) pureId = pureId.split(':')[1]
 
-            // As the user inserted the Instance Token directly into api_token, we skip fetching /instance/all
             try {
                const downloadReq = await fetch(`${API_URL}/message/download`, {
                   method: "POST",
@@ -129,59 +139,55 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
                   const finalBase64 = downloadRes.base64 || downloadRes.base64Data || downloadRes.data
                   let resolvedUrl = downloadRes.url || downloadRes.link || null
 
-                  // If UAZ returns base64, we can upload it to Supabase Storage
-                        if (!resolvedUrl && finalBase64) {
-                           let finalMime = mimeType || 'application/octet-stream'
-                           if (isAudio) finalMime = 'audio/mp3'
-                           else if (isImage) finalMime = 'image/jpeg'
-                           // Upload to Supabase Storage to prevent massive DB bloat which breaks Realtime
-                           try {
-                               const ext = finalMime.split('/')[1] || 'bin'
-                               const cleanB64 = finalBase64.replace(/\s/g, '')
-                               const buffer = Buffer.from(cleanB64, 'base64')
-                               const filename = `m${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`
-                               
-                               const { error: uploadErr } = await supabase.storage
-                                 .from('chat-media')
-                                 .upload(filename, buffer, { contentType: finalMime, upsert: true })
-                               
-                               if (!uploadErr) {
-                                 const { data: publicUrlData } = supabase.storage.from('chat-media').getPublicUrl(filename)
-                                 resolvedUrl = publicUrlData.publicUrl
-                               } else {
-                                 resolvedUrl = `data:${finalMime};base64,${cleanB64}` // fallback
-                               }
-                           } catch (uploadCrash) {
-                               resolvedUrl = `data:${finalMime};base64,${finalBase64.replace(/\s/g, '')}`
-                           }
-                           
-                           // PROTOTYPE TRANSCRIPTION (Phase 8) - OpenAI Whisper
-                           if (isAudio && process.env.OPENAI_API_KEY) {
-                               const audioBuffer = Buffer.from(finalBase64.replace(/\\s/g, ''), 'base64')
-                               const blob = new Blob([audioBuffer], { type: 'audio/mp3' })
-                               const formData = new FormData()
-                               formData.append('file', blob, 'audio.mp3')
-                               formData.append('model', 'whisper-1')
-
-                               const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-                                  method: 'POST',
-                                  headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-                                  body: formData
-                               })
-                               if (whisperRes.ok) {
-                                  const wJson = await whisperRes.json()
-                                  mediaTranscription = wJson.text
-                               }
-                            }
+                  if (!resolvedUrl && finalBase64) {
+                     let finalMime = mimeType || 'application/octet-stream'
+                     if (isAudio) finalMime = 'audio/mp3'
+                     else if (isImage) finalMime = 'image/jpeg'
+                     try {
+                         const ext = finalMime.split('/')[1] || 'bin'
+                         const cleanB64 = finalBase64.replace(/\s/g, '')
+                         const buffer = Buffer.from(cleanB64, 'base64')
+                         const filename = `m${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`
+                         
+                         const { error: uploadErr } = await supabase.storage
+                           .from('chat-media')
+                           .upload(filename, buffer, { contentType: finalMime, upsert: true })
+                         
+                         if (!uploadErr) {
+                           const { data: publicUrlData } = supabase.storage.from('chat-media').getPublicUrl(filename)
+                           resolvedUrl = publicUrlData.publicUrl
+                         } else {
+                           resolvedUrl = `data:${finalMime};base64,${cleanB64}`
                          }
-                         mediaUrl = resolvedUrl
+                     } catch (uploadCrash) {
+                         resolvedUrl = `data:${finalMime};base64,${finalBase64.replace(/\s/g, '')}`
                      }
+                     
+                     if (isAudio && process.env.OPENAI_API_KEY) {
+                         const audioBuffer = Buffer.from(finalBase64.replace(/\s/g, ''), 'base64')
+                         const blob = new Blob([audioBuffer], { type: 'audio/mp3' })
+                         const formData = new FormData()
+                         formData.append('file', blob, 'audio.mp3')
+                         formData.append('model', 'whisper-1')
+
+                         const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                            body: formData
+                         })
+                         if (whisperRes.ok) {
+                            const wJson = await whisperRes.json()
+                            mediaTranscription = wJson.text
+                         }
+                      }
+                   }
+                   mediaUrl = resolvedUrl
+               }
             } catch(e) {
                console.error("Failed to download media for UAZ:", e)
             }
          }
       } else {
-         // EVOLUTION API Base handler
          const msgType = messageData?.messageType
          if (msgType === 'conversation') {
             textContent = messageData?.message?.conversation || ''
@@ -210,7 +216,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
          return NextResponse.json({ success: true, message: 'Duplicate ignored' })
       }
 
-      // 3. Find/Create Worker & Conversation
+      // 3. Find/Create Worker & Conversation using smart phone matching RPC
+      let matchedWorker: any = null
+      try {
+        const { data: matchData } = await supabase.rpc('match_worker_by_phone', {
+          p_raw_phone: phone,
+          p_company_name: channel.company_name || null
+        })
+        if (matchData && matchData.matched) {
+          matchedWorker = matchData
+        }
+      } catch (e) {}
+
+      const defaultContactType = matchedWorker?.id
+        ? 'worker'
+        : channel.channel_type === 'clients'
+        ? 'client'
+        : channel.channel_type === 'general'
+        ? 'general'
+        : 'worker'
+
       let { data: conversation } = await supabase
         .from('chat_conversations')
         .select('*')
@@ -223,19 +248,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
       let newlyFetchedAvatar: string | undefined = undefined;
 
       if (!conversation) {
-         // Attempt to find worker by phone (very basic matching)
-         let worker = null
-         try {
-            const { data: workers } = await supabase
-              .schema('core_personal')
-              .from('workers')
-              .select('id, nome, cpf, rg')
-              .or(`movil.ilike.%${phone.substring(2)}%,telefono2.ilike.%${phone.substring(2)}%`)
-              .limit(1)
-            if (workers && workers.length > 0) worker = workers[0]
-         } catch(e) {} // Failsafe if Schema not found
-
-         // Tenta buscar a foto de perfil do WhatsApp se for Evolution/UAZ
          try {
            const fetchedUrl = await evolutionApi.fetchProfilePictureUrl({
              number: remoteJid,
@@ -252,9 +264,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
            .insert({
              channel_id: channel.id,
              contact_phone: phone,
-             contact_name: worker ? worker.nome : senderName,
+             contact_name: matchedWorker?.nome || senderName,
+             contact_type: defaultContactType,
              contact_avatar_url: newlyFetchedAvatar || null,
-             worker_id: worker?.id || null,
+             worker_id: matchedWorker?.id || null,
+             worker_company_name: matchedWorker?.contratante || channel.company_name || null,
+             worker_client_name: matchedWorker?.cliente || null,
+             worker_function_name: matchedWorker?.funcion || null,
+             department_id: channel.department_id || null,
+             last_message_preview: (mediaTranscription || textContent || '').slice(0, 140),
              status: 'open'
            })
            .select()
@@ -263,9 +281,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
          if (convError) throw convError
          conversation = newConv
       } else {
-         // Status and assignments will be updated at the end with the latest unread count
-         
-         // Se a conversa já existe mas a foto nula, tentar recuperar
+         if (matchedWorker?.id && (!conversation.worker_id || conversation.contact_name === 'Desconhecido')) {
+           await supabase
+             .from('chat_conversations')
+             .update({
+               worker_id: matchedWorker.id,
+               contact_name: matchedWorker.nome || conversation.contact_name,
+               contact_type: 'worker',
+               worker_company_name: matchedWorker.contratante || channel.company_name || null,
+               worker_client_name: matchedWorker.cliente || null,
+               worker_function_name: matchedWorker.funcion || null
+             })
+             .eq('id', conversation.id)
+         }
+
          if (!conversation.contact_avatar_url) {
             try {
               const fetchedUrl = await evolutionApi.fetchProfilePictureUrl({
@@ -278,14 +307,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
               if (fetchedUrl) {
                 newlyFetchedAvatar = fetchedUrl;
                 conversation.contact_avatar_url = fetchedUrl;
-                // Deixa atualizar silenciosamente junto com o last_message_at depois, no fluxo de always update.
               }
             } catch(e) {}
          }
       }
 
       if (conversation) {
-         // Transform CRM Echo into an UPDATE instead of a duplicate INSERT
          if (isFromMe && eventType !== 'messages.update') {
             const { data: recentCrmMsg } = await supabase
               .from('chat_messages')
@@ -293,7 +320,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
               .eq('conversation_id', conversation.id)
               .eq('direction', 'outbound')
               .is('external_id', null)
-              .gte('created_at', new Date(Date.now() - 120000).toISOString()) // 2 minutes window
+              .gte('created_at', new Date(Date.now() - 120000).toISOString())
               .order('created_at', { ascending: false })
               .limit(1)
               .single()
@@ -312,7 +339,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
             }
          }
 
-         // Insert message
          const finalContentToInsert = mediaTranscription ? mediaTranscription : textContent;
 
          const { error: msgErr } = await supabase.from('chat_messages').insert({
@@ -321,24 +347,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug?: 
            direction: isFromMe ? 'outbound' : 'inbound',
            content: finalContentToInsert,
            message_type: messageTypeDb,
-           sender_name: isFromMe ? 'Sistema' : senderName,
+           sender_name: isFromMe ? 'Sistema' : (matchedWorker?.nome || senderName),
            media_url: mediaUrl,
            status: 'delivered'
          })
          
-         if (msgErr) {
-            if (msgErr.code === '23505') {
-               console.log(`[Webhook INFO] Message ${externalId} already processed (duplicate webhook request).`)
-            } else {
-               console.error('[Webhook ERROR] Error inserting message:', msgErr)
-            }
+         if (msgErr && msgErr.code !== '23505') {
+            console.error('[Webhook ERROR] Error inserting message:', msgErr)
          }
 
-         // Update unread_count, last_message_at and reopen if closed
-         const updateConversationPayload: any = {};
+         const updateConversationPayload: any = {
+           last_message_preview: (finalContentToInsert || '').slice(0, 140)
+         };
          if (newlyFetchedAvatar) updateConversationPayload.contact_avatar_url = newlyFetchedAvatar;
 
-         // If the chat is closed and contact messages us, reopen it and clear assignment.
          if (conversation.status === 'closed' && !isFromMe) {
            updateConversationPayload.status = 'open';
            updateConversationPayload.assigned_to = null;

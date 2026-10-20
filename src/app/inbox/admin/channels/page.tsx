@@ -173,6 +173,91 @@ export default function ChannelsAdminPage() {
      }
   }
 
+  const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null)
+  const [isRematching, setIsRematching] = useState(false)
+  const [isClearingAll, setIsClearingAll] = useState(false)
+
+  const handleConnectQr = async (channel: any) => {
+    setSyncingChannelId(channel.id)
+    try {
+      const res = await fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'connect_qr', channelId: channel.id })
+      })
+      const data = await res.json()
+      if (data.qrcode) {
+        setQrModalData({ name: channel.name, qrcode: data.qrcode })
+      } else if (data.status === 'connected') {
+        alert('Esta instância já está conectada (connected)!')
+      } else {
+        alert(data.error || 'Não foi possível gerar o QR Code no momento. Verifique o token da instância na UazAPI.')
+      }
+      fetchAllData()
+    } catch (err: any) {
+      alert('Erro ao solicitar QR Code: ' + err.message)
+    } finally {
+      setSyncingChannelId(null)
+    }
+  }
+
+  const handleSyncChannelChats = async (channel: any) => {
+    setSyncingChannelId(channel.id)
+    try {
+      const res = await fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_channel', channelId: channel.id })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert('Aviso ao sincronizar: ' + (data.error || 'Erro desconhecido'))
+      } else {
+        alert(data.message || 'Sincronização concluída!')
+      }
+      fetchAllData()
+    } catch (err: any) {
+      alert('Erro ao sincronizar conversas: ' + err.message)
+    } finally {
+      setSyncingChannelId(null)
+    }
+  }
+
+  const handleRematchAllWorkers = async () => {
+    setIsRematching(true)
+    try {
+      const res = await fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rematch_workers' })
+      })
+      const data = await res.json()
+      alert(data.message || 'Cruzamento concluído!')
+    } catch (err: any) {
+      alert('Erro ao cruzar números: ' + err.message)
+    } finally {
+      setIsRematching(false)
+    }
+  }
+
+  const handleClearAllConversations = async () => {
+    if (!confirm('ATENÇÃO: Deseja realmente ZERAR todas as conversas e mensagens do MCS Chat para começar do zero?')) return
+    setIsClearingAll(true)
+    try {
+      const res = await fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear_all_conversations' })
+      })
+      const data = await res.json()
+      alert(data.message || 'Todas as conversas foram zeradas!')
+    } catch (err: any) {
+      alert('Erro ao zerar conversas: ' + err.message)
+    } finally {
+      setIsClearingAll(false)
+    }
+  }
+
   const filteredChannels = channels.filter(ch => {
     if (typeFilter === 'all') return true
     const chType = ch.channel_type || (ch.name?.toLowerCase().includes('cliente') ? 'clients' : 'workers')
@@ -190,7 +275,28 @@ export default function ChannelsAdminPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold self-start">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleRematchAllWorkers}
+              disabled={isRematching}
+              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Cruzar todos os telefones do WhatsApp com o cadastro de Trabalhadores (core_personal.workers)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRematching ? 'animate-spin' : ''}`} />
+              <span>{isRematching ? 'Cruzando...' : 'Cruzar Telefones c/ Trabalhadores'}</span>
+            </button>
+
+            <button
+              onClick={handleClearAllConversations}
+              disabled={isClearingAll}
+              className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Zerar todas as conversas e mensagens para recomeçar do zero"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isClearingAll ? 'Zerando...' : 'Zerar Conversas'}</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold self-start">
             <button
               onClick={() => setTypeFilter('all')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -223,6 +329,7 @@ export default function ChannelsAdminPage() {
             >
               🚗 Frota & EPI ({channels.filter(c => c.channel_type === 'general').length})
             </button>
+          </div>
           </div>
        </div>
 
@@ -474,15 +581,24 @@ export default function ChannelsAdminPage() {
                      </div>
 
                      <div className="flex items-center gap-2">
-                        {channel.qrcode_base64 && (
-                           <button
-                             onClick={() => setQrModalData({ name: channel.name, qrcode: channel.qrcode_base64 })}
-                             className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                             title="Ver QR Code"
-                           >
-                             <QrCode className="w-4 h-4" />
-                           </button>
-                        )}
+                        <button
+                          onClick={() => handleConnectQr(channel)}
+                          disabled={syncingChannelId === channel.id}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          title="Conectar WhatsApp / Gerar QR Code na UazAPI"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span className="hidden lg:inline">QR Code</span>
+                        </button>
+                        <button
+                          onClick={() => handleSyncChannelChats(channel)}
+                          disabled={syncingChannelId === channel.id}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          title="Importar conversas deste número na UazAPI e cruzar automaticamente com Trabalhadores"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${syncingChannelId === channel.id ? 'animate-spin' : ''}`} />
+                          <span className="hidden lg:inline">Importar & Cruzar</span>
+                        </button>
                         <button
                           onClick={() => setEditingChannel(channel)}
                           className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"

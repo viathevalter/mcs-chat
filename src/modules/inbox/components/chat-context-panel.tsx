@@ -74,6 +74,76 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
   const [scheduleDateTime, setScheduleDateTime] = useState('')
   const [savingSchedule, setSavingSchedule] = useState(false)
 
+  // Manual Worker Linking State (Vincular Número ao Trabalhador)
+  const [showLinkWorkerBox, setShowLinkWorkerBox] = useState(false)
+  const [workerSearchTerm, setWorkerSearchTerm] = useState('')
+  const [workerSearchResults, setWorkerSearchResults] = useState<any[]>([])
+  const [searchingWorkers, setSearchingWorkers] = useState(false)
+  const [linkingWorker, setLinkingWorker] = useState(false)
+  const [updateWorkerPhone, setUpdateWorkerPhone] = useState(true)
+
+  useEffect(() => {
+    const q = workerSearchTerm.trim()
+    if (!showLinkWorkerBox || q.length < 2) {
+      setWorkerSearchResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setSearchingWorkers(true)
+      const { data } = await supabase
+        .schema('core_personal')
+        .from('workers')
+        .select('id, cod_colab, nome, contratante, cliente, funcion, status_trabajador, status_seguridad, movil, nie, dni, pasaporte, foto')
+        .or(`nome.ilike.%${q}%,cod_colab.ilike.%${q}%,nie.ilike.%${q}%,dni.ilike.%${q}%,pasaporte.ilike.%${q}%,movil.ilike.%${q}%`)
+        .limit(12)
+      setWorkerSearchResults(data || [])
+      setSearchingWorkers(false)
+    }, 260)
+    return () => clearTimeout(timer)
+  }, [workerSearchTerm, showLinkWorkerBox])
+
+  const handleLinkConversationToWorker = async (selectedW: any) => {
+    if (linkingWorker) return
+    setLinkingWorker(true)
+    try {
+      const { error } = await supabase.rpc('link_conversation_to_worker', {
+        p_conversation_id: conversationId,
+        p_worker_id: selectedW.id,
+        p_update_worker_phone: updateWorkerPhone
+      })
+      if (error) throw error
+
+      setContext((prev: any) => ({
+        ...prev,
+        worker: {
+          ...selectedW,
+          documento: selectedW.nie || selectedW.dni || selectedW.pasaporte || null
+        },
+        conversation: {
+          ...prev.conversation,
+          worker_id: selectedW.id,
+          contact_name: selectedW.nome,
+          worker_company_name: selectedW.contratante,
+          worker_client_name: selectedW.cliente,
+          worker_function_name: selectedW.funcion
+        }
+      }))
+
+      setShowLinkWorkerBox(false)
+      setWorkerSearchTerm('')
+      setFeedbackMsg(
+        updateWorkerPhone
+          ? `✅ Vinculado a ${selectedW.nome} e telefone WhatsApp salvo no cadastro do trabalhador!`
+          : `✅ Conversa vinculada a ${selectedW.nome}!`
+      )
+      setTimeout(() => setFeedbackMsg(null), 4500)
+    } catch (err: any) {
+      setFeedbackMsg(`Erro ao vincular: ${err.message}`)
+    } finally {
+      setLinkingWorker(false)
+    }
+  }
+
   useEffect(() => {
     if (context?.conversation) {
       setTransferDeptId(context.conversation.department_id || '')
@@ -422,11 +492,14 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
           </div>
         </div>
 
-        {/* 2 Top Action Buttons: Transferir Bloco & Ver Ficha MCS */}
+        {/* 2 Top Action Buttons: Transferir Bloco & Ver Ficha MCS / Vincular Trabalhador */}
         <div className="grid grid-cols-2 gap-2 mt-3">
           <button
             type="button"
-            onClick={() => setShowTransferBox(!showTransferBox)}
+            onClick={() => {
+              setShowTransferBox(!showTransferBox)
+              setShowLinkWorkerBox(false)
+            }}
             className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
               showTransferBox
                 ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
@@ -438,21 +511,104 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
           </button>
 
           {worker?.id ? (
-            <a
-              href={`https://mcs.gestaologinpro.com/workers/${worker.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <span>Ficha MCS</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          ) : (
-            <div className="py-1.5 px-3 bg-slate-50 text-slate-400 border border-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center">
-              Sem Ficha Vinculada
+            <div className="flex items-center gap-1">
+              <a
+                href={`https://mcs.gestaologinpro.com/workers/${worker.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+              >
+                <span>Ficha MCS</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLinkWorkerBox(!showLinkWorkerBox)
+                  setShowTransferBox(false)
+                }}
+                title="Alterar Trabalhador Vinculado"
+                className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+              </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setShowLinkWorkerBox(!showLinkWorkerBox)
+                setShowTransferBox(false)
+              }}
+              className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                showLinkWorkerBox
+                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Vincular Trabalhador</span>
+            </button>
           )}
         </div>
+
+        {/* Inline Box: Vincular Número WhatsApp a um Trabalhador (e atualizar telefone no MCS Personal) */}
+        {showLinkWorkerBox && (
+          <div className="mt-3 p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-2.5 animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                Vincular WhatsApp ao Trabalhador
+              </span>
+            </div>
+
+            <input
+              type="text"
+              value={workerSearchTerm}
+              onChange={(e) => setWorkerSearchTerm(e.target.value)}
+              placeholder="Buscar por Nome, DNI/NIE ou Código..."
+              className="w-full text-xs bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-1.5 focus:outline-none"
+            />
+
+            <label className="flex items-center gap-2 text-[10.5px] font-semibold text-emerald-900 dark:text-emerald-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={updateWorkerPhone}
+                onChange={(e) => setUpdateWorkerPhone(e.target.checked)}
+                className="rounded text-emerald-600"
+              />
+              <span>Salvar este número ({conversation?.contact_phone}) na ficha do trabalhador</span>
+            </label>
+
+            {searchingWorkers && (
+              <p className="text-[11px] text-emerald-700 text-center py-1">Buscando trabalhadores...</p>
+            )}
+
+            {!searchingWorkers && workerSearchResults.length > 0 && (
+              <div className="max-h-44 overflow-y-auto space-y-1 pr-0.5">
+                {workerSearchResults.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    disabled={linkingWorker}
+                    onClick={() => handleLinkConversationToWorker(w)}
+                    className="w-full text-left p-2 rounded-lg bg-white hover:bg-emerald-100/70 border border-emerald-200/80 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{w.nome}</p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {w.contratante || 'MCS'} {w.cliente ? `• 🏗️ ${w.cliente}` : ''} {w.nie || w.dni ? `• ${w.nie || w.dni}` : ''}
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold shrink-0">
+                      Vincular
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Inline Transfer Box (Creates Bloco de Atendimento in Chat) */}
         {showTransferBox && (

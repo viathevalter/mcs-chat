@@ -61,6 +61,38 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       return NextResponse.json({ success: true, warning: "Channel unknown" })
     }
 
+    // 1.2 Auto-sincronizar Token, URL, Telefone e Status "connected" do Canal a partir do próprio Webhook da UazAPI
+    const webhookToken = payload.token || payload.instance?.token || null
+    const webhookBaseUrl = (payload.BaseUrl || payload.baseUrl || channel.api_url || 'https://mcs-chat.uazapi.com').replace(/\/$/, '')
+    const webhookOwnerPhone = payload.owner ? String(payload.owner).replace(/\D/g, '') : null
+
+    if (
+      channel.status !== 'connected' ||
+      (webhookToken && channel.instance_token !== webhookToken) ||
+      (webhookOwnerPhone && !channel.phone_number) ||
+      (instanceName && channel.instance_name !== instanceName)
+    ) {
+      await supabase
+        .from('chat_channels')
+        .update({
+          status: 'connected',
+          instance_name: instanceName || channel.instance_name || channel.name,
+          api_url: webhookBaseUrl,
+          instance_token: webhookToken || channel.instance_token,
+          api_token: webhookToken || channel.api_token,
+          phone_number: webhookOwnerPhone || channel.phone_number,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', channel.id)
+
+      channel.status = 'connected'
+      if (webhookToken) {
+        channel.instance_token = webhookToken
+        channel.api_token = webhookToken
+      }
+      if (webhookBaseUrl) channel.api_url = webhookBaseUrl
+    }
+
     const eventName = (payload.event || payload.EventType || '').toLowerCase()
 
     // 1.5 Atualizar status de conexão se for evento de connection/status

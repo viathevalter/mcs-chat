@@ -4,80 +4,97 @@ import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config"
 
 export async function POST(req: NextRequest) {
   try {
-    const { instanceName, companyId, companyName, channelType, displayLabel, departmentId, aiAgentId, apiUrl, apiToken } = await req.json()
+    const { instanceName, phoneNumber, companyId, companyName, channelType, displayLabel, departmentId, aiAgentId, apiUrl, apiToken } = await req.json()
 
     if (!instanceName) {
       return NextResponse.json({ error: "Nome da instância é obrigatório." }, { status: 400 })
     }
 
-    const UAZ_API_URL = apiUrl || process.env.UAZ_API_URL || "https://uazapi.gestaologinpro.com"
-    const UAZ_GLOBAL_KEY = apiToken || process.env.UAZ_GLOBAL_KEY || process.env.UAZ_ADMIN_TOKEN || ""
+    const cleanInstanceName = instanceName.trim()
+    const UAZ_API_URL = (apiUrl || process.env.UAZ_API_URL || "https://mcs-chat.uazapi.com").replace(/\/$/, '')
+    const providedToken = (apiToken || "").trim()
+    const UAZ_GLOBAL_KEY = process.env.UAZ_GLOBAL_KEY || process.env.UAZ_ADMIN_TOKEN || ""
 
     const supabase = createClient(
       SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY
     )
 
-    // Call UAZAPI to initialize instance
-    const cleanUrl = UAZ_API_URL.replace(/\/$/, '')
-    const uazInitUrl = `${cleanUrl}/instance/init`
-
-    const body = {
-      instanceName: instanceName.trim().replace(/\s+/g, '-').toLowerCase(),
-      token: "",
-      qrcode: true,
-      integration: "WHATSAPP-BAILEYS"
-    }
-
     let qrcodeBase64 = null
-    let instanceToken = null
-    let instanceStatus = "disconnected"
+    let instanceToken: string | null = providedToken || null
+    let instanceStatus = "connected"
+    let detectedPhone: string | null = phoneNumber ? String(phoneNumber).replace(/\D/g, '') : null
 
-    try {
-      const response = await fetch(uazInitUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "admintoken": UAZ_GLOBAL_KEY
-        },
-        body: JSON.stringify(body)
-      })
-
-      if (response.ok) {
-        const uazData = await response.json()
-        qrcodeBase64 = uazData?.qrcode?.base64 || uazData?.base64 || null
-        instanceToken = uazData?.instance?.token || uazData?.token || null
-        instanceStatus = uazData?.instance?.status || "connecting"
+    // 1. Se tivermos o token da instância, verificar status diretamente na UazAPI (/instance/status)
+    if (instanceToken) {
+      try {
+        const stRes = await fetch(`${UAZ_API_URL}/instance/status`, {
+          method: "GET",
+          headers: { token: instanceToken }
+        })
+        if (stRes.ok) {
+          const stData = await stRes.json()
+          const st = stData?.instance?.status || stData?.status
+          if (st) instanceStatus = st === 'open' ? 'connected' : st
+          if (!detectedPhone && stData?.instance?.owner) {
+            detectedPhone = String(stData.instance.owner).replace(/\D/g, '')
+          }
+        }
+      } catch (e: any) {
+        console.warn("Aviso ao checar status da instância na UazAPI:", e.message)
       }
-    } catch (e: any) {
-      console.warn("UAZ API init call error, saving channel in database:", e.message)
+    } else if (UAZ_GLOBAL_KEY) {
+      // 2. Se houver admintoken global configurado, buscar a instância ativa pelo nome em /instance/all
+      try {
+        const allRes = await fetch(`${UAZ_API_URL}/instance/all`, {
+          method: "GET",
+          headers: { admintoken: UAZ_GLOBAL_KEY }
+        })
+        if (allRes.ok) {
+          const list = await allRes.json()
+          if (Array.isArray(list)) {
+            const found = list.find((i: any) => String(i.name || '').toLowerCase() === cleanInstanceName.toLowerCase())
+            if (found) {
+              instanceToken = found.token || null
+              instanceStatus = found.status === 'open' || found.status === 'connected' ? 'connected' : (found.status || 'connected')
+              if (!detectedPhone && found.owner) {
+                detectedPhone = String(found.owner).replace(/\D/g, '')
+              }
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn("Aviso ao consultar /instance/all na UazAPI:", e.message)
+      }
     }
 
     const resolvedChannelType = channelType || 'workers'
     const resolvedDisplayLabel = displayLabel || (
       companyName
         ? `${companyName.toUpperCase()} • ${resolvedChannelType === 'clients' ? 'Clientes' : resolvedChannelType === 'general' ? 'Geral' : 'Trabalhadores'}`
-        : instanceName
+        : cleanInstanceName
     )
 
     // Insert or Update chat_channels
     const { data: channel, error: dbError } = await supabase
       .from('chat_channels')
       .insert({
-        name: instanceName,
+        name: cleanInstanceName,
+        phone_number: detectedPhone,
         company_id: companyId || null,
         company_name: companyName || null,
         channel_type: resolvedChannelType,
         display_label: resolvedDisplayLabel,
         department_id: departmentId || null,
         ai_agent_id: aiAgentId || null,
-        instance_name: instanceName,
+        instance_name: cleanInstanceName,
         instance_token: instanceToken,
         qrcode_base64: qrcodeBase64,
         status: instanceStatus,
         is_active: true,
-        api_url: cleanUrl,
-        api_token: UAZ_GLOBAL_KEY
+        provider: 'uazapi',
+        api_url: UAZ_API_URL,
+        api_token: instanceToken || UAZ_GLOBAL_KEY || null
       })
       .select('*')
       .single()

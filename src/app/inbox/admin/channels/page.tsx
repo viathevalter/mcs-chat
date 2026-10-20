@@ -78,7 +78,8 @@ export default function ChannelsAdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName: name,
+          instanceName: name.trim(),
+          phoneNumber: phone.trim() || undefined,
           companyId: companyId || null,
           companyName: compName,
           channelType,
@@ -125,17 +126,24 @@ export default function ChannelsAdminPage() {
         ? (selectedCompany.trade_name || selectedCompany.nome)
         : (editingChannel.company_name || null)
 
+      const cleanName = (editingChannel.name || '').trim()
+      const cleanToken = (editingChannel.api_token || editingChannel.instance_token || '').trim() || null
+
       const { error } = await supabase
         .from('chat_channels')
         .update({
-          name: editingChannel.name,
+          name: cleanName,
+          instance_name: cleanName,
           display_label: editingChannel.display_label || null,
           channel_type: editingChannel.channel_type || 'workers',
-          phone_number: editingChannel.phone_number || null,
+          phone_number: editingChannel.phone_number ? String(editingChannel.phone_number).replace(/\D/g, '') : null,
           company_id: editingChannel.company_id || null,
           company_name: companyName,
           department_id: editingChannel.department_id || null,
           ai_agent_id: editingChannel.ai_agent_id || null,
+          api_token: cleanToken,
+          instance_token: cleanToken,
+          status: editingChannel.status || 'connected',
           auto_reject_calls: editingChannel.auto_reject_calls ?? false,
           updated_at: new Date().toISOString()
         })
@@ -449,20 +457,33 @@ export default function ChannelsAdminPage() {
                      </div>
                   </div>
 
-                  <div>
-                     <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">🤖 Agente de IA para Triagem Automática</label>
-                     <select
-                       value={editingChannel.ai_agent_id || ''}
-                       onChange={e => setEditingChannel({ ...editingChannel, ai_agent_id: e.target.value })}
-                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
-                     >
-                       <option value="">Nenhum (Apenas Atendentes Humanos)</option>
-                       {agents.map(ag => (
-                         <option key={ag.id} value={ag.id}>
-                           {ag.name}
-                         </option>
-                       ))}
-                     </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                     <div>
+                        <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">🤖 Agente de IA para Triagem Automática</label>
+                        <select
+                          value={editingChannel.ai_agent_id || ''}
+                          onChange={e => setEditingChannel({ ...editingChannel, ai_agent_id: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                        >
+                          <option value="">Nenhum (Apenas Atendentes Humanos)</option>
+                          {agents.map(ag => (
+                            <option key={ag.id} value={ag.id}>
+                              {ag.name}
+                            </option>
+                          ))}
+                        </select>
+                     </div>
+
+                     <div>
+                        <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">🔑 Token da Instância (UazAPI)</label>
+                        <input
+                          type="text"
+                          value={editingChannel.api_token || editingChannel.instance_token || ''}
+                          onChange={e => setEditingChannel({ ...editingChannel, api_token: e.target.value, instance_token: e.target.value })}
+                          placeholder="Capturado via Webhook ou cole aqui"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-[11px]"
+                        />
+                     </div>
                   </div>
 
                   <div className="pt-2">
@@ -634,15 +655,37 @@ export default function ChannelsAdminPage() {
              Adicionar Novo Canal de WhatsApp
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
              <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Nome da Instância</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Nome da Instância (UazAPI)</label>
                 <input
                   type="text"
-                  placeholder="Ex: stoccotrabajadores"
+                  placeholder="Ex: oldstoccotrabajadores"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
+                />
+             </div>
+
+             <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Número WhatsApp</label>
+                <input
+                  type="text"
+                  placeholder="Ex: 34685818604"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
+                />
+             </div>
+
+             <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">Token da Instância (Opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Token na UazAPI..."
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
                 />
              </div>
 
@@ -695,7 +738,7 @@ export default function ChannelsAdminPage() {
                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
              >
                <Plus className="w-4 h-4" />
-               {isCreating ? 'Provisionando na UazAPI...' : 'Conectar Canal WhatsApp'}
+               {isCreating ? 'Vinculando Instância...' : 'Vincular Instância Ativa da UazAPI'}
              </button>
           </div>
        </div>

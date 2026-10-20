@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     // Get conversation details to send via WhatsApp
     const { data: conv, error: convError } = await supabase
       .from('chat_conversations')
-      .select('*, channel:chat_channels(name, api_url, api_token, provider)')
+      .select('*, channel:chat_channels(name, instance_name, api_url, api_token, instance_token, provider)')
       .eq('id', conversationId)
       .single()
 
@@ -29,10 +29,10 @@ export async function POST(req: Request) {
        try {
          const fetchedAvatar = await evolutionApi.fetchProfilePictureUrl({
             number: conv.contact_phone + '@s.whatsapp.net',
-            instanceName: conv.channel.name,
-            apiUrl: conv.channel.api_url,
-            apiToken: conv.channel.api_token,
-            provider: conv.channel.provider
+            instanceName: conv.channel.instance_name || conv.channel.name,
+            apiUrl: conv.channel.api_url || 'https://mcs-chat.uazapi.com',
+            apiToken: conv.channel.instance_token || conv.channel.api_token,
+            provider: conv.channel.provider || 'uazapi'
          });
          if (fetchedAvatar) {
             newlyFetchedAvatar = fetchedAvatar;
@@ -43,10 +43,10 @@ export async function POST(req: Request) {
     // Only hit UAZ API if it's not an internal note or system_block
     if (!isInternalNote) {
       const channelData = conv.channel as any
-      const instanceName = channelData?.name
-      const apiUrl = channelData?.api_url
-      const apiToken = channelData?.api_token
-      const provider = channelData?.provider || 'evolution'
+      const instanceName = channelData?.instance_name || channelData?.name
+      const apiUrl = channelData?.api_url || 'https://mcs-chat.uazapi.com'
+      const apiToken = channelData?.instance_token || channelData?.api_token
+      const provider = channelData?.provider || 'uazapi'
 
       if (!apiUrl || !apiToken || !instanceName) {
         throw new Error('Channel API credentials (URL or Token) are missing in the database.')
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
           provider
         })
       } else {
-        // Send via Evolution API (Dynamic Multi-Tenant)
+        // Send via UazAPI / Evolution API (Dynamic Multi-Tenant)
         await evolutionApi.sendText({
           number: cleanedPhone,
           text,
@@ -109,7 +109,8 @@ export async function POST(req: Request) {
     // Update the conversation's last_message_at so the sidebar instantly re-renders via Realtime
     const updatePayload: any = {
       last_message_at: new Date().toISOString(),
-      last_message_text: messageType === 'audio' ? '🎵 Áudio' : text
+      last_message_text: messageType === 'audio' ? '🎵 Áudio' : text,
+      last_message_preview: messageType === 'audio' ? '🎵 Áudio' : text.slice(0, 140)
     };
     if (newlyFetchedAvatar) updatePayload.contact_avatar_url = newlyFetchedAvatar;
 

@@ -154,9 +154,26 @@ export async function POST(req: NextRequest) {
       return { allItems, totalStats }
     }
 
-    // 4. Ação: Preview / Diagnóstico Organizado antes de importar
+    // 4. Ação: Preview / Diagnóstico Organizado antes de importar (1 única chamada RPC batch!)
     if (action === 'preview_channel') {
       const { allItems, totalStats } = await fetchAllIndividualChatsFromUaz()
+
+      const parsedItems = allItems
+        .map((item: any) => {
+          const jid = item.wa_chatid || item.id || item.remoteJid || ''
+          const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '')
+          const rawTs = Number(item.wa_lastMsgTimestamp || 0)
+          const tsMs = rawTs > 0 ? (rawTs < 1e12 ? rawTs * 1000 : rawTs) : 0
+          return { item, cleanPhone, tsMs }
+        })
+        .filter((x: any) => x.cleanPhone.length >= 8)
+
+      const allPhones = Array.from(new Set(parsedItems.map((x: any) => x.cleanPhone)))
+      const { data: batchMatches } = await supabase.rpc('match_workers_batch_by_phones', {
+        p_phones: allPhones,
+        p_company_name: channel.company_name || null
+      })
+      const matchMap: Record<string, any> = batchMatches || {}
 
       let matchedWorkersCount = 0
       let unmatchedCount = 0
@@ -165,23 +182,13 @@ export async function POST(req: NextRequest) {
       const sampleMatched: any[] = []
       const sampleUnmatched: any[] = []
 
-      for (const item of allItems) {
-        const jid = item.wa_chatid || item.id || item.remoteJid || ''
-        const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '')
-        if (cleanPhone.length < 8) continue
-
-        const rawTs = Number(item.wa_lastMsgTimestamp || 0)
-        const tsMs = rawTs > 0 ? (rawTs < 1e12 ? rawTs * 1000 : rawTs) : 0
+      for (const { item, cleanPhone, tsMs } of parsedItems) {
         if (tsMs >= thirtyDaysAgo) recent30dCount++
 
-        const { data: matchData } = await supabase.rpc('match_worker_by_phone', {
-          p_raw_phone: cleanPhone,
-          p_company_name: channel.company_name || null
-        })
-
+        const matchData = matchMap[cleanPhone]
         if (matchData && matchData.matched) {
           matchedWorkersCount++
-          if (sampleMatched.length < 25) {
+          if (sampleMatched.length < 30) {
             sampleMatched.push({
               phone: cleanPhone,
               waName: item.name || item.wa_name || '',
@@ -207,7 +214,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         channelName: channel.display_label || channel.name,
-        totalIndividualChats: allItems.length,
+        totalIndividualChats: parsedItems.length,
         totalGroupsIgnored: totalStats?.group_chats?.total || 0,
         matchedWorkersCount,
         unmatchedCount,
@@ -217,39 +224,52 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 5. Ação: Importar Conversas da UazAPI de forma organizada + Histórico de Mensagens
+    // 5. Ação: Importar Conversas da UazAPI de forma organizada + Histórico de Mensagens (em lote rápido!)
     if (action === 'sync_channel') {
       const { allItems } = await fetchAllIndividualChatsFromUaz()
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+
+      const parsedItems = allItems
+        .map((item: any) => {
+          const jid = item.wa_chatid || item.id || item.remoteJid || item.jid || ''
+          const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '')
+          const rawTs = Number(item.wa_lastMsgTimestamp || 0)
+          const tsMs = rawTs > 0 ? (rawTs < 1e12 ? rawTs * 1000 : rawTs) : Date.now()
+          return { item, cleanPhone, rawTs, tsMs }
+        })
+        .filter((x: any) => x.cleanPhone.length >= 8)
+
+      const allPhones = Array.from(new Set(parsedItems.map((x: any) => x.cleanPhone)))
+      const { data: batchMatches } = await supabase.rpc('match_workers_batch_by_phones', {
+        p_phones: allPhones,
+        p_company_name: channel.company_name || null
+      })
+      const matchMap: Record<string, any> = batchMatches || {}
+
+      // Carregar conversas existentes deste canal de uma só vez
+      const { data: existingConvs } = await supabase
+        .from('chat_conversations')
+        .select('id, contact_phone, worker_id')
+        .eq('channel_id', channel.id)
+
+      const existingByPhone = new Map<string, any>()
+      for (const ec of existingConvs || []) {
+        existingByPhone.set(ec.contact_phone, ec)
+      }
 
       let importedCount = 0
       let updatedCount = 0
       let matchedWorkersCount = 0
       let importedMessagesCount = 0
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
 
-      for (const item of allItems) {
-        const jid = item.wa_chatid || item.id || item.remoteJid || item.jid || ''
-        if (!jid || jid.includes('@g.us') || jid.includes('broadcast')) continue
-
-        const cleanPhone = jid.replace(/@.*$/, '').replace(/\D/g, '')
-        if (cleanPhone.length < 8) continue
-
-        const rawTs = Number(item.wa_lastMsgTimestamp || 0)
-        const tsMs = rawTs > 0 ? (rawTs < 1e12 ? rawTs * 1000 : rawTs) : Date.now()
-
+      for (const { item, cleanPhone, rawTs, tsMs } of parsedItems) {
         if (filterMode === 'recent_30d' && tsMs < thirtyDaysAgo) {
           continue
         }
 
-        // Cruzar com core_personal.workers via RPC match_worker_by_phone
-        const { data: matchData } = await supabase.rpc('match_worker_by_phone', {
-          p_raw_phone: cleanPhone,
-          p_company_name: channel.company_name || null
-        })
-
+        const matchData = matchMap[cleanPhone]
         const isMatched = Boolean(matchData && matchData.matched)
 
-        // Se o modo for 'matched_only', importa apenas quem já é Trabalhador identificado no MCS!
         if (filterMode === 'matched_only' && !isMatched) {
           continue
         }
@@ -274,13 +294,7 @@ export async function POST(req: NextRequest) {
         const lastTs = new Date(tsMs).toISOString()
         const previewText = (item.wa_lastMessageTextVote || item.lastMessage || 'Conversa sincronizada').slice(0, 140)
 
-        const { data: existingConv } = await supabase
-          .from('chat_conversations')
-          .select('id, worker_id')
-          .eq('channel_id', channel.id)
-          .eq('contact_phone', cleanPhone)
-          .maybeSingle()
-
+        const existingConv = existingByPhone.get(cleanPhone)
         let targetConvId: string | null = null
 
         if (existingConv) {
@@ -326,17 +340,12 @@ export async function POST(req: NextRequest) {
             .single()
 
           targetConvId = insertedConv?.id || null
+          if (targetConvId) {
+            existingByPhone.set(cleanPhone, { id: targetConvId, contact_phone: cleanPhone })
+          }
           importedCount++
-        }
 
-        // Se a conversa tem última mensagem gravada na UazAPI e ainda não tem mensagens no banco, cria o registro da última mensagem para o chat não abrir em branco
-        if (targetConvId && importMessages && item.wa_lastMessageTextVote) {
-          const { count } = await supabase
-            .from('chat_messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('conversation_id', targetConvId)
-
-          if (!count || count === 0) {
+          if (targetConvId && importMessages && item.wa_lastMessageTextVote) {
             await supabase.from('chat_messages').insert({
               conversation_id: targetConvId,
               direction: 'inbound',
@@ -359,7 +368,7 @@ export async function POST(req: NextRequest) {
         updatedCount,
         matchedWorkersCount,
         importedMessagesCount,
-        totalScanned: allItems.length,
+        totalScanned: parsedItems.length,
         message: `Importação concluída: ${importedCount} nova(s) conversa(s) criada(s), ${updatedCount} atualizada(s) e ${matchedWorkersCount} trabalhador(es) vinculado(s) automaticamente!`
       })
     }

@@ -11,7 +11,104 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { action, channelId, tokenOverride, filterMode = 'matched_only', importMessages = true } = body
+    const { action, channelId, conversationId, tokenOverride, filterMode = 'matched_only', importMessages = true } = body
+
+    // 0. Ação: Sincronizar o histórico de diálogos (WhatsApp Web + Recebidas) de uma conversa específica ao abrir o chat
+    if (action === 'sync_conversation_messages' && conversationId) {
+      const { data: conv } = await supabase
+        .from('chat_conversations')
+        .select('id, channel_id, contact_phone, contact_name, channel:chat_channels(api_url, instance_token, api_token)')
+        .eq('id', conversationId)
+        .maybeSingle()
+
+      const ch: any = conv?.channel
+      const tk = (ch?.instance_token || ch?.api_token || '').trim()
+      const baseUrl = (ch?.api_url || 'https://mcs-chat.uazapi.com').replace(/\/$/, '')
+
+      if (!conv || !tk || !conv.contact_phone) {
+        return NextResponse.json({ success: false, imported: 0 })
+      }
+
+      const cleanPhone = conv.contact_phone.replace(/\D/g, '')
+      const mr = await fetch(`${baseUrl}/message/find`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: tk },
+        body: JSON.stringify({
+          chatid: `${cleanPhone}@s.whatsapp.net`,
+          limit: 60
+        })
+      })
+
+      if (!mr.ok) {
+        return NextResponse.json({ success: false, imported: 0 })
+      }
+
+      const md = await mr.json().catch(() => ({}))
+      const uazMsgs: any[] = Array.isArray(md?.messages) ? md.messages : []
+      if (uazMsgs.length === 0) {
+        return NextResponse.json({ success: true, imported: 0 })
+      }
+
+      const { data: existingMsgs } = await supabase
+        .from('chat_messages')
+        .select('external_id')
+        .eq('conversation_id', conversationId)
+
+      const existingExtIds = new Set((existingMsgs || []).map((m: any) => m.external_id).filter(Boolean))
+      const toInsert: any[] = []
+
+      for (const m of uazMsgs) {
+        if (m.messageType === 'ReactionMessage') continue
+        const extId = m.id || m.messageid
+        if (!extId || existingExtIds.has(extId)) continue
+
+        const rawText =
+          typeof m.text === 'string' && m.text.trim()
+            ? m.text
+            : typeof m.content === 'string' && m.content.trim()
+            ? m.content
+            : m.content?.text || m.content?.caption || (m.fileURL ? `[${m.messageType || 'Mídia'}]` : '')
+
+        if (!rawText && !m.fileURL) continue
+
+        const rawType = String(m.messageType || '').toLowerCase()
+        let msgType = 'text'
+        if (rawType.includes('audio') || rawType.includes('ptt')) msgType = 'audio'
+        else if (rawType.includes('image')) msgType = 'image'
+        else if (rawType.includes('video')) msgType = 'video'
+        else if (rawType.includes('document')) msgType = 'document'
+
+        const tsMs = Number(m.messageTimestamp || 0) > 0
+          ? (Number(m.messageTimestamp) < 1e12 ? Number(m.messageTimestamp) * 1000 : Number(m.messageTimestamp))
+          : Date.now()
+
+        toInsert.push({
+          conversation_id: conversationId,
+          direction: m.fromMe ? 'outbound' : 'inbound',
+          message_type: msgType,
+          content: rawText || '[Mídia]',
+          media_url: m.fileURL || null,
+          status: 'delivered',
+          external_id: extId,
+          sender_name: m.fromMe ? 'WhatsApp Web / Equipe' : (conv.contact_name || m.senderName || cleanPhone),
+          created_at: new Date(tsMs).toISOString(),
+          is_private: false
+        })
+        existingExtIds.add(extId)
+      }
+
+      if (toInsert.length > 0) {
+        await supabase.from('chat_messages').insert(toInsert)
+        // Remover mensagem sintética 'sync_...' se agora temos o histórico real
+        await supabase
+          .from('chat_messages')
+          .delete()
+          .eq('conversation_id', conversationId)
+          .like('external_id', 'sync_%')
+      }
+
+      return NextResponse.json({ success: true, imported: toInsert.length })
+    }
 
     // 1. Ação: Zerar todas as conversas e mensagens
     if (action === 'clear_all_conversations') {
@@ -237,7 +334,7 @@ export async function POST(req: NextRequest) {
           const tsMs = rawTs > 0 ? (rawTs < 1e12 ? rawTs * 1000 : rawTs) : Date.now()
           return { item, cleanPhone, rawTs, tsMs }
         })
-        .filter((x: any) => x.cleanPhone.length >= 8)
+        .filter((x: any) => x.cleanPhone.length >= 8 && (x.rawTs > 0 || Boolean(x.item.wa_lastMessageTextVote)))
 
       const allPhones = Array.from(new Set(parsedItems.map((x: any) => x.cleanPhone)))
       const { data: batchMatches } = await supabase.rpc('match_workers_batch_by_phones', {

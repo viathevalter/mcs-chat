@@ -54,7 +54,21 @@ export function useChat(conversationId: string) {
       }
     })
 
-    fetchMessages()
+    fetchMessages().then(() => {
+      // Sincronizar automaticamente diálogos do WhatsApp Web / UazAPI ao abrir a conversa
+      fetch('/api/channels/uazapi/sync-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_conversation_messages', conversationId })
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d?.imported > 0) {
+            fetchMessages()
+          }
+        })
+        .catch(() => {})
+    })
 
     // Auto mark as read
     supabase.from('chat_conversations').update({ unread_count: 0 }).eq('id', conversationId).then()

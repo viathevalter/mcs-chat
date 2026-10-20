@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 export interface Message {
@@ -10,11 +10,18 @@ export interface Message {
   media_url?: string
   message_type: string
   status: string
+  external_id?: string | null
   created_at: string
   sender_name?: string
   sender_department?: string | null
   sender_user_id?: string | null
   translations?: Record<string, string>
+}
+
+function notifyInboxUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('mcs-chat-updated'))
+  }
 }
 
 export function useChat(conversationId: string) {
@@ -23,6 +30,18 @@ export function useChat(conversationId: string) {
   const [senderName, setSenderName] = useState<string>('Atendente')
   const [senderDept, setSenderDept] = useState<string>('')
   const [senderUserId, setSenderUserId] = useState<string | null>(null)
+
+  const fetchMessages = useCallback(async () => {
+    if (!conversationId) return
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+
+    if (data) setMessages(data)
+    setLoading(false)
+  }, [conversationId])
 
   useEffect(() => {
     if (!conversationId) return
@@ -66,12 +85,17 @@ export function useChat(conversationId: string) {
           if (d?.imported > 0) {
             fetchMessages()
           }
+          notifyInboxUpdated()
         })
         .catch(() => {})
     })
 
     // Auto mark as read
-    supabase.from('chat_conversations').update({ unread_count: 0 }).eq('id', conversationId).then()
+    supabase
+      .from('chat_conversations')
+      .update({ unread_count: 0 })
+      .eq('id', conversationId)
+      .then(() => notifyInboxUpdated())
 
     const subscription = supabase
       .channel(`chat_room_${conversationId}`)
@@ -90,29 +114,28 @@ export function useChat(conversationId: string) {
                 if (prev.some((m) => m.id === newMessage.id)) return prev
                 return [...prev, newMessage]
               })
+              notifyInboxUpdated()
             } else if (payload.eventType === 'UPDATE') {
               setMessages((prev) => prev.map((m) => (m.id === newMessage.id ? newMessage : m)))
+              notifyInboxUpdated()
             }
           }
         }
       )
       .subscribe()
 
+    // Silent poll inside active chat every 4s for guaranteed live delivery
+    const pollTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchMessages()
+      }
+    }, 4000)
+
     return () => {
       supabase.removeChannel(subscription)
+      clearInterval(pollTimer)
     }
-  }, [conversationId])
-
-  const fetchMessages = async () => {
-    const { data } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-
-    if (data) setMessages(data)
-    setLoading(false)
-  }
+  }, [conversationId, fetchMessages])
 
   const sendMessage = async (
     text: string,
@@ -149,7 +172,7 @@ export function useChat(conversationId: string) {
     setMessages((prev) => [...prev, optimisticMessage])
 
     try {
-      await fetch('/api/chat/send', {
+      const res = await fetch('/api/chat/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -164,21 +187,41 @@ export function useChat(conversationId: string) {
           senderUserId: effectiveUserId,
         }),
       })
+      const resData = await res.json().catch(() => ({}))
 
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === optId
-            ? { ...msg, status: messageType === 'internal_note' || messageType === 'system_block' ? 'delivered' : 'sent' }
+            ? resData?.message || {
+                ...msg,
+                status: messageType === 'internal_note' || messageType === 'system_block' ? 'delivered' : 'sent'
+              }
             : msg
         )
       )
 
       await fetchMessages()
+      notifyInboxUpdated()
     } catch (err) {
       console.error('Error sending message:', err)
       setMessages((prev) => prev.filter((msg) => msg.id !== optId))
     }
   }
 
-  return { messages, loading, sendMessage, senderName, senderDept, senderUserId }
+  const editMessage = async (messageId: string, newText: string) => {
+    if (!newText.trim()) return false
+    const res = await fetch('/api/chat/edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId, newText })
+    })
+    if (res.ok) {
+      await fetchMessages()
+      notifyInboxUpdated()
+      return true
+    }
+    return false
+  }
+
+  return { messages, loading, sendMessage, editMessage, refetchMessages: fetchMessages, senderName, senderDept, senderUserId }
 }

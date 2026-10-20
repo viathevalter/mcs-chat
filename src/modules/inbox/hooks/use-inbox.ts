@@ -10,6 +10,10 @@ export interface Conversation {
   unread_count: number
   last_message_at: string
   last_message_text?: string | null
+  last_message_preview?: string | null
+  last_message_direction?: 'inbound' | 'outbound' | string | null
+  lastMessage?: string
+  lastMessageDirection?: 'inbound' | 'outbound' | string | null
   channel_id: string
   department_id?: string | null
   bot_status?: string
@@ -45,6 +49,50 @@ export interface ChatChannelInfo {
   is_active?: boolean
 }
 
+function resolveReadablePreview(conv: any): { lastMessage: string; lastMessageDirection: 'inbound' | 'outbound' } {
+  const msgs = Array.isArray(conv.chat_messages) ? conv.chat_messages : []
+  const latestMsg = msgs.find(
+    (m: any) => m.message_type !== 'system_block' && m.message_type !== 'internal_note' && m.message_type !== 'private_note'
+  ) || msgs[0]
+
+  let preview = ''
+  let direction: 'inbound' | 'outbound' =
+    (conv.last_message_direction === 'outbound' ? 'outbound' : 'inbound')
+
+  if (latestMsg) {
+    direction = latestMsg.direction === 'outbound' ? 'outbound' : 'inbound'
+    const mType = String(latestMsg.message_type || '').toLowerCase()
+    const rawContent = String(latestMsg.content || '').trim()
+    const isRawPlaceholder =
+      !rawContent ||
+      rawContent.startsWith('[') ||
+      rawContent.startsWith('http') ||
+      rawContent.startsWith('data:') ||
+      rawContent.startsWith('{"URL"')
+
+    if (mType === 'image') preview = isRawPlaceholder ? '📷 Foto' : `📷 ${rawContent}`
+    else if (mType === 'audio' || mType === 'ptt') preview = isRawPlaceholder ? '🎵 Áudio' : rawContent
+    else if (mType === 'video') preview = isRawPlaceholder ? '🎥 Vídeo' : `🎥 ${rawContent}`
+    else if (mType === 'document') preview = isRawPlaceholder ? '📄 Documento' : `📄 ${rawContent}`
+    else if (mType === 'sticker') preview = '🏷️ Figurinha'
+    else preview = rawContent
+  }
+
+  if (!preview) {
+    const dbText = String(conv.last_message_text || conv.last_message_preview || '').trim()
+    if (dbText === '[IMAGE]' || dbText === '[image]') preview = '📷 Foto'
+    else if (dbText === '[AUDIO]' || dbText === '[audio]' || dbText === '[Mensagem de Voz]') preview = '🎵 Áudio'
+    else if (dbText === '[VIDEO]' || dbText === '[video]') preview = '🎥 Vídeo'
+    else if (dbText === '[DOCUMENT]' || dbText === '[document]') preview = '📄 Documento'
+    else preview = dbText
+  }
+
+  return {
+    lastMessage: preview || 'Conversa iniciada',
+    lastMessageDirection: direction
+  }
+}
+
 export function useInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([])
@@ -73,11 +121,17 @@ export function useInbox() {
 
       let query = supabase
         .from('chat_conversations')
-        .select('*, channel:chat_channels(id, name, provider, company_name, channel_type, display_label, phone_number), department:mcs_departments(id, name)')
+        .select(`
+          *,
+          channel:chat_channels(id, name, provider, company_name, channel_type, display_label, phone_number),
+          department:mcs_departments(id, name),
+          chat_messages(content, created_at, direction, message_type, sender_name)
+        `)
         .order('last_message_at', { ascending: false })
+        .order('created_at', { foreignTable: 'chat_messages', ascending: false })
+        .limit(1, { foreignTable: 'chat_messages' })
         .limit(250)
 
-      // Strict department visibility only if user is restricted and not searching
       if (!isAdmin && visibilityMode === 'strict_department') {
         if (allowedChannels.length > 0) {
           query = query.in('channel_id', allowedChannels)
@@ -90,7 +144,15 @@ export function useInbox() {
       const { data, error } = await query
 
       if (data && !error) {
-        setConversations(data)
+        const enriched = data.map((conv: any) => {
+          const { lastMessage, lastMessageDirection } = resolveReadablePreview(conv)
+          return {
+            ...conv,
+            lastMessage,
+            lastMessageDirection
+          }
+        })
+        setConversations(enriched)
       } else {
         const { data: fallbackData } = await supabase
           .from('chat_conversations')
@@ -98,7 +160,14 @@ export function useInbox() {
           .order('last_message_at', { ascending: false })
           .limit(250)
 
-        if (fallbackData) setConversations(fallbackData)
+        if (fallbackData) {
+          setConversations(
+            fallbackData.map((conv: any) => {
+              const { lastMessage, lastMessageDirection } = resolveReadablePreview(conv)
+              return { ...conv, lastMessage, lastMessageDirection }
+            })
+          )
+        }
       }
     } catch (err) {
       console.error('Error fetching conversations:', err)
@@ -173,18 +242,65 @@ export function useInbox() {
       fetchConversationsList()
     })
 
+    // 1. Assinatura Realtime Instantânea do Supabase (chat_conversations e chat_messages)
     const convChannel = supabase
-      .channel('realtime_inbox_conversations')
+      .channel('realtime_inbox_conversations_v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' }, () => {
         fetchConversationsList()
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
         fetchConversationsList()
       })
       .subscribe()
 
+    // 2. Evento local instantâneo disparado pelo painel ao enviar/editar/apagar/ler mensagem (0ms)
+    const handleLocalUpdate = () => {
+      fetchConversationsList()
+    }
+    window.addEventListener('mcs-chat-updated', handleLocalUpdate)
+
+    // 3. Atualização automática ao voltar para a aba / foco da janela
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchConversationsList()
+      }
+    }
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+
+    // 4. Refresh silencioso de segurança a cada 6s + Delta-Poll UazAPI a cada 18s para garantir fila 100% viva
+    const dbPollTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchConversationsList()
+      }
+    }, 6000)
+
+    const uazPollTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetch('/api/channels/uazapi/live-poll', { method: 'POST' })
+          .then(r => r.json())
+          .then(d => {
+            if (d?.updated > 0) fetchConversationsList()
+          })
+          .catch(() => {})
+      }
+    }, 18000)
+
+    // Executa 1 delta-poll inicial ao abrir o Inbox
+    fetch('/api/channels/uazapi/live-poll', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        if (d?.updated > 0) fetchConversationsList()
+      })
+      .catch(() => {})
+
     return () => {
       supabase.removeChannel(convChannel)
+      window.removeEventListener('mcs-chat-updated', handleLocalUpdate)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      clearInterval(dbPollTimer)
+      clearInterval(uazPollTimer)
     }
   }, [fetchConversationsList, loadUserPermissions])
 

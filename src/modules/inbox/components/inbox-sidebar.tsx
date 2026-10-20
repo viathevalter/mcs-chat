@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Search, Plus, User, Bot, BotOff, Building2, Briefcase, UserCheck, Star, Calendar } from 'lucide-react'
+import { Search, Plus, Bot, BotOff, Star, Calendar } from 'lucide-react'
 import { useInbox } from '../hooks/use-inbox'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -12,14 +12,32 @@ import { supabase } from '@/lib/supabase/client'
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
+function formatPhoneDisplay(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  const clean = rawPhone.replace(/\D/g, '')
+  if (!clean) return rawPhone
+  if (clean.startsWith('34') && clean.length === 11) {
+    return `+34 ${clean.slice(2, 5)} ${clean.slice(5, 7)} ${clean.slice(7, 9)} ${clean.slice(9, 11)}`
+  }
+  if (clean.startsWith('351') && clean.length === 12) {
+    return `+351 ${clean.slice(3, 6)} ${clean.slice(6, 9)} ${clean.slice(9, 12)}`
+  }
+  if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
+    const ddd = clean.slice(2, 4)
+    const rest = clean.slice(4)
+    return `+55 (${ddd}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`
+  }
+  return `+${clean}`
+}
+
 export default function InboxSidebar() {
   const { t } = useI18n()
   const router = useRouter()
-  const { 
-    conversations, 
-    departments, 
+  const {
+    conversations,
+    departments,
     channels,
-    loading, 
+    loading,
     currentUserId,
     currentUserDepartmentId,
     selectedDepartmentFilter,
@@ -29,7 +47,7 @@ export default function InboxSidebar() {
   const params = useParams()
   const activeId = params?.id as string
   const [isModalOpen, setIsModalOpen] = useState(false)
-  
+
   const [activeFilter, setActiveFilter] = useState<FilterType>('abertas')
   const [audienceFilter, setAudienceFilter] = useState<'all' | 'workers' | 'clients' | 'general'>('all')
   const [companyFilter, setCompanyFilter] = useState<string>('all')
@@ -139,7 +157,6 @@ export default function InboxSidebar() {
     let fechadas = 0
 
     conversations.forEach(conv => {
-      // Respect current audience / company / channel filter in tab badges
       if (audienceFilter !== 'all' && resolveConvAudience(conv) !== audienceFilter) return
       if (companyFilter !== 'all') {
         const comp = (conv.worker_company_name || conv.channel?.company_name || '').toUpperCase()
@@ -165,7 +182,7 @@ export default function InboxSidebar() {
   }, [conversations, currentUserId, currentUserDepartmentId, audienceFilter, companyFilter, channelIdFilter])
 
   const filteredConversations = useMemo(() => {
-    return conversations.filter(conv => {
+    const list = conversations.filter(conv => {
       // 1. Audience Filter (Trabalhadores vs Clientes vs Geral)
       if (audienceFilter !== 'all') {
         if (resolveConvAudience(conv) !== audienceFilter) return false
@@ -197,17 +214,21 @@ export default function InboxSidebar() {
       if (clientFilter !== 'all') {
         if ((conv.worker_client_name || '').trim() !== clientFilter) return false
       }
-      
-      // 6. Search Filter (Name, Phone, Company, Client, Function, Channel)
+
+      // 6. Search Filter (Name, Phone, Last Message, Company, Client, Function, Channel)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
+        const cleanQuery = query.replace(/\D/g, '')
         const matchName = conv.contact_name?.toLowerCase().includes(query)
-        const matchPhone = conv.contact_phone?.toLowerCase().includes(query)
+        const matchPhone =
+          conv.contact_phone?.toLowerCase().includes(query) ||
+          (cleanQuery.length >= 3 && conv.contact_phone?.replace(/\D/g, '').includes(cleanQuery))
+        const matchMsg = (conv.lastMessage || conv.last_message_text || conv.last_message_preview || '').toLowerCase().includes(query)
         const matchCompany = (conv.worker_company_name || conv.channel?.company_name || '').toLowerCase().includes(query)
         const matchClient = (conv.worker_client_name || '').toLowerCase().includes(query)
         const matchFunc = (conv.worker_function_name || '').toLowerCase().includes(query)
         const matchChannel = (conv.channel?.display_label || conv.channel?.name || '').toLowerCase().includes(query)
-        if (!matchName && !matchPhone && !matchCompany && !matchClient && !matchFunc && !matchChannel) return false
+        if (!matchName && !matchPhone && !matchMsg && !matchCompany && !matchClient && !matchFunc && !matchChannel) return false
         return true
       }
 
@@ -229,8 +250,15 @@ export default function InboxSidebar() {
       if (activeFilter === 'fechadas') {
         return isClosed
       }
-      
+
       return true
+    })
+
+    // Sempre ordenar pela mensagem mais recente no topo (subindo conversas vivas automaticamente!)
+    return [...list].sort((a, b) => {
+      const tA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+      const tB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+      return tB - tA
     })
   }, [conversations, audienceFilter, channelIdFilter, selectedDepartmentFilter, companyFilter, clientFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
 
@@ -288,7 +316,7 @@ export default function InboxSidebar() {
 
   return (
     <>
-      <aside className="w-[385px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors select-none">
+      <aside className="w-[395px] flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col h-full z-40 transition-colors select-none">
         {/* Header estilo CRM */}
         <div className="h-14 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
           <h1 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2 tracking-tight">
@@ -296,6 +324,10 @@ export default function InboxSidebar() {
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
               {filteredConversations.length}
             </span>
+            <span
+              className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+              title="Fila em Tempo Real Ativa (Live)"
+            />
           </h1>
           <div className="flex items-center gap-1.5">
             <Link
@@ -324,7 +356,7 @@ export default function InboxSidebar() {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar trabalhador, cliente/obra, empresa ou tel..."
+              placeholder="Buscar mensagens, trabalhador, cliente ou tel..."
               className="w-full pl-8 pr-7 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-800 dark:text-slate-100 font-medium"
             />
             {searchQuery && (
@@ -501,6 +533,11 @@ export default function InboxSidebar() {
             >
               <Star className="w-3 h-3 fill-current" />
               <span>Fav</span>
+              {tabCounts.favoritos > 0 && (
+                <span className={`px-1 rounded text-[10px] ${activeFilter === 'favoritos' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>
+                  {tabCounts.favoritos}
+                </span>
+              )}
             </button>
 
             <button
@@ -577,7 +614,7 @@ export default function InboxSidebar() {
           </div>
         )}
 
-        {/* Lista de Conversas */}
+        {/* Lista de Conversas (Padrão Evoluído CRM IPTV) */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
           {loading ? (
             <div className="p-8 text-center text-xs text-slate-400">
@@ -591,27 +628,30 @@ export default function InboxSidebar() {
           ) : (
             filteredConversations.map(conv => {
               const isSelected = activeId === conv.id
-              const formattedTime = conv.last_message_at 
+              const formattedTime = conv.last_message_at
                 ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })
                 : ''
               const companyBadge = conv.worker_company_name || conv.channel?.company_name
               const clientBadge = conv.worker_client_name
               const convAudience = resolveConvAudience(conv)
               const channelLabel = conv.channel?.display_label || conv.channel?.name
+              const readableLastMsg = conv.lastMessage || conv.last_message_text || conv.last_message_preview || 'Conversa iniciada'
+              const isOutboundLast = (conv.lastMessageDirection || conv.last_message_direction) === 'outbound'
+              const unreadCount = Number(conv.unread_count || 0)
 
               return (
                 <Link
                   key={conv.id}
                   href={`/inbox/${conv.id}`}
-                  className={`block p-3.5 transition-colors relative ${
-                    isSelected 
-                      ? 'bg-emerald-50/90 dark:bg-emerald-950/35 border-l-4 border-emerald-500' 
+                  className={`block px-3.5 py-3 transition-colors relative ${
+                    isSelected
+                      ? 'bg-emerald-50/90 dark:bg-emerald-950/35 border-l-4 border-emerald-500'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-900/60'
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
-                    <div className={`relative w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 overflow-hidden font-bold text-xs shadow-2xs ${
+                    <div className={`relative w-[42px] h-[42px] rounded-full text-white flex items-center justify-center shrink-0 overflow-hidden font-bold text-xs shadow-2xs mt-0.5 ${
                       convAudience === 'clients'
                         ? 'bg-gradient-to-tr from-purple-600 to-indigo-500'
                         : convAudience === 'general'
@@ -629,98 +669,129 @@ export default function InboxSidebar() {
                           }}
                         />
                       )}
-                      {conv.is_pinned && (
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 text-white rounded-full flex items-center justify-center text-[8px] z-10">
-                          ★
-                        </span>
-                      )}
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
-                          {conv.contact_name || conv.contact_phone}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {Number(conv.unread_count) > 0 && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-emerald-500 text-white rounded-full leading-none">
-                              {conv.unread_count}
+                    <div className="flex-1 min-w-0 flex flex-col gap-1">
+                      {/* Linha 1: Nome do Contato + Badges Sutil de Empresa/Público + Tempo */}
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="font-bold text-[13px] text-slate-900 dark:text-slate-100 truncate">
+                            {conv.contact_name || formatPhoneDisplay(conv.contact_phone)}
+                          </span>
+                          {conv.is_pinned && (
+                            <span className="text-amber-500 text-[11px] shrink-0" title="Favorito">⭐</span>
+                          )}
+                          {companyBadge && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 uppercase shrink-0">
+                              {companyBadge}
                             </span>
                           )}
-                          <span className="text-[10px] text-slate-400">{formattedTime}</span>
+                          {convAudience === 'clients' ? (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shrink-0"
+                              title={`Canal de Clientes: ${channelLabel || ''}`}
+                            >
+                              Clientes
+                            </span>
+                          ) : convAudience === 'general' ? (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800 shrink-0"
+                              title={`Canal Geral: ${channelLabel || ''}`}
+                            >
+                              {conv.channel?.name === 'safetyprevi' ? 'EPI' : 'Frota'}
+                            </span>
+                          ) : (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0"
+                              title={`Canal de Trabalhadores: ${channelLabel || ''}`}
+                            >
+                              Trab.
+                            </span>
+                          )}
                         </div>
+                        <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
+                          {formattedTime}
+                        </span>
                       </div>
 
-                      {/* Preview da última mensagem */}
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mb-1.5">
-                        {conv.last_message_text || conv.contact_phone}
-                      </p>
-
-                      {/* Badges de Empresa + Público do Canal (Trabalhadores vs Clientes), Cliente/Obra, Departamento e Atendente */}
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {companyBadge && (
-                          <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 uppercase">
-                            {companyBadge}
+                      {/* Linha 2: Preview da Última Mensagem Enviada/Recebida (Estilo CRM IPTV com "Você: ...") + Badge Não Lidas */}
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <p
+                          className={`text-[12px] leading-snug truncate flex-1 min-w-0 ${
+                            unreadCount > 0
+                              ? 'font-semibold text-slate-900 dark:text-white'
+                              : 'text-slate-600 dark:text-slate-300'
+                          }`}
+                          title={isOutboundLast ? `Você: ${readableLastMsg}` : readableLastMsg}
+                        >
+                          {isOutboundLast && (
+                            <span className="font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                              Você:
+                            </span>
+                          )}
+                          {readableLastMsg}
+                        </p>
+                        {unreadCount > 0 && (
+                          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-extrabold text-white shadow-xs shrink-0">
+                            {unreadCount}
                           </span>
                         )}
+                      </div>
 
-                        {/* Badge de Tipo de Canal (Trabalhador vs Cliente) */}
-                        {convAudience === 'clients' ? (
-                          <span
-                            className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/70"
-                            title={`Canal de Clientes: ${channelLabel || ''}`}
-                          >
-                            🏢 Canal Clientes
+                      {/* Linha 3: Telefone Formatado + Badges de Obra/Cliente, Setor, Atendente e Tags */}
+                      <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                        <div className="flex items-center gap-1 flex-wrap min-w-0">
+                          <span className="text-[10.5px] font-mono text-slate-400 dark:text-slate-500 mr-1 shrink-0">
+                            {formatPhoneDisplay(conv.contact_phone)}
                           </span>
-                        ) : convAudience === 'general' ? (
-                          <span
-                            className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70"
-                            title={`Canal Geral: ${channelLabel || ''}`}
-                          >
-                            🚗 {conv.channel?.name === 'safetyprevi' ? 'EPI / Segurança' : 'Frota / Geral'}
-                          </span>
-                        ) : (
-                          <span
-                            className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 border border-teal-200/70 dark:border-teal-800/70"
-                            title={`Canal de Trabalhadores: ${channelLabel || ''}`}
-                          >
-                            👷 Trabalhador
-                          </span>
-                        )}
 
-                        {clientBadge && (
-                          <span
-                            className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 truncate max-w-[135px]"
-                            title={`Cliente / Obra: ${clientBadge}`}
-                          >
-                            🏗️ {clientBadge}
-                          </span>
-                        )}
+                          {clientBadge && (
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70 truncate max-w-[130px]"
+                              title={`Cliente / Obra: ${clientBadge}`}
+                            >
+                              🏗️ {clientBadge}
+                            </span>
+                          )}
 
-                        {conv.department?.name && (
-                          <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
-                            {conv.department.name}
-                          </span>
-                        )}
+                          {conv.department?.name && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/70">
+                              {conv.department.name}
+                            </span>
+                          )}
 
-                        {conv.assigned_to_name && (
-                          <span
-                            className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 truncate max-w-[100px]"
-                            title={`Em atendimento por: ${conv.assigned_to_name}`}
-                          >
-                            👤 {conv.assigned_to_name.split('@')[0]}
-                          </span>
-                        )}
+                          {conv.assigned_to_name && (
+                            <span
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate max-w-[95px]"
+                              title={`Em atendimento por: ${conv.assigned_to_name}`}
+                            >
+                              👤 {conv.assigned_to_name.split('@')[0]}
+                            </span>
+                          )}
 
-                        {conv.bot_status === 'active' ? (
-                          <span className="text-[9.5px] font-medium px-1 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center gap-0.5">
-                            <Bot className="w-2.5 h-2.5" /> IA
-                          </span>
-                        ) : (
-                          <span className="text-[9.5px] font-medium px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                            <BotOff className="w-2.5 h-2.5" /> Humano
-                          </span>
-                        )}
+                          {Array.isArray(conv.tags) &&
+                            conv.tags.slice(0, 2).map((tag: any, idx: number) => (
+                              <span
+                                key={idx}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-2xs whitespace-nowrap"
+                                style={{ backgroundColor: tag.color || '#4f46e5' }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                        </div>
+
+                        <div className="shrink-0">
+                          {conv.bot_status === 'active' ? (
+                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center gap-0.5">
+                              <Bot className="w-2.5 h-2.5" /> IA
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                              <BotOff className="w-2.5 h-2.5" /> Hum
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

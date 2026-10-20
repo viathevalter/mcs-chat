@@ -24,6 +24,7 @@ import {
   Tag,
   CornerUpLeft,
   Trash2,
+  Pencil,
   Globe,
   Bot,
   Building2,
@@ -258,7 +259,7 @@ interface QuickReply {
 export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: ChatAreaProps) {
   const { t } = useI18n()
   const router = useRouter()
-  const { messages, loading, sendMessage } = useChat(conversationId)
+  const { messages, loading, sendMessage, editMessage, refetchMessages } = useChat(conversationId)
   const { context, setContext } = useConversationContext(conversationId)
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -431,6 +432,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     const newStatus = !context.conversation.is_pinned
     setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, is_pinned: newStatus } } : null)
     await supabase.from('chat_conversations').update({ is_pinned: newStatus }).eq('id', conversationId)
+    window.dispatchEvent(new CustomEvent('mcs-chat-updated'))
   }
 
   const resolvedSenderDept = context?.conversation?.department?.name || currentUserDept || 'Operações'
@@ -458,6 +460,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
   }
 
+  const handleEditMessage = async (msg: any) => {
+    const newText = prompt('Editar mensagem enviada:', msg.content || '')
+    if (newText === null || newText.trim() === '' || newText.trim() === msg.content) return
+    await editMessage(msg.id, newText.trim())
+  }
+
   const handleDeleteMessage = async (msg: any) => {
     if (!confirm(t('chatArea', 'confirmDelete') || 'Deseja realmente apagar esta mensagem para todos?')) return
 
@@ -474,6 +482,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       if (!res.ok) {
         await supabase.from('chat_messages').update({ content: '🚫 Mensagem apagada', status: 'deleted' }).eq('id', msg.id)
       }
+      await refetchMessages()
+      window.dispatchEvent(new CustomEvent('mcs-chat-updated'))
     } catch (err) {
       console.error('Falha ao apagar msg', err)
     }
@@ -1073,14 +1083,24 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   >
                     <button
                       onClick={() => setReplyingTo(msg)}
-                      className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"
+                      className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                      title="Responder Mensagem"
                     >
                       <CornerUpLeft className="w-3 h-3" />
                     </button>
-                    {isOutbound && (
+                    {isOutbound && msg.message_type === 'text' && msg.status !== 'deleted' && (
+                      <button
+                        onClick={() => handleEditMessage(msg)}
+                        className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-blue-600 transition-colors ml-1 cursor-pointer"
+                        title="Editar Mensagem (WhatsApp)"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                    {isOutbound && msg.status !== 'deleted' && (
                       <button
                         onClick={() => handleDeleteMessage(msg)}
-                        className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1"
+                        className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors ml-1 cursor-pointer"
                         title="Apagar Mensagem"
                       >
                         <Trash2 className="w-3 h-3" />

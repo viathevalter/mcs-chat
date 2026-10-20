@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config"
+import { evolutionApi } from "@/lib/whatsapp/evolution-api"
 
 export async function POST(req: NextRequest) {
   try {
@@ -66,6 +67,15 @@ export async function POST(req: NextRequest) {
       } catch (e: any) {
         console.warn("Aviso ao consultar /instance/all na UazAPI:", e.message)
       }
+    }
+
+    // 3. Configurar automaticamente o Webhook na UazAPI se tivermos o token da instância
+    if (instanceToken) {
+      await evolutionApi.configureWebhook({
+        instanceName: cleanInstanceName,
+        apiUrl: UAZ_API_URL,
+        apiToken: instanceToken
+      })
     }
 
     const resolvedChannelType = channelType || 'workers'

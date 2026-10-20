@@ -262,6 +262,9 @@ export async function POST(req: NextRequest) {
       let matchedWorkersCount = 0
       let importedMessagesCount = 0
 
+      const convsToInsert: any[] = []
+      const lastMsgByPhone = new Map<string, { text: string; created_at: string; external_id: string; sender_name: string }>()
+
       for (const { item, cleanPhone, rawTs, tsMs } of parsedItems) {
         if (filterMode === 'recent_30d' && tsMs < thirtyDaysAgo) {
           continue
@@ -295,10 +298,8 @@ export async function POST(req: NextRequest) {
         const previewText = (item.wa_lastMessageTextVote || item.lastMessage || 'Conversa sincronizada').slice(0, 140)
 
         const existingConv = existingByPhone.get(cleanPhone)
-        let targetConvId: string | null = null
 
         if (existingConv) {
-          targetConvId = existingConv.id
           await supabase
             .from('chat_conversations')
             .update({
@@ -314,52 +315,69 @@ export async function POST(req: NextRequest) {
             })
             .eq('id', existingConv.id)
           updatedCount++
-        } else {
-          const { data: insertedConv } = await supabase
-            .from('chat_conversations')
-            .insert({
-              channel_id: channel.id,
-              contact_phone: cleanPhone,
-              contact_name: contactName,
-              contact_type: defaultContactType,
-              worker_id: isMatched ? matchData.id : null,
-              worker_company_name: isMatched ? matchData.contratante : channel.company_name || null,
-              worker_client_name: isMatched ? matchData.cliente : null,
-              worker_function_name: isMatched ? matchData.funcion : null,
-              department_id: channel.department_id || null,
-              status: 'open',
-              unread_count: Number(item.wa_unreadCount || 0),
-              last_message_at: lastTs,
-              last_message_preview: previewText,
-              last_message_text: previewText,
-              contact_avatar_url: item.imagePreview || item.image || null,
-              is_pinned: Boolean(item.wa_isPinned),
-              bot_status: 'active'
-            })
-            .select('id')
-            .single()
+        } else if (!lastMsgByPhone.has(cleanPhone)) {
+          convsToInsert.push({
+            channel_id: channel.id,
+            contact_phone: cleanPhone,
+            contact_name: contactName,
+            contact_type: defaultContactType,
+            worker_id: isMatched ? matchData.id : null,
+            worker_company_name: isMatched ? matchData.contratante : channel.company_name || null,
+            worker_client_name: isMatched ? matchData.cliente : null,
+            worker_function_name: isMatched ? matchData.funcion : null,
+            department_id: channel.department_id || null,
+            status: 'open',
+            unread_count: Number(item.wa_unreadCount || 0),
+            last_message_at: lastTs,
+            last_message_preview: previewText,
+            last_message_text: previewText,
+            contact_avatar_url: item.imagePreview || item.image || null,
+            is_pinned: Boolean(item.wa_isPinned),
+            bot_status: 'active'
+          })
 
-          targetConvId = insertedConv?.id || null
-          if (targetConvId) {
-            existingByPhone.set(cleanPhone, { id: targetConvId, contact_phone: cleanPhone })
-          }
+          lastMsgByPhone.set(cleanPhone, {
+            text: item.wa_lastMessageTextVote || '',
+            created_at: lastTs,
+            external_id: `sync_${cleanPhone}_${rawTs || Date.now()}`,
+            sender_name: contactName
+          })
+        }
+      }
+
+      // Bulk insert conversations in batches of 100
+      const messagesToInsert: any[] = []
+      for (let i = 0; i < convsToInsert.length; i += 100) {
+        const chunk = convsToInsert.slice(i, i + 100)
+        const { data: insertedRows } = await supabase
+          .from('chat_conversations')
+          .insert(chunk)
+          .select('id, contact_phone')
+
+        for (const row of insertedRows || []) {
           importedCount++
-
-          if (targetConvId && importMessages && item.wa_lastMessageTextVote) {
-            await supabase.from('chat_messages').insert({
-              conversation_id: targetConvId,
+          const msgMeta = lastMsgByPhone.get(row.contact_phone)
+          if (importMessages && msgMeta && msgMeta.text) {
+            messagesToInsert.push({
+              conversation_id: row.id,
               direction: 'inbound',
               message_type: 'text',
-              content: item.wa_lastMessageTextVote,
+              content: msgMeta.text,
               status: 'delivered',
-              external_id: `sync_${cleanPhone}_${rawTs || Date.now()}`,
-              sender_name: contactName,
-              created_at: lastTs,
+              external_id: msgMeta.external_id,
+              sender_name: msgMeta.sender_name,
+              created_at: msgMeta.created_at,
               is_private: false
             })
-            importedMessagesCount++
           }
         }
+      }
+
+      // Bulk insert initial messages in batches of 100
+      for (let i = 0; i < messagesToInsert.length; i += 100) {
+        const msgChunk = messagesToInsert.slice(i, i + 100)
+        await supabase.from('chat_messages').insert(msgChunk)
+        importedMessagesCount += msgChunk.length
       }
 
       return NextResponse.json({

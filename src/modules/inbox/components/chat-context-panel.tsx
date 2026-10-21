@@ -30,6 +30,10 @@ import { useConversationContext } from '../hooks/use-context'
 import { supabase } from '@/lib/supabase/client'
 import { useI18n } from '@/contexts/i18n-context'
 import Link from 'next/link'
+import {
+  MCS_TRANSFER_SPECIALTIES,
+  executeConversationTransfer,
+} from '../constants/mcs-tags-and-transfers'
 
 export default function ChatContextPanel({ conversationId }: { conversationId: string }) {
   const { t } = useI18n()
@@ -38,6 +42,7 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
 
   // Transfer Modal / Box State
   const [showTransferBox, setShowTransferBox] = useState(false)
+  const [transferSpecialty, setTransferSpecialty] = useState('')
   const [transferDeptId, setTransferDeptId] = useState('')
   const [transferUserId, setTransferUserId] = useState('')
   const [transferReason, setTransferReason] = useState('')
@@ -192,23 +197,36 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
     e.preventDefault()
     setSubmittingTransfer(true)
     try {
+      const { data: authData } = await supabase.auth.getUser()
+      const currentUid = authData?.user?.id || null
+      const currentUObj = users.find((u: any) => u.id === currentUid)
+      const senderName =
+        currentUObj?.display_name ||
+        currentUObj?.name ||
+        authData?.user?.email?.split('@')[0] ||
+        'Atendente MCS'
+
       const selectedUser = users.find((u: any) => u.id === transferUserId)
       const effectiveDeptId = transferDeptId || selectedUser?.department_id || ''
       const selectedDept = departments.find((d) => d.id === effectiveDeptId)
       const assignedName = selectedUser ? selectedUser.display_name || selectedUser.name || selectedUser.email : null
 
-      const { error } = await supabase
-        .from('chat_conversations')
-        .update({
-          department_id: effectiveDeptId || null,
-          assigned_to: transferUserId || null,
-          assigned_to_name: assignedName,
-          status: 'open'
-        })
-        .eq('id', conversationId)
+      const { nextTags, targetSummary } = await executeConversationTransfer({
+        conversationId,
+        currentTags: conversation?.tags || [],
+        targetDeptId: effectiveDeptId || null,
+        targetDeptName: selectedDept?.name || null,
+        targetUserId: transferUserId || null,
+        targetUserName: assignedName,
+        senderUserId: currentUid,
+        senderUserName: senderName,
+        specialtyId: transferSpecialty || null,
+        reason: transferReason,
+        contactName: worker?.nome || conversation?.contact_name || conversation?.contact_phone || 'Trabalhador',
+        contactPhone: conversation?.contact_phone || null,
+      })
 
-      if (error) throw error
-
+      const specObj = MCS_TRANSFER_SPECIALTIES.find((s) => s.id === transferSpecialty)
       setContext((prev: any) => ({
         ...prev,
         conversation: {
@@ -216,34 +234,18 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
           department_id: effectiveDeptId || null,
           department: selectedDept || null,
           assigned_to: transferUserId || null,
-          assigned_to_name: assignedName
+          assigned_to_name: assignedName,
+          transferred_by_name: senderName,
+          transfer_category: specObj?.shortLabel || null,
+          transfer_note: transferReason.trim() || null,
+          tags: nextTags,
         }
       }))
 
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
-      }
-
-      // Log visual Bloco de Atendimento divider in chat timeline
-      const targetParts: string[] = []
-      if (selectedDept?.name) targetParts.push(`Setor ${selectedDept.name}`)
-      if (assignedName) targetParts.push(`Atendente ${assignedName}`)
-      const targetSummary = targetParts.length > 0 ? targetParts.join(' • ') : 'Fila Geral'
-      const reasonSuffix = transferReason.trim() ? ` — Motivo: "${transferReason.trim()}"` : ''
-
-      await supabase.from('chat_messages').insert({
-        conversation_id: conversationId,
-        direction: 'outbound',
-        sender_name: assignedName || 'Transferência MCS',
-        sender_department: selectedDept?.name || 'Operações',
-        message_type: 'system_block',
-        content: `🔄 BLOCO TRANSFERIDO PARA: ${targetSummary}${reasonSuffix}`,
-        status: 'sent'
-      })
-
       setShowTransferBox(false)
       setTransferReason('')
-      setFeedbackMsg(`✅ Conversa transferida para ${targetSummary}!`)
+      setTransferSpecialty('')
+      setFeedbackMsg(`✅ Conversa transferida e notificada para ${targetSummary}!`)
       setTimeout(() => setFeedbackMsg(null), 4000)
     } catch (err: any) {
       setFeedbackMsg(`Erro ao transferir: ${err.message}`)
@@ -626,6 +628,24 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
                 <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
                 Transferir Bloco de Atendimento
               </span>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                Assunto / Especialidade (Etiqueta Automática)
+              </label>
+              <select
+                value={transferSpecialty}
+                onChange={(e) => setTransferSpecialty(e.target.value)}
+                className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
+              >
+                <option value="">📌 Sem especialidade específica</option>
+                {MCS_TRANSFER_SPECIALTIES.map((spec) => (
+                  <option key={spec.id} value={spec.id}>
+                    {spec.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

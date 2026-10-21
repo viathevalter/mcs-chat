@@ -44,6 +44,14 @@ import { useI18n } from '@/contexts/i18n-context'
 import { translateOutboundMessage } from '@/app/actions/translation-actions'
 import { BilingualMessage } from './bilingual-message'
 import { useRouter } from 'next/navigation'
+import {
+  MCS_QUICK_TAGS,
+  CRM_MAIN_COLORS,
+  CRM_MORE_COLORS,
+  isLightTagColor,
+  MCS_TRANSFER_SPECIALTIES,
+  executeConversationTransfer,
+} from '../constants/mcs-tags-and-transfers'
 
 function FlagSpain({ className = "w-5 h-5" }: { className?: string }) {
   return (
@@ -281,12 +289,15 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   // Tags States
   const [showTagsMenu, setShowTagsMenu] = useState(false)
   const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#ef4444')
+  const [newTagColor, setNewTagColor] = useState('#4b5563')
 
-  const tagColors = [
-    '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
-    '#0ea5e9', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'
-  ]
+  // Header Quick Transfer Modal States
+  const [showHeaderTransfer, setShowHeaderTransfer] = useState(false)
+  const [headerTransferSpecialty, setHeaderTransferSpecialty] = useState('')
+  const [headerTransferDeptId, setHeaderTransferDeptId] = useState('')
+  const [headerTransferUserId, setHeaderTransferUserId] = useState('')
+  const [headerTransferReason, setHeaderTransferReason] = useState('')
+  const [isSubmittingHeaderTransfer, setIsSubmittingHeaderTransfer] = useState(false)
 
   const [showEmoji, setShowEmoji] = useState(false)
   const [showAttach, setShowAttach] = useState(false)
@@ -412,35 +423,142 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     if (data) setQuickReplies(data)
   }
 
-  const handleAddTag = async () => {
-    if (!newTagName.trim() || !context?.conversation) return
-    const newTag = { id: Date.now().toString(), name: newTagName.trim(), color: newTagColor }
-    const currentTags = context.conversation.tags || []
+  const handleAddTag = async (customName?: string, customColor?: string) => {
+    const tagToAddName = (customName ?? newTagName).trim()
+    const tagToAddColor = customColor ?? newTagColor
+    if (!tagToAddName || !context?.conversation) return
 
-    if (currentTags.find((t: any) => t.name.toLowerCase() === newTag.name.toLowerCase())) {
-      return
+    const currentTags = Array.isArray(context.conversation.tags) ? context.conversation.tags : []
+    const existingIdx = currentTags.findIndex(
+      (t: any) => (t?.name || '').toLowerCase() === tagToAddName.toLowerCase()
+    )
+
+    let updatedTags: any[]
+    if (existingIdx >= 0) {
+      if (customName) {
+        // Clicking an already active quick suggestion toggles it off
+        updatedTags = currentTags.filter((_: any, i: number) => i !== existingIdx)
+      } else {
+        return
+      }
+    } else {
+      updatedTags = [
+        ...currentTags,
+        { id: Date.now().toString(), name: tagToAddName, color: tagToAddColor },
+      ]
     }
 
-    const updatedTags = [...currentTags, newTag]
-    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null)
+    setContext((prev: any) =>
+      prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null
+    )
 
-    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId)
+    const { error } = await supabase
+      .from('chat_conversations')
+      .update({ tags: updatedTags })
+      .eq('id', conversationId)
+
     if (error) {
-      setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null)
+      setContext((prev: any) =>
+        prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null
+      )
     } else {
-      setNewTagName('')
+      if (!customName) setNewTagName('')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
     }
   }
 
   const handleRemoveTag = async (tagName: string) => {
     if (!context?.conversation) return
-    const currentTags = context.conversation.tags || []
+    const currentTags = Array.isArray(context.conversation.tags) ? context.conversation.tags : []
     const updatedTags = currentTags.filter((t: any) => t.name !== tagName)
-    setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null)
+    setContext((prev: any) =>
+      prev ? { ...prev, conversation: { ...prev.conversation, tags: updatedTags } } : null
+    )
 
-    const { error } = await supabase.from('chat_conversations').update({ tags: updatedTags }).eq('id', conversationId)
+    const { error } = await supabase
+      .from('chat_conversations')
+      .update({ tags: updatedTags })
+      .eq('id', conversationId)
     if (error) {
-      setContext((prev: any) => prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null)
+      setContext((prev: any) =>
+        prev ? { ...prev, conversation: { ...prev.conversation, tags: currentTags } } : null
+      )
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+    }
+  }
+
+  const handleOpenHeaderTransfer = () => {
+    setHeaderTransferDeptId(context?.conversation?.department_id || '')
+    setHeaderTransferUserId(context?.conversation?.assigned_to || '')
+    setHeaderTransferSpecialty('')
+    setHeaderTransferReason('')
+    setShowHeaderTransfer(true)
+    setShowTagsMenu(false)
+  }
+
+  const handleConfirmHeaderTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isSubmittingHeaderTransfer) return
+    setIsSubmittingHeaderTransfer(true)
+    try {
+      const allUsers = context?.users || []
+      const allDepts = context?.departments || []
+      const selectedUser = allUsers.find((u: any) => u.id === headerTransferUserId)
+      const effectiveDeptId = headerTransferDeptId || selectedUser?.department_id || ''
+      const selectedDept = allDepts.find((d: any) => d.id === effectiveDeptId)
+      const assignedName = selectedUser
+        ? selectedUser.display_name || selectedUser.name || selectedUser.email
+        : null
+
+      const { nextTags } = await executeConversationTransfer({
+        conversationId,
+        currentTags: context?.conversation?.tags || [],
+        targetDeptId: effectiveDeptId || null,
+        targetDeptName: selectedDept?.name || null,
+        targetUserId: headerTransferUserId || null,
+        targetUserName: assignedName,
+        senderUserId: currentUserId,
+        senderUserName: currentUserName,
+        specialtyId: headerTransferSpecialty || null,
+        reason: headerTransferReason,
+        contactName:
+          context?.worker?.nome ||
+          context?.conversation?.contact_name ||
+          context?.conversation?.contact_phone ||
+          'Trabalhador',
+        contactPhone: context?.conversation?.contact_phone || null,
+      })
+
+      const specObj = MCS_TRANSFER_SPECIALTIES.find((s) => s.id === headerTransferSpecialty)
+      setContext((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              conversation: {
+                ...prev.conversation,
+                department_id: effectiveDeptId || null,
+                department: selectedDept || null,
+                assigned_to: headerTransferUserId || null,
+                assigned_to_name: assignedName,
+                transferred_by_name: currentUserName,
+                transfer_category: specObj?.shortLabel || null,
+                transfer_note: headerTransferReason.trim() || null,
+                tags: nextTags,
+              },
+            }
+          : null
+      )
+
+      await refetchMessages()
+      setShowHeaderTransfer(false)
+      setHeaderTransferReason('')
+    } catch (err: any) {
+      alert('Erro ao transferir conversa: ' + (err.message || ''))
+    } finally {
+      setIsSubmittingHeaderTransfer(false)
     }
   }
 
@@ -978,9 +1096,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               )}
             </div>
 
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {context?.conversation?.contact_phone && (
-                <span className="text-[11px] font-mono font-medium text-slate-500">{context.conversation.contact_phone}</span>
+                <span className="text-[11px] font-mono font-medium text-slate-500">
+                  +{context.conversation.contact_phone.replace(/\D/g, '')}
+                </span>
               )}
               {conversation?.department?.name && (
                 <span
@@ -1000,6 +1120,36 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   {conversation.assigned_to_name}
                 </span>
               )}
+
+              {/* Etiquetas Ativas no Cabeçalho (Padrão CRM IPTV) */}
+              {Array.isArray(context?.conversation?.tags) &&
+                context.conversation.tags.map((tag: any, idx: number) => {
+                  const darkTxt = isLightTagColor(tag.color)
+                  return (
+                    <span
+                      key={idx}
+                      onClick={() => setShowTagsMenu(true)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-transform hover:scale-105 ${
+                        darkTxt ? 'text-slate-900 border border-black/10' : 'text-white'
+                      }`}
+                      style={{ backgroundColor: tag.color || '#16a34a' }}
+                      title="Clique para gerenciar etiquetas"
+                    >
+                      <span>{tag.name}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveTag(tag.name)
+                        }}
+                        className="hover:bg-black/20 rounded-full p-0.5 transition-colors"
+                        title={`Remover etiqueta ${tag.name}`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )
+                })}
             </div>
           </div>
         </div>
@@ -1030,75 +1180,423 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
             </button>
           )}
 
-          {/* Botão Tags */}
+          {/* Botão Transferir Direto no Cabeçalho (Para outro colega do mesmo setor ou outro setor) */}
           <div className="relative">
             <button
-              onClick={() => setShowTagsMenu(!showTagsMenu)}
-              className="px-2.5 py-1.5 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-50 hidden md:flex cursor-pointer"
+              type="button"
+              onClick={handleOpenHeaderTransfer}
+              className={`px-2.5 py-1.5 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                showHeaderTransfer
+                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                  : 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
+              }`}
+              title="Transferir conversa para outro atendente (Horário, Seguridade, Nómina, Adiantamento, etc.)"
             >
-              <Tag className="w-3.5 h-3.5" /> Tags
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Transferir</span>
+            </button>
+
+            {showHeaderTransfer && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowHeaderTransfer(false)} />
+                <div className="absolute top-full right-0 mt-2 w-[380px] max-w-[94vw] bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <ArrowRightLeft className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">
+                          Transferir Atendimento
+                        </h4>
+                        <p className="text-[10.5px] text-slate-500">
+                          Direcione para o colega responsável e notifique na tela dele
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowHeaderTransfer(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleConfirmHeaderTransfer} className="space-y-3">
+                    {/* 1. Assunto / Especialidade (Etiqueta Automática) */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+                        1. Assunto / Especialidade (Aplica Etiqueta)
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {MCS_TRANSFER_SPECIALTIES.map((spec) => {
+                          const isSelected = headerTransferSpecialty === spec.id
+                          return (
+                            <button
+                              key={spec.id}
+                              type="button"
+                              onClick={() =>
+                                setHeaderTransferSpecialty(isSelected ? '' : spec.id)
+                              }
+                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-left border transition-all flex items-center gap-1.5 cursor-pointer truncate ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs ring-2 ring-indigo-500/20'
+                                  : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-800'
+                              }`}
+                              title={spec.description}
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: isSelected ? '#ffffff' : spec.tagColor }}
+                              />
+                              <span className="truncate">{spec.shortLabel}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 2. Setor de Destino */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                        2. Setor de Destino
+                      </label>
+                      <select
+                        value={headerTransferDeptId}
+                        onChange={(e) => {
+                          const nextDept = e.target.value
+                          setHeaderTransferDeptId(nextDept)
+                          if (nextDept && headerTransferUserId) {
+                            const curr = (context?.users || []).find(
+                              (u: any) => u.id === headerTransferUserId
+                            )
+                            if (curr && curr.department_id !== nextDept) {
+                              setHeaderTransferUserId('')
+                            }
+                          }
+                        }}
+                        className="w-full text-xs font-semibold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100"
+                      >
+                        <option value="">📂 Todos os Setores / Fila Geral</option>
+                        {(context?.departments || []).map((dept: any) => {
+                          const cnt = (context?.users || []).filter(
+                            (u: any) => u.department_id === dept.id
+                          ).length
+                          return (
+                            <option key={dept.id} value={dept.id}>
+                              📂 {dept.name} ({cnt} atendentes)
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+
+                    {/* 3. Escolher o Atendente / Colega */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                        3. Para qual Atendente vai a conversa? (Receberá Alerta 🔔)
+                      </label>
+                      <div className="max-h-36 overflow-y-auto space-y-1 p-1.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setHeaderTransferUserId('')}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                            !headerTransferUserId
+                              ? 'bg-indigo-600 text-white'
+                              : 'hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          <span>👥 Qualquer colega do setor (Fila Aberta)</span>
+                          {!headerTransferUserId && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        {(headerTransferDeptId
+                          ? (context?.users || []).filter(
+                              (u: any) => u.department_id === headerTransferDeptId
+                            )
+                          : context?.users || []
+                        ).map((u: any) => {
+                          const isSelected = headerTransferUserId === u.id
+                          const uName = u.display_name || u.name || u.email
+                          return (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => {
+                                setHeaderTransferUserId(u.id)
+                                if (!headerTransferDeptId && u.department_id) {
+                                  setHeaderTransferDeptId(u.department_id)
+                                }
+                              }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                                  {String(uName).substring(0, 2).toUpperCase()}
+                                </span>
+                                <span className="truncate">{uName}</span>
+                                {!headerTransferDeptId && u.department_name && (
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.2 rounded ${
+                                      isSelected
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                    }`}
+                                  >
+                                    {u.department_name}
+                                  </span>
+                                )}
+                              </div>
+                              {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 4. Motivo / Instrução para o Colega */}
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                        4. Resumo / Orientação para o Colega
+                      </label>
+                      <input
+                        type="text"
+                        value={headerTransferReason}
+                        onChange={(e) => setHeaderTransferReason(e.target.value)}
+                        placeholder="Ex: Precisa de Alta na Seguridade / Pede adiantamento..."
+                        className="w-full text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingHeaderTransfer}
+                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      <span>
+                        {isSubmittingHeaderTransfer
+                          ? 'Transferindo e Notificando...'
+                          : 'Confirmar Transferência e Notificar 🔔'}
+                      </span>
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Botão Tags (Modal Evoluído Estilo CRM IPTV adaptado p/ MCS) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowTagsMenu(!showTagsMenu)
+                setShowHeaderTransfer(false)
+              }}
+              className={`px-2.5 py-1.5 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                showTagsMenu
+                  ? 'bg-slate-200/80 dark:bg-slate-800 border-slate-300 text-slate-900 dark:text-white'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Tags</span>
+              {(context?.conversation?.tags || []).length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
+                  {context?.conversation?.tags?.length}
+                </span>
+              )}
             </button>
 
             {showTagsMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowTagsMenu(false)}></div>
-                <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-900 shadow-2xl rounded-xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+                <div className="absolute top-full right-0 mt-2 w-[385px] max-w-[94vw] bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-slate-200 dark:border-slate-800 p-5 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+                  {/* Título */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <Tag className="w-4 h-4 text-slate-800 dark:text-slate-100" />
+                    <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base tracking-tight">
+                      Etiquetas do Contato
+                    </h3>
+                  </div>
+
+                  {/* Etiquetas atuais */}
                   <div className="mb-4">
-                    <span className="font-bold text-slate-700 dark:text-slate-200 block text-sm mb-2 flex items-center gap-2">
-                      <Tag className="w-4 h-4" /> Etiquetas do Contato
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-2">
+                      Etiquetas atuais
                     </span>
-                    <div className="flex flex-wrap gap-2 min-h-[30px] p-2 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-wrap gap-2 min-h-[34px]">
                       {(context?.conversation?.tags || []).length === 0 && (
-                        <p className="text-xs text-slate-400 w-full italic">Nenhuma etiqueta atribuída.</p>
+                        <p className="text-xs text-slate-400 italic py-1">
+                          Nenhuma etiqueta atribuída a esta conversa.
+                        </p>
                       )}
-                      {(context?.conversation?.tags || []).map((tag: any, idx: number) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-1 rounded text-[11px] font-bold text-white flex items-center gap-1 shadow-sm"
-                          style={{ backgroundColor: tag.color }}
-                        >
-                          {tag.name}
-                          <button onClick={() => handleRemoveTag(tag.name)} className="hover:bg-black/20 rounded-full p-0.5 ml-1 transition-colors">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
+                      {(context?.conversation?.tags || []).map((tag: any, idx: number) => {
+                        const darkTxt = isLightTagColor(tag.color)
+                        return (
+                          <span
+                            key={idx}
+                            className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs ${
+                              darkTxt ? 'text-slate-900 border border-black/10' : 'text-white'
+                            }`}
+                            style={{ backgroundColor: tag.color || '#16a34a' }}
+                          >
+                            <span>{tag.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag.name)}
+                              className="w-4 h-4 rounded-full bg-black/20 hover:bg-black/35 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Remover etiqueta"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        )
+                      })}
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-2">Nova Etiqueta</span>
+                  {/* Nova Etiqueta + Sugestões Rápidas MCS */}
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 mb-4">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-2">
+                      Nova Etiqueta
+                    </span>
                     <div className="flex gap-2 mb-3 w-full">
                       <input
                         type="text"
-                        placeholder="Ex: Pendente EPI"
+                        placeholder="Ex: Horário / Ponto, Seguridade..."
                         value={newTagName}
                         onChange={(e) => setNewTagName(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                        className="flex-1 min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        className="flex-1 min-w-0 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
                       />
                       <button
-                        onClick={handleAddTag}
+                        type="button"
+                        onClick={() => handleAddTag()}
                         disabled={!newTagName.trim()}
-                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
+                        className="bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-extrabold transition-colors shrink-0 shadow-xs cursor-pointer"
                       >
-                        Add
+                        Adicionar
                       </button>
                     </div>
-                    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
-                      {tagColors.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setNewTagColor(color)}
-                          className="w-5 h-5 rounded-full transition-all flex items-center justify-center shrink-0"
-                          style={{
-                            backgroundColor: color,
-                            scale: newTagColor === color ? '1.2' : '1',
-                            boxShadow: newTagColor === color ? `0 0 0 2px white, 0 0 0 3px ${color}` : 'none'
-                          }}
-                        />
-                      ))}
+
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
+                      SUGESTÕES RÁPIDAS (RH • TRABALHADORES • OPERAÇÕES)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {MCS_QUICK_TAGS.map((sug) => {
+                        const isAssigned = (context?.conversation?.tags || []).some(
+                          (t: any) => (t?.name || '').toLowerCase() === sug.name.toLowerCase()
+                        )
+                        return (
+                          <button
+                            key={sug.name}
+                            type="button"
+                            onClick={() => handleAddTag(sug.name, sug.color)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold text-white transition-all cursor-pointer flex items-center gap-1 ${
+                              isAssigned
+                                ? 'ring-2 ring-offset-1 ring-slate-900 dark:ring-white opacity-100 scale-[1.03]'
+                                : 'opacity-90 hover:opacity-100 hover:scale-[1.03]'
+                            }`}
+                            style={{ backgroundColor: sug.color }}
+                            title={
+                              isAssigned
+                                ? 'Clique para remover esta etiqueta'
+                                : 'Clique para aplicar esta etiqueta imediatamente'
+                            }
+                          >
+                            <span>{sug.name}</span>
+                            {isAssigned && <Check className="w-3 h-3 stroke-[3]" />}
+                          </button>
+                        )
+                      })}
                     </div>
+                  </div>
+
+                  {/* Cores principais (8 cores estilo CRM IPTV) */}
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 mb-3.5">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-2.5">
+                      Cores principais
+                    </span>
+                    <div className="grid grid-cols-8 gap-1.5">
+                      {CRM_MAIN_COLORS.map((c) => {
+                        const selected = newTagColor.toLowerCase() === c.hex.toLowerCase()
+                        return (
+                          <button
+                            key={c.hex}
+                            type="button"
+                            onClick={() => setNewTagColor(c.hex)}
+                            className="flex flex-col items-center gap-1 group cursor-pointer"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                                selected ? 'ring-2 ring-blue-600 ring-offset-2 scale-105' : 'hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: c.hex }}
+                            >
+                              {selected && <Check className="w-4 h-4 text-white stroke-[3]" />}
+                            </div>
+                            <span className="text-[9.5px] text-slate-500 dark:text-slate-400 truncate w-full text-center">
+                              {c.name}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Mais cores (16 cores em 2 linhas de 8 estilo CRM IPTV) */}
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 mb-4">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-2.5">
+                      Mais cores
+                    </span>
+                    <div className="grid grid-cols-8 gap-x-1.5 gap-y-2.5">
+                      {CRM_MORE_COLORS.map((c) => {
+                        const selected = newTagColor.toLowerCase() === c.hex.toLowerCase()
+                        return (
+                          <button
+                            key={c.hex}
+                            type="button"
+                            onClick={() => setNewTagColor(c.hex)}
+                            className="flex flex-col items-center gap-1 group cursor-pointer"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border border-black/5 ${
+                                selected ? 'ring-2 ring-blue-600 ring-offset-2 scale-105' : 'hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: c.hex }}
+                            >
+                              {selected && (
+                                <Check
+                                  className={`w-4 h-4 stroke-[3] ${
+                                    c.darkText ? 'text-slate-900' : 'text-white'
+                                  }`}
+                                />
+                              )}
+                            </div>
+                            <span className="text-[9px] text-slate-500 dark:text-slate-400 truncate w-full text-center">
+                              {c.name}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Rodapé Concluir */}
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowTagsMenu(false)}
+                      className="px-4 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                    >
+                      Concluir
+                    </button>
                   </div>
                 </div>
               </>
@@ -1129,6 +1627,33 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           </button>
         </div>
       </div>
+
+      {/* Faixa de Contexto de Transferência (Quando a conversa foi direcionada por outro colega) */}
+      {(conversation?.transferred_by_name || conversation?.transfer_note || conversation?.transfer_category) && (
+        <div className="bg-indigo-50/90 dark:bg-indigo-950/60 border-b border-indigo-200 dark:border-indigo-800/80 px-4 py-1.5 flex items-center justify-between gap-3 shrink-0 z-10">
+          <div className="flex items-center gap-2 text-xs text-indigo-900 dark:text-indigo-200 min-w-0 flex-wrap">
+            <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-extrabold uppercase shrink-0 flex items-center gap-1">
+              <ArrowRightLeft className="w-3 h-3" />
+              Transferida por {conversation?.transferred_by_name || 'Colega'}
+            </span>
+            {conversation?.transfer_category && (
+              <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-[10.5px] font-bold shrink-0">
+                📌 Assunto: {conversation.transfer_category}
+              </span>
+            )}
+            {conversation?.assigned_to_name && (
+              <span className="text-[11px] font-semibold text-indigo-800 dark:text-indigo-300">
+                → Responsável: <strong>{conversation.assigned_to_name}</strong>
+              </span>
+            )}
+            {conversation?.transfer_note && (
+              <span className="text-[11px] italic text-indigo-950 dark:text-indigo-100 bg-indigo-100/70 dark:bg-indigo-900/50 px-2 py-0.5 rounded">
+                "{conversation.transfer_note}"
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Alerta de Divergência entre Empresa do Trabalhador e Canal WhatsApp Ativo */}
       {isChannelMismatch && (

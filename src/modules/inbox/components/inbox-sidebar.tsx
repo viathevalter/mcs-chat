@@ -2,13 +2,41 @@
 import Link from 'next/link'
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Search, Plus, Bot, BotOff, Star, Calendar } from 'lucide-react'
+import { Search, Plus, Bot, BotOff, Star, Calendar, Bell, ArrowRightLeft, X, Check } from 'lucide-react'
 import { useInbox } from '../hooks/use-inbox'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { NewChatModal } from './new-chat-modal'
 import { useI18n } from '@/contexts/i18n-context'
 import { supabase } from '@/lib/supabase/client'
+import { MCS_QUICK_TAGS, isLightTagColor } from '../constants/mcs-tags-and-transfers'
+
+function playNotificationChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const now = ctx.currentTime
+    const osc1 = ctx.createOscillator()
+    const osc2 = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc1.type = 'sine'
+    osc2.type = 'triangle'
+    osc1.frequency.setValueAtTime(587.33, now) // D5
+    osc1.frequency.setValueAtTime(880, now + 0.14) // A5
+    osc2.frequency.setValueAtTime(293.66, now)
+    osc2.frequency.setValueAtTime(440, now + 0.14)
+    gain.gain.setValueAtTime(0.18, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
+    osc1.connect(gain)
+    osc2.connect(gain)
+    gain.connect(ctx.destination)
+    osc1.start(now)
+    osc2.start(now)
+    osc1.stop(now + 0.55)
+    osc2.stop(now + 0.55)
+  } catch {}
+}
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
@@ -53,7 +81,81 @@ export default function InboxSidebar() {
   const [companyFilter, setCompanyFilter] = useState<string>('all')
   const [channelIdFilter, setChannelIdFilter] = useState<string>('all')
   const [clientFilter, setClientFilter] = useState<string>('all')
+  const [tagFilter, setTagFilter] = useState<string>('all')
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Real-Time Transfer Notifications State
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [showNotifMenu, setShowNotifMenu] = useState(false)
+  const [liveToastNotif, setLiveToastNotif] = useState<any | null>(null)
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    const loadNotifications = async () => {
+      const { data } = await supabase
+        .from('chat_notifications')
+        .select('*')
+        .eq('recipient_user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (data) setNotifications(data)
+    }
+
+    loadNotifications()
+
+    const notifChannel = supabase
+      .channel(`user_transfer_notifs_${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_notifications',
+          filter: `recipient_user_id=eq.${currentUserId}`,
+        },
+        (payload) => {
+          const newNotif = payload.new as any
+          setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)])
+          setLiveToastNotif(newNotif)
+          playNotificationChime()
+          refetch()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(notifChannel)
+    }
+  }, [currentUserId, refetch])
+
+  const unreadNotifCount = useMemo(
+    () => notifications.filter((n) => !n.is_read).length,
+    [notifications]
+  )
+
+  const handleOpenNotification = async (notif: any) => {
+    await supabase.from('chat_notifications').update({ is_read: true }).eq('id', notif.id)
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+    )
+    setShowNotifMenu(false)
+    if (liveToastNotif?.id === notif.id) setLiveToastNotif(null)
+    if (notif.conversation_id) {
+      router.push(`/inbox/${notif.conversation_id}`)
+    }
+  }
+
+  const handleMarkAllNotifsRead = async () => {
+    if (!currentUserId) return
+    await supabase
+      .from('chat_notifications')
+      .update({ is_read: true })
+      .eq('recipient_user_id', currentUserId)
+      .eq('is_read', false)
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+  }
 
   // Global worker search (allows Prevenção / Logística / RH to find any worker from Luminous, Wiseowe, Stocco etc.)
   const [globalWorkers, setGlobalWorkers] = useState<any[]>([])
@@ -128,6 +230,33 @@ export default function InboxSidebar() {
       }
     })
     return Array.from(set).sort()
+  }, [conversations])
+
+  // Derive available tags (MCS default tags + any custom tags on conversations)
+  const availableTags = useMemo(() => {
+    const map = new Map<string, string>()
+    MCS_QUICK_TAGS.forEach((t) => map.set(t.name, t.color))
+    conversations.forEach((c) => {
+      if (Array.isArray(c.tags)) {
+        c.tags.forEach((tg: any) => {
+          if (tg?.name && !map.has(tg.name)) {
+            map.set(tg.name, tg.color || '#16a34a')
+          }
+        })
+      }
+    })
+    return Array.from(map.entries()).map(([name, color]) => ({ name, color }))
+  }, [conversations])
+
+  // Derive unique assignees on conversations
+  const availableAssignees = useMemo(() => {
+    const map = new Map<string, string>()
+    conversations.forEach((c) => {
+      if (c.assigned_to && c.assigned_to_name) {
+        map.set(c.assigned_to, c.assigned_to_name)
+      }
+    })
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
   }, [conversations])
 
   // Counts for audience pills (only open conversations)
@@ -215,7 +344,26 @@ export default function InboxSidebar() {
         if ((conv.worker_client_name || '').trim() !== clientFilter) return false
       }
 
-      // 6. Search Filter (Name, Phone, Last Message, Company, Client, Function, Channel)
+      // 5.1 Tag Filter (Dropdown)
+      if (tagFilter !== 'all') {
+        const hasTag =
+          Array.isArray(conv.tags) &&
+          conv.tags.some((t: any) => (t?.name || '').toLowerCase() === tagFilter.toLowerCase())
+        if (!hasTag) return false
+      }
+
+      // 5.2 Assignee / Attendant Filter (Dropdown)
+      if (assigneeFilter !== 'all') {
+        if (assigneeFilter === 'me') {
+          if (conv.assigned_to !== currentUserId) return false
+        } else if (assigneeFilter === 'unassigned') {
+          if (conv.assigned_to) return false
+        } else {
+          if (conv.assigned_to !== assigneeFilter) return false
+        }
+      }
+
+      // 6. Search Filter (Name, Phone, Last Message, Company, Client, Function, Channel, Tags, Attendant)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
         const cleanQuery = query.replace(/\D/g, '')
@@ -228,7 +376,11 @@ export default function InboxSidebar() {
         const matchClient = (conv.worker_client_name || '').toLowerCase().includes(query)
         const matchFunc = (conv.worker_function_name || '').toLowerCase().includes(query)
         const matchChannel = (conv.channel?.display_label || conv.channel?.name || '').toLowerCase().includes(query)
-        if (!matchName && !matchPhone && !matchMsg && !matchCompany && !matchClient && !matchFunc && !matchChannel) return false
+        const matchAssignee = (conv.assigned_to_name || '').toLowerCase().includes(query)
+        const matchTag =
+          Array.isArray(conv.tags) &&
+          conv.tags.some((t: any) => (t?.name || '').toLowerCase().includes(query))
+        if (!matchName && !matchPhone && !matchMsg && !matchCompany && !matchClient && !matchFunc && !matchChannel && !matchAssignee && !matchTag) return false
         return true
       }
 
@@ -260,7 +412,7 @@ export default function InboxSidebar() {
       const tB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
       return tB - tA
     })
-  }, [conversations, audienceFilter, channelIdFilter, selectedDepartmentFilter, companyFilter, clientFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
+  }, [conversations, audienceFilter, channelIdFilter, selectedDepartmentFilter, companyFilter, clientFilter, tagFilter, assigneeFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
 
   const resolveWorkerChannel = (contratante?: string | null) => {
     const workerChannels = channels.filter(ch => (ch.channel_type || 'workers') === 'workers')
@@ -370,7 +522,97 @@ export default function InboxSidebar() {
               title="Fila em Tempo Real Ativa (Live)"
             />
           </h1>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 relative">
+            {/* Sino de Notificações de Transferências Recebidas */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotifMenu(!showNotifMenu)}
+                className={`p-1.5 rounded-lg border transition-colors flex items-center justify-center relative cursor-pointer ${
+                  unreadNotifCount > 0
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs animate-bounce'
+                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                }`}
+                title="Conversas transferidas para você"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-white text-[9.5px] font-extrabold flex items-center justify-center border border-white">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifMenu(false)} />
+                  <div className="absolute top-full right-0 mt-2 w-[340px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in zoom-in-95 origin-top-right">
+                    <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/60">
+                      <div className="flex items-center gap-1.5">
+                        <Bell className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                          Transferências Recebidas ({unreadNotifCount})
+                        </span>
+                      </div>
+                      {unreadNotifCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleMarkAllNotifsRead}
+                          className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                        >
+                          Marcar lidas
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          Nenhuma transferência recebida recentemente.
+                        </div>
+                      ) : (
+                        notifications.map((n) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => handleOpenNotification(n)}
+                            className={`w-full text-left p-3 transition-colors flex items-start gap-2.5 cursor-pointer ${
+                              !n.is_read
+                                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100/70'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                              <ArrowRightLeft className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                  {n.contact_name || 'Trabalhador'}
+                                </span>
+                                {!n.is_read && (
+                                  <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mt-0.5">
+                                De: <strong>{n.sender_name || 'Colega'}</strong>
+                                {n.category ? ` • 📌 ${n.category}` : ''}
+                              </p>
+                              {n.reason && (
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 italic truncate mt-0.5">
+                                  "{n.reason}"
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <Link
               href="/inbox/agenda"
               className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800/70 text-orange-700 dark:text-orange-300 rounded-lg text-xs font-bold hover:bg-orange-100 transition-colors"
@@ -538,6 +780,39 @@ export default function InboxSidebar() {
               {availableClients.map(cli => (
                 <option key={cli} value={cli}>
                   🏗️ {cli}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Linha 3 de Dropdowns: Etiqueta (Assunto/Especialidade) + Atendente Responsável */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <select
+              value={tagFilter}
+              onChange={e => setTagFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
+              title="Filtrar por Etiqueta / Assunto (Horário, Seguridade, Nómina, Adiantamento...)"
+            >
+              <option value="all">🏷️ Todas Etiquetas</option>
+              {availableTags.map(tg => (
+                <option key={tg.name} value={tg.name}>
+                  🏷️ {tg.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={assigneeFilter}
+              onChange={e => setAssigneeFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 truncate"
+              title="Filtrar por Atendente Responsável"
+            >
+              <option value="all">👤 Todos Atendentes</option>
+              {currentUserId && <option value="me">📥 Minhas Conversas</option>}
+              <option value="unassigned">⚠️ Sem Atendente (Fila)</option>
+              {availableAssignees.map(asg => (
+                <option key={asg.id} value={asg.id}>
+                  👤 {asg.name}
                 </option>
               ))}
             </select>
@@ -817,23 +1092,45 @@ export default function InboxSidebar() {
 
                           {conv.assigned_to_name && (
                             <span
-                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate max-w-[95px]"
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[120px] ${
+                                conv.assigned_to === currentUserId
+                                  ? 'bg-indigo-600 text-white shadow-2xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                              }`}
                               title={`Em atendimento por: ${conv.assigned_to_name}`}
                             >
                               👤 {conv.assigned_to_name.split('@')[0]}
                             </span>
                           )}
 
+                          {(conv as any).transferred_by_name && conv.assigned_to === currentUserId && (
+                            <span
+                              className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 whitespace-nowrap"
+                              title={
+                                (conv as any).transfer_note
+                                  ? `Transferida por ${(conv as any).transferred_by_name}: "${(conv as any).transfer_note}"`
+                                  : `Transferida por ${(conv as any).transferred_by_name}`
+                              }
+                            >
+                              📥 De {(conv as any).transferred_by_name.split(' ')[0]}
+                            </span>
+                          )}
+
                           {Array.isArray(conv.tags) &&
-                            conv.tags.slice(0, 2).map((tag: any, idx: number) => (
-                              <span
-                                key={idx}
-                                className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-2xs whitespace-nowrap"
-                                style={{ backgroundColor: tag.color || '#4f46e5' }}
-                              >
-                                {tag.name}
-                              </span>
-                            ))}
+                            conv.tags.slice(0, 3).map((tag: any, idx: number) => {
+                              const darkTxt = isLightTagColor(tag.color)
+                              return (
+                                <span
+                                  key={idx}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold shadow-2xs whitespace-nowrap ${
+                                    darkTxt ? 'text-slate-900 border border-black/10' : 'text-white'
+                                  }`}
+                                  style={{ backgroundColor: tag.color || '#16a34a' }}
+                                >
+                                  {tag.name}
+                                </span>
+                              )
+                            })}
                         </div>
 
                         <div className="shrink-0">
@@ -856,6 +1153,59 @@ export default function InboxSidebar() {
           )}
         </div>
       </aside>
+
+      {/* Toast Flutuante ao Vivo quando uma conversa é transferida para o usuário logado */}
+      {liveToastNotif && (
+        <div className="fixed top-4 right-4 z-[100] w-[380px] max-w-[92vw] bg-indigo-950 text-white rounded-2xl shadow-2xl border border-indigo-500/60 p-4 animate-in slide-in-from-top-4 fade-in">
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-md">
+                <ArrowRightLeft className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-block px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                  🔔 Nova Conversa Transferida para Você
+                </span>
+                <h4 className="text-sm font-extrabold text-white truncate">
+                  {liveToastNotif.contact_name || 'Trabalhador'}
+                </h4>
+                <p className="text-xs text-indigo-200 mt-0.5">
+                  Enviada por <strong>{liveToastNotif.sender_name || 'Colega'}</strong>
+                  {liveToastNotif.category ? ` • 📌 ${liveToastNotif.category}` : ''}
+                </p>
+                {liveToastNotif.reason && (
+                  <p className="text-xs italic text-white bg-indigo-900/80 border border-indigo-700 rounded-lg px-2.5 py-1.5 mt-1.5">
+                    "{liveToastNotif.reason}"
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLiveToastNotif(null)}
+              className="text-indigo-300 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center justify-end gap-2 mt-3 pt-2.5 border-t border-indigo-800/80">
+            <button
+              type="button"
+              onClick={() => setLiveToastNotif(null)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-200 hover:bg-indigo-900 cursor-pointer"
+            >
+              Depois
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenNotification(liveToastNotif)}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold shadow-sm cursor-pointer"
+            >
+              Abrir Atendimento Agora →
+            </button>
+          </div>
+        </div>
+      )}
 
       <NewChatModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>

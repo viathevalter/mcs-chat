@@ -262,31 +262,72 @@ export default function InboxSidebar() {
     })
   }, [conversations, audienceFilter, channelIdFilter, selectedDepartmentFilter, companyFilter, clientFilter, activeFilter, searchQuery, currentUserId, currentUserDepartmentId])
 
+  const resolveWorkerChannel = (contratante?: string | null) => {
+    const workerChannels = channels.filter(ch => (ch.channel_type || 'workers') === 'workers')
+    if (contratante) {
+      const norm = contratante.trim().toUpperCase()
+      const exact = workerChannels.find(ch => (ch.company_name || '').trim().toUpperCase() === norm)
+      if (exact) return exact
+      const partial = workerChannels.find(
+        ch =>
+          (ch.company_name || '').toUpperCase().includes(norm) ||
+          norm.includes((ch.company_name || '').toUpperCase())
+      )
+      if (partial) return partial
+    }
+    return workerChannels[0] || channels[0] || null
+  }
+
   const handleOpenOrCreateWorkerChat = async (worker: any) => {
     const cleanPhone = (worker.movil || '').replace(/\D/g, '')
-    const existing = conversations.find(
-      c => c.worker_id === worker.id || (cleanPhone.length >= 8 && c.contact_phone?.includes(cleanPhone.slice(-8)))
-    )
-    if (existing) {
-      setSearchQuery('')
-      router.push(`/inbox/${existing.id}`)
-      return
-    }
-
     if (!cleanPhone) {
       alert('Este trabalhador não possui telefone celular cadastrado na ficha.')
       return
     }
 
-    // Prefer worker channel for worker's company
-    const workerChannels = channels.filter(ch => (ch.channel_type || 'workers') === 'workers')
-    const matchedChannel =
-      workerChannels.find(ch =>
-        worker.contratante && ch.company_name?.toLowerCase().includes(worker.contratante.toLowerCase())
-      ) || workerChannels[0] || channels[0]
-
+    // 1. Determinar obrigatoriamente o canal oficial da empresa contratante do trabalhador (ex: WISEOWE -> canal WISEOWE)
+    const matchedChannel = resolveWorkerChannel(worker.contratante)
     if (!matchedChannel) {
       alert('Nenhum canal WhatsApp ativo encontrado.')
+      return
+    }
+
+    // 2. Procurar conversa existente DESTE trabalhador ESPECIFICAMENTE no canal correto da empresa dele
+    const existingOnCorrectChannel = conversations.find(
+      c =>
+        c.channel_id === matchedChannel.id &&
+        (c.worker_id === worker.id || (cleanPhone.length >= 8 && c.contact_phone?.includes(cleanPhone.slice(-8))))
+    )
+    if (existingOnCorrectChannel) {
+      setSearchQuery('')
+      router.push(`/inbox/${existingOnCorrectChannel.id}`)
+      return
+    }
+
+    // Checar também no banco para evitar duplicata no mesmo canal
+    const { data: dbExisting } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('channel_id', matchedChannel.id)
+      .ilike('contact_phone', `%${cleanPhone.slice(-8)}%`)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (dbExisting?.id) {
+      await supabase
+        .from('chat_conversations')
+        .update({
+          worker_id: worker.id,
+          contact_name: worker.nome,
+          worker_company_name: worker.contratante || matchedChannel.company_name || null,
+          worker_client_name: worker.cliente || null,
+          worker_function_name: worker.funcion || null
+        })
+        .eq('id', dbExisting.id)
+      await refetch()
+      setSearchQuery('')
+      router.push(`/inbox/${dbExisting.id}`)
       return
     }
 
@@ -595,18 +636,19 @@ export default function InboxSidebar() {
                   type="button"
                   onClick={() => handleOpenOrCreateWorkerChat(w)}
                   className="w-full text-left p-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800 border border-indigo-100 dark:border-indigo-900/50 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                  title={`Iniciar ou abrir conversa pelo canal WhatsApp oficial da empresa ${w.contratante || ''}`}
                 >
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
                       {w.nome}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate">
-                      {w.contratante && <span className="font-bold text-emerald-600">{w.contratante}</span>}
+                      {w.contratante && <span className="font-bold text-emerald-600">📱 Canal: {w.contratante}</span>}
                       {w.cliente && <span>• 🏗️ {w.cliente}</span>}
                     </div>
                   </div>
                   <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded-md shrink-0">
-                    Conversar
+                    Conversar via {w.contratante || 'WhatsApp'}
                   </span>
                 </button>
               ))}
@@ -631,7 +673,10 @@ export default function InboxSidebar() {
               const formattedTime = conv.last_message_at
                 ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })
                 : ''
-              const companyBadge = conv.worker_company_name || conv.channel?.company_name
+              const channelCompany = (conv.channel?.company_name || '').toUpperCase()
+              const workerCompany = (conv.worker_company_name || '').toUpperCase()
+              const companyBadge = channelCompany || workerCompany
+              const isChannelMismatch = Boolean(workerCompany && channelCompany && workerCompany !== channelCompany)
               const clientBadge = conv.worker_client_name
               const convAudience = resolveConvAudience(conv)
               const channelLabel = conv.channel?.display_label || conv.channel?.name
@@ -672,7 +717,7 @@ export default function InboxSidebar() {
                     </div>
 
                     <div className="flex-1 min-w-0 flex flex-col gap-1">
-                      {/* Linha 1: Nome do Contato + Badges Sutil de Empresa/Público + Tempo */}
+                      {/* Linha 1: Nome do Contato + Badges de Canal WhatsApp / Empresa + Tempo */}
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <span className="font-bold text-[13px] text-slate-900 dark:text-slate-100 truncate">
@@ -681,11 +726,21 @@ export default function InboxSidebar() {
                           {conv.is_pinned && (
                             <span className="text-amber-500 text-[11px] shrink-0" title="Favorito">⭐</span>
                           )}
-                          {companyBadge && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 uppercase shrink-0">
-                              {companyBadge}
+                          {isChannelMismatch ? (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 uppercase shrink-0"
+                              title={`Atenção: Esta conversa está no número WhatsApp da ${channelCompany}, mas o trabalhador pertence à ${workerCompany}`}
+                            >
+                              ⚠️ Canal {channelCompany} (Trab: {workerCompany})
                             </span>
-                          )}
+                          ) : companyBadge ? (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 uppercase shrink-0"
+                              title={`Canal WhatsApp: ${channelLabel || companyBadge}${conv.channel?.phone_number ? ` (+${conv.channel.phone_number})` : ''}`}
+                            >
+                              📱 {companyBadge}
+                            </span>
+                          ) : null}
                           {convAudience === 'clients' ? (
                             <span
                               className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shrink-0"

@@ -292,6 +292,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([])
+  const [availableChannels, setAvailableChannels] = useState<any[]>([])
+  const [isSwitchingChannel, setIsSwitchingChannel] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [attachment, setAttachment] = useState<{ file: File; type: 'image' | 'document'; previewUrl?: string } | null>(null)
 
@@ -342,6 +344,14 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     })
 
     fetchQuickReplies()
+    supabase
+      .from('chat_channels')
+      .select('id, name, company_name, channel_type, display_label, phone_number')
+      .eq('is_active', true)
+      .order('company_name', { ascending: true })
+      .then(({ data }) => {
+        if (data) setAvailableChannels(data)
+      })
   }, [])
 
   const updateTranslator = (updates: { active?: boolean; myLang?: string; targetLang?: string }) => {
@@ -717,6 +727,90 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     conversation?.channel?.company_name ||
     null
 
+  const workerRegisteredCompany = (
+    context?.worker?.contratante ||
+    conversation?.worker_company_name ||
+    ''
+  ).trim().toUpperCase()
+
+  const activeChannelCompany = (conversation?.channel?.company_name || '').trim().toUpperCase()
+  const isChannelMismatch = Boolean(
+    workerRegisteredCompany &&
+      activeChannelCompany &&
+      workerRegisteredCompany !== activeChannelCompany
+  )
+
+  const officialWorkerChannel = availableChannels.find(
+    ch =>
+      (ch.channel_type || 'workers') === 'workers' &&
+      workerRegisteredCompany &&
+      (ch.company_name || '').trim().toUpperCase() === workerRegisteredCompany
+  )
+
+  const handleSwitchToChannel = async (targetChannelId: string) => {
+    if (!targetChannelId || targetChannelId === conversation?.channel_id || isSwitchingChannel) return
+    const phone = (conversation?.contact_phone || context?.worker?.movil || '').replace(/\D/g, '')
+    if (!phone) {
+      alert('Telefone do contato não encontrado para abrir conversa no outro canal.')
+      return
+    }
+    setIsSwitchingChannel(true)
+    try {
+      const { data: existing } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('channel_id', targetChannelId)
+        .ilike('contact_phone', `%${phone.slice(-8)}%`)
+        .order('last_message_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existing?.id) {
+        await supabase
+          .from('chat_conversations')
+          .update({
+            status: 'open',
+            worker_id: conversation?.worker_id || context?.worker?.id || null,
+            worker_company_name: context?.worker?.contratante || conversation?.worker_company_name || null,
+            worker_client_name: context?.worker?.cliente || conversation?.worker_client_name || null,
+            worker_function_name: context?.worker?.funcion || conversation?.worker_function_name || null
+          })
+          .eq('id', existing.id)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId: existing.id } }))
+        }
+        router.push(`/inbox/${existing.id}`)
+        return
+      }
+
+      const { data: created, error } = await supabase
+        .from('chat_conversations')
+        .insert({
+          channel_id: targetChannelId,
+          contact_phone: phone,
+          contact_name: context?.worker?.nome || conversation?.contact_name || phone,
+          worker_id: conversation?.worker_id || context?.worker?.id || null,
+          worker_company_name: context?.worker?.contratante || conversation?.worker_company_name || null,
+          worker_client_name: context?.worker?.cliente || conversation?.worker_client_name || null,
+          worker_function_name: context?.worker?.funcion || conversation?.worker_function_name || null,
+          status: 'open',
+          unread_count: 0,
+          last_message_at: new Date().toISOString()
+        })
+        .select('id')
+        .single()
+
+      if (!error && created?.id) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId: created.id } }))
+        }
+        router.push(`/inbox/${created.id}`)
+      }
+    } finally {
+      setIsSwitchingChannel(false)
+    }
+  }
+
   const workerClient =
     context?.worker?.cliente ||
     conversation?.worker_client_name ||
@@ -767,31 +861,40 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 {context?.worker?.nome || context?.conversation?.contact_name || context?.conversation?.contact_phone || 'Painel de Atendimento'}
               </h2>
               {workerCompany && (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shrink-0">
+                <span
+                  className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shrink-0"
+                  title="Empresa contratante na ficha do trabalhador"
+                >
                   <Building2 className="w-2.5 h-2.5" />
-                  {workerCompany}
+                  Ficha: {workerCompany}
                 </span>
               )}
-              {channelType === 'clients' ? (
-                <span
-                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shrink-0"
-                  title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
-                >
-                  🏢 Canal Clientes {conversation?.channel?.phone_number ? `(+${conversation.channel.phone_number.slice(-4)})` : ''}
-                </span>
-              ) : channelType === 'general' ? (
-                <span
-                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shrink-0"
-                  title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
-                >
-                  🚗 {channelDisplayLabel || 'Canal Geral'}
-                </span>
+              {availableChannels.length > 0 ? (
+                <div className="relative inline-flex items-center shrink-0">
+                  <select
+                    value={conversation?.channel_id || ''}
+                    disabled={isSwitchingChannel}
+                    onChange={e => handleSwitchToChannel(e.target.value)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border cursor-pointer outline-none transition-colors ${
+                      isChannelMismatch
+                        ? 'bg-rose-100 text-rose-800 border-rose-300 ring-2 ring-rose-400/40'
+                        : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                    }`}
+                    title="Canal de WhatsApp ativo desta conversa (clique para alternar de número)"
+                  >
+                    {availableChannels.map(ch => (
+                      <option key={ch.id} value={ch.id}>
+                        📱 WhatsApp: {ch.company_name || ch.name} {ch.phone_number ? `(+${ch.phone_number.slice(-4)})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ) : (
                 <span
                   className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1 shrink-0"
                   title={`Canal de WhatsApp: ${channelDisplayLabel || ''}`}
                 >
-                  👷 Canal Trabalhadores {conversation?.channel?.phone_number ? `(+${conversation.channel.phone_number.slice(-4)})` : ''}
+                  📱 WhatsApp: {activeChannelCompany || 'Trabalhadores'} {conversation?.channel?.phone_number ? `(+${conversation.channel.phone_number.slice(-4)})` : ''}
                 </span>
               )}
               {workerClient && (
@@ -953,6 +1056,39 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           </button>
         </div>
       </div>
+
+      {/* Alerta de Divergência entre Empresa do Trabalhador e Canal WhatsApp Ativo */}
+      {isChannelMismatch && (
+        <div className="bg-rose-50 dark:bg-rose-950/70 border-b border-rose-200 dark:border-rose-800 px-4 py-2 flex items-center justify-between gap-3 shrink-0 z-10">
+          <div className="flex items-center gap-2 text-xs text-rose-800 dark:text-rose-200 font-medium min-w-0">
+            <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+              ⚠️ Canal Divergente
+            </span>
+            <span className="truncate">
+              Este trabalhador pertence à <strong>{workerRegisteredCompany}</strong> na ficha cadastral, mas esta janela está no WhatsApp da{' '}
+              <strong>
+                {activeChannelCompany}
+                {conversation?.channel?.phone_number ? ` (+${conversation.channel.phone_number})` : ''}
+              </strong>
+              .
+            </span>
+          </div>
+          {officialWorkerChannel && (
+            <button
+              type="button"
+              disabled={isSwitchingChannel}
+              onClick={() => handleSwitchToChannel(officialWorkerChannel.id)}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg text-xs font-extrabold shrink-0 shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>
+                Mudar para WhatsApp {workerRegisteredCompany}
+                {officialWorkerChannel.phone_number ? ` (+${officialWorkerChannel.phone_number.slice(-4)})` : ''}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Chat Messages Timeline */}
       <div
@@ -1607,8 +1743,24 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <div className="flex items-center justify-center -ml-0.5">
                   <AudioRecorder onSend={handleSendAudio} disabled={isSending || isUploading} />
                 </div>
-                <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 ml-2">
-                  Respondendo como <strong className="text-slate-600 dark:text-slate-300">{currentUserName}</strong> ({resolvedSenderDept})
+                <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 ml-2">
+                  <span>
+                    Respondendo como <strong className="text-slate-600 dark:text-slate-300">{currentUserName}</strong> ({resolvedSenderDept})
+                  </span>
+                  {activeChannelCompany && !isPrivateNote && (
+                    <span
+                      className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${
+                        isChannelMismatch
+                          ? 'bg-rose-100 text-rose-800 border-rose-300'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                      }`}
+                      title={`Esta mensagem será disparada pelo WhatsApp da ${activeChannelCompany}${conversation?.channel?.phone_number ? ` (+${conversation.channel.phone_number})` : ''}`}
+                    >
+                      {isChannelMismatch ? '⚠️ ' : '📱 '}
+                      Canal de Envio: {activeChannelCompany}
+                      {conversation?.channel?.phone_number ? ` (+${conversation.channel.phone_number.slice(-4)})` : ''}
+                    </span>
+                  )}
                 </span>
               </div>
 

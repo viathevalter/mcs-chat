@@ -3,10 +3,30 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
-import { MessageCircle, Megaphone, Bot, Settings, ChevronLeft, ChevronRight, Moon, Sun, Globe, LogOut, User as UserIcon, Palette, Check } from 'lucide-react'
+import { MessageCircle, Megaphone, Bot, Settings, ChevronLeft, ChevronRight, Globe, LogOut, User as UserIcon, Palette, Check } from 'lucide-react'
 import { useI18n } from '@/contexts/i18n-context'
 import { supabase } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
+
+const PRODUCTION_HUB_URL = 'https://mcs-personal.vercel.app/hub'
+
+function resolveHubReturnUrl(): string {
+  const envHub = (process.env.NEXT_PUBLIC_HUB_URL || '').trim()
+  if (typeof window !== 'undefined') {
+    const isLocalHost =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (!isLocalHost) {
+      if (envHub && !envHub.includes('localhost') && !envHub.includes('127.0.0.1')) {
+        return envHub.endsWith('/hub') ? envHub : `${envHub.replace(/\/$/, '')}/hub`
+      }
+      return PRODUCTION_HUB_URL
+    }
+  }
+  if (envHub && !envHub.includes('localhost')) {
+    return envHub.endsWith('/hub') ? envHub : `${envHub.replace(/\/$/, '')}/hub`
+  }
+  return PRODUCTION_HUB_URL
+}
 
 export function GlobalSidebar() {
   const [collapsed, setCollapsed] = useState(false)
@@ -16,16 +36,37 @@ export function GlobalSidebar() {
   const [mounted, setMounted] = useState(false)
   const { lang, setLang, t } = useI18n()
   const [user, setUser] = useState<User | null>(null)
+  const [displayName, setDisplayName] = useState<string>('')
 
   useEffect(() => {
     setMounted(true)
-    
+
+    const loadUser = async (authUser: User | null) => {
+      setUser(authUser)
+      if (!authUser) {
+        setDisplayName('')
+        return
+      }
+      const { data: mcsUser } = await supabase
+        .from('mcs_users')
+        .select('display_name, name, full_name')
+        .eq('id', authUser.id)
+        .maybeSingle()
+      const resolved =
+        mcsUser?.display_name ||
+        mcsUser?.name ||
+        mcsUser?.full_name ||
+        authUser.user_metadata?.full_name ||
+        (authUser.email ? authUser.email.split('@')[0] : 'Usuário')
+      setDisplayName(resolved)
+    }
+
     supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
+      loadUser(user)
     })
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadUser(session?.user ?? null)
     })
 
     return () => {
@@ -53,19 +94,18 @@ export function GlobalSidebar() {
     { id: 'ocean', name: 'Ocean (Frio)', color1: '#0ea5e9', color2: '#e0f2fe' }
   ]
 
-
   return (
     <nav className={`flex flex-col border-r border-slate-200 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 bg-chat-surface-bg transition-all duration-300 ${collapsed ? 'w-20' : 'w-[240px]'} h-full shrink-0 relative z-50`}>
       {/* Logo Area */}
       <div className="h-20 flex items-center justify-center border-b border-slate-100 dark:border-slate-800 sunset:border-[#ffd5d9] ocean:border-sky-200 shrink-0">
-         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
-           M
-         </div>
-         {!collapsed && <span className="ml-3 font-bold text-slate-800 dark:text-slate-100 text-lg tracking-tight shrink-0 whitespace-nowrap">MCS-Chat</span>}
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+          M
+        </div>
+        {!collapsed && <span className="ml-3 font-bold text-slate-800 dark:text-slate-100 text-lg tracking-tight shrink-0 whitespace-nowrap">MCS-Chat</span>}
       </div>
 
       {/* Collapse Button */}
-      <button 
+      <button
         onClick={() => setCollapsed(!collapsed)}
         className="absolute -right-3 top-24 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-500 hover:text-emerald-600 transition-colors shadow-sm z-50"
       >
@@ -75,17 +115,18 @@ export function GlobalSidebar() {
       {/* Navigation Links */}
       <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-hide">
         {/* Hub Return Button */}
-        <button 
-          onClick={() => {
-            const hubUrl = process.env.NEXT_PUBLIC_HUB_URL || 'http://localhost:3000'
-            window.location.href = hubUrl
+        <a
+          href={PRODUCTION_HUB_URL}
+          onClick={(e) => {
+            e.preventDefault()
+            window.location.href = resolveHubReturnUrl()
           }}
           title={collapsed ? t('sidebar', 'back_to_hub') || "Voltar para o Hub" : undefined}
           className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 mb-4 rounded-xl cursor-pointer transition-colors group relative bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700`}
         >
           <ChevronLeft className="w-5 h-5 shrink-0 transition-colors" />
           {!collapsed && <span className="ml-3 text-[14px] whitespace-nowrap font-medium">Voltar para o Hub</span>}
-        </button>
+        </a>
 
         {links.map((link) => {
           const isActive = link.exact ? pathname === link.href : pathname?.startsWith(link.href)
@@ -113,7 +154,7 @@ export function GlobalSidebar() {
             {!collapsed && (
               <div className="flex flex-col truncate">
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate pr-2">
-                  {user?.email ? user.email.split('@')[0] : 'Usuário'}
+                  {displayName || (user?.email ? user.email.split('@')[0] : 'Usuário')}
                 </span>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate pr-2">
                   {user?.email || 'Desconhecido'}
@@ -131,7 +172,7 @@ export function GlobalSidebar() {
             </button>
           )}
         </div>
-        
+
         {/* Collapsed Logout */}
         {collapsed && (
           <button
@@ -144,33 +185,33 @@ export function GlobalSidebar() {
         )}
 
         <button onClick={toggleLanguage} className={`flex items-center ${collapsed ? 'justify-center w-10 h-10' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-emerald-300 transition-colors group`} title={t('sidebar', 'language')}>
-           {collapsed ? (
-             <span className="text-xs font-bold leading-none">{lang}</span>
-           ) : (
-             <>
-               <span className="text-xs font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" /> {t('sidebar', 'language')}</span>
-               <span className="text-xs font-bold bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-200 dark:border-slate-700">{lang}</span>
-             </>
-           )}
+          {collapsed ? (
+            <span className="text-xs font-bold leading-none">{lang}</span>
+          ) : (
+            <>
+              <span className="text-xs font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" /> {t('sidebar', 'language')}</span>
+              <span className="text-xs font-bold bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-200 dark:border-slate-700">{lang}</span>
+            </>
+          )}
         </button>
 
         {mounted && (
           <div className="relative group w-full">
-            <button 
+            <button
               className={`flex items-center ${collapsed ? 'justify-center w-10 h-10 mx-auto' : 'px-3 py-2 w-full justify-between'} bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:border-emerald-300 transition-colors group-hover:border-emerald-300 group`}
               title={t('sidebar', 'theme')}
             >
               {collapsed ? (
-                 <Palette className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
+                <Palette className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
               ) : (
                 <>
-                 <span className="text-xs font-semibold flex items-center gap-2">
-                   <Palette className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
-                   {t('sidebar', 'theme')}
-                 </span>
-                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-[80px]">
-                   {themesList.find(t => t.id === theme)?.name || theme}
-                 </span>
+                  <span className="text-xs font-semibold flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
+                    {t('sidebar', 'theme')}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-[80px]">
+                    {themesList.find(t => t.id === theme)?.name || theme}
+                  </span>
                 </>
               )}
             </button>

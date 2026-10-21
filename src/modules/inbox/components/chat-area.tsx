@@ -2399,11 +2399,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  if (e.ctrlKey || e.metaKey) {
-                    if (translatorActive && !isPrivateNote) {
-                      handleTranslateAndSend()
-                      return
-                    }
+                  if (translatorActive && !isPrivateNote && text.trim() && !attachment) {
+                    handleTranslateAndSend()
+                    return
                   }
                   if (text.trim() || attachment) {
                     handleSend()

@@ -300,16 +300,28 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       : String(rawMessageId)
     const possibleExternalIds = Array.from(new Set([String(rawMessageId), pureMessageId]))
 
-    // 4. Prevenir duplicatas por external_id
+    // 4. Prevenir duplicatas por external_id ou mensagens disparadas pela própria API (wasSentByApi)
+    const wasSentByApi = Boolean(messageData?.wasSentByApi || payload?.wasSentByApi)
+
     const { data: existingMsg } = await supabase
       .from('chat_messages')
-      .select('id')
+      .select('id, status')
       .in('external_id', possibleExternalIds)
       .limit(1)
       .maybeSingle()
 
     if (existingMsg) {
+      if (existingMsg.status === 'sent') {
+        await supabase
+          .from('chat_messages')
+          .update({ status: 'delivered' })
+          .eq('id', existingMsg.id)
+      }
       return NextResponse.json({ success: true, status: "Ignored Duplicate Message" })
+    }
+
+    if (wasSentByApi) {
+      return NextResponse.json({ success: true, status: "Ignored API-Sent Echo Message" })
     }
 
     // 4.5 Descriptografar e baixar Mídia via UazAPI v2 (/message/download) + Upload p/ Supabase Storage (chat_media)
@@ -461,26 +473,25 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
     if (existingConv) {
       conversationId = existingConv.id
 
-      // Deduplicação inteligente de eco (caso a mensagem tenha acabado de ser enviada pelo painel MCS Chat há < 15s)
+      // Deduplicação inteligente de eco (caso a mensagem tenha acabado de ser enviada pelo painel MCS Chat há < 60s)
       if (fromMe && content) {
-        const fifteenSecAgo = new Date(Date.now() - 15000).toISOString()
+        const sixtySecAgo = new Date(Date.now() - 60000).toISOString()
         const { data: recentOut } = await supabase
           .from('chat_messages')
           .select('id, external_id')
           .eq('conversation_id', conversationId)
           .eq('direction', 'outbound')
           .eq('content', content)
-          .gte('created_at', fifteenSecAgo)
+          .gte('created_at', sixtySecAgo)
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
 
         if (recentOut) {
-          if (!recentOut.external_id) {
-            await supabase
-              .from('chat_messages')
-              .update({ external_id: pureMessageId, status: 'delivered' })
-              .eq('id', recentOut.id)
-          }
+          await supabase
+            .from('chat_messages')
+            .update({ external_id: recentOut.external_id || pureMessageId, status: 'delivered' })
+            .eq('id', recentOut.id)
           await supabase
             .from('chat_conversations')
             .update({
@@ -670,4 +681,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
     console.error("Erro no webhook UazAPI:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ status: "ok", webhook: "uazapi-v2-unified" })
 }

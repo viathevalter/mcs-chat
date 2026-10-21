@@ -165,11 +165,13 @@ export default function AdminUsersPage() {
     try {
       const userId = editingUser.id
 
-      // 1. Update mcs_users (shared with MCS-Personal)
+      // 1. Update mcs_users (shared with MCS-Personal: sync display_name, name, full_name and department_id)
+      const cleanName = formDisplayName.trim() || null
       const { error: uErr } = await supabase
         .from("mcs_users")
         .update({
-          display_name: formDisplayName.trim() || null,
+          display_name: cleanName,
+          ...(cleanName ? { name: cleanName, full_name: cleanName } : {}),
           role: formRole,
           department_id: formDepartmentId || null,
           visibility_mode: formVisibilityMode
@@ -189,6 +191,7 @@ export default function AdminUsersPage() {
           .from("mcs_department_members")
           .update({
             user_id: userId,
+            ...(cleanName ? { nombrecompleto: cleanName } : {}),
             department_id: formDepartmentId || undefined
           })
           .eq("id", formEmployeeId)

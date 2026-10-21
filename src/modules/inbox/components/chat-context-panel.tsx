@@ -192,14 +192,15 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
     e.preventDefault()
     setSubmittingTransfer(true)
     try {
-      const selectedDept = departments.find((d) => d.id === transferDeptId)
       const selectedUser = users.find((u: any) => u.id === transferUserId)
-      const assignedName = selectedUser ? selectedUser.name || selectedUser.email : null
+      const effectiveDeptId = transferDeptId || selectedUser?.department_id || ''
+      const selectedDept = departments.find((d) => d.id === effectiveDeptId)
+      const assignedName = selectedUser ? selectedUser.display_name || selectedUser.name || selectedUser.email : null
 
       const { error } = await supabase
         .from('chat_conversations')
         .update({
-          department_id: transferDeptId || null,
+          department_id: effectiveDeptId || null,
           assigned_to: transferUserId || null,
           assigned_to_name: assignedName,
           status: 'open'
@@ -212,12 +213,16 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
         ...prev,
         conversation: {
           ...prev.conversation,
-          department_id: transferDeptId || null,
+          department_id: effectiveDeptId || null,
           department: selectedDept || null,
           assigned_to: transferUserId || null,
           assigned_to_name: assignedName
         }
       }))
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
 
       // Log visual Bloco de Atendimento divider in chat timeline
       const targetParts: string[] = []
@@ -627,31 +632,58 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
               <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Setor de Destino</label>
               <select
                 value={transferDeptId}
-                onChange={(e) => setTransferDeptId(e.target.value)}
+                onChange={(e) => {
+                  const nextDeptId = e.target.value
+                  setTransferDeptId(nextDeptId)
+                  if (nextDeptId && transferUserId) {
+                    const currentSelected = users.find((u: any) => u.id === transferUserId)
+                    if (currentSelected && currentSelected.department_id !== nextDeptId) {
+                      setTransferUserId('')
+                    }
+                  }
+                }}
                 className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
               >
                 <option value="">Fila Geral (Sem setor específico)</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    📂 {dept.name}
-                  </option>
-                ))}
+                {departments.map((dept) => {
+                  const deptUsersCount = users.filter((u: any) => u.department_id === dept.id).length
+                  return (
+                    <option key={dept.id} value={dept.id}>
+                      📂 {dept.name} ({deptUsersCount})
+                    </option>
+                  )
+                })}
               </select>
             </div>
 
             <div>
               <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                Funcionário Responsável (Mesmo Número)
+                {transferDeptId
+                  ? `Funcionários do Setor (${users.filter((u: any) => u.department_id === transferDeptId).length})`
+                  : 'Funcionário Responsável (Mesmo Número)'}
               </label>
               <select
                 value={transferUserId}
-                onChange={(e) => setTransferUserId(e.target.value)}
+                onChange={(e) => {
+                  const nextUserId = e.target.value
+                  setTransferUserId(nextUserId)
+                  if (nextUserId && !transferDeptId) {
+                    const chosen = users.find((u: any) => u.id === nextUserId)
+                    if (chosen?.department_id) {
+                      setTransferDeptId(chosen.department_id)
+                    }
+                  }
+                }}
                 className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
               >
                 <option value="">Qualquer funcionário do setor</option>
-                {users.map((u: any) => (
+                {(transferDeptId
+                  ? users.filter((u: any) => u.department_id === transferDeptId)
+                  : users
+                ).map((u: any) => (
                   <option key={u.id} value={u.id}>
-                    👤 {u.name || u.email}
+                    👤 {u.display_name || u.name || u.email}
+                    {!transferDeptId && u.department_name ? ` — ${u.department_name}` : ''}
                   </option>
                 ))}
               </select>

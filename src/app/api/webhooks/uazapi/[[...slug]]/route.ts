@@ -551,7 +551,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       return NextResponse.json({ success: false, error: "Failed to resolve conversation" }, { status: 500 })
     }
 
-    // 7. Inserir a Mensagem Recebida / Enviada
+    // 7. Checagem final anti-concorrência e inserção da Mensagem Recebida / Enviada
+    const { data: doubleCheckMsg } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .in('external_id', possibleExternalIds)
+      .limit(1)
+      .maybeSingle()
+
+    if (doubleCheckMsg?.id) {
+      return NextResponse.json({ success: true, status: "Duplicate message ignored on final check" })
+    }
+
     await supabase.from('chat_messages').insert({
       conversation_id: conversationId,
       direction,

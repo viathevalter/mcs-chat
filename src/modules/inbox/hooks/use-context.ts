@@ -127,8 +127,8 @@ export function useConversationContext(conversationId: string) {
 
       const resolvedEmpresaId = companyData?.id || workerData?.empresa_id || conv.company_id || null
 
-      // 5. Fetch available active departments, users, coreDepartments, and workerTasks
-      const [deptsRes, usersRes, coreDeptsRes, tasksRes] = await Promise.all([
+      // 5. Fetch available active departments, users, department members, coreDepartments, and workerTasks
+      const [deptsRes, usersRes, membersRes, coreDeptsRes, tasksRes] = await Promise.all([
         supabase
           .from('mcs_departments')
           .select('*')
@@ -136,8 +136,12 @@ export function useConversationContext(conversationId: string) {
           .order('name', { ascending: true }),
         supabase
           .from('mcs_users')
-          .select('id, name, email, department_id, role')
-          .order('name', { ascending: true }),
+          .select('id, name, display_name, full_name, email, department_id, role, active')
+          .order('display_name', { ascending: true }),
+        supabase
+          .from('mcs_department_members')
+          .select('id, user_id, nombrecompleto, correoempresarial, department_id, active')
+          .eq('active', true),
         resolvedEmpresaId
           ? supabase
               .schema('core_common')
@@ -159,6 +163,38 @@ export function useConversationContext(conversationId: string) {
           : Promise.resolve({ data: [] as any[] })
       ])
 
+      const deptMap = new Map<string, string>()
+      for (const d of deptsRes.data || []) {
+        deptMap.set(d.id, d.name)
+      }
+
+      const membersList = membersRes.data || []
+      const unifiedUsers = (usersRes.data || [])
+        .filter((u: any) => u.active !== false && u.email !== 'demo@mastercorp.local')
+        .map((u: any) => {
+          const linkedMember = membersList.find(
+            (m: any) =>
+              m.user_id === u.id ||
+              (m.correoempresarial && u.email && m.correoempresarial.trim().toLowerCase() === u.email.trim().toLowerCase())
+          )
+          const resolvedName =
+            (u.display_name && !u.display_name.includes('@') ? u.display_name.trim() : '') ||
+            (linkedMember?.nombrecompleto ? linkedMember.nombrecompleto.trim() : '') ||
+            (u.full_name ? u.full_name.trim() : '') ||
+            (u.display_name ? u.display_name.trim() : '') ||
+            (u.name ? u.name.trim() : '') ||
+            u.email
+          const resolvedDeptId = u.department_id || linkedMember?.department_id || null
+          return {
+            ...u,
+            name: resolvedName,
+            display_name: resolvedName,
+            department_id: resolvedDeptId,
+            department_name: resolvedDeptId ? deptMap.get(resolvedDeptId) || null : null
+          }
+        })
+        .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+
       // Standardize document field
       if (workerData) {
         workerData.documento = workerData.dni || workerData.nie || workerData.nif || workerData.pasaporte || null
@@ -170,7 +206,7 @@ export function useConversationContext(conversationId: string) {
         company: companyData || { id: resolvedEmpresaId, trade_name: companyQueryName || 'MCS Group' },
         departments: deptsRes.data || [],
         coreDepartments: coreDeptsRes.data || [],
-        users: usersRes.data || [],
+        users: unifiedUsers,
         workerTasks: tasksRes.data || [],
         allocations: allocationHistory
       })

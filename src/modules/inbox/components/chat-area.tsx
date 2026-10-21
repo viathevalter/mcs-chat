@@ -292,6 +292,13 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([])
+  const [selectedQuickReplyIdx, setSelectedQuickReplyIdx] = useState(0)
+  const [quickReplySearch, setQuickReplySearch] = useState('')
+  const [showInlineNewReply, setShowInlineNewReply] = useState(false)
+  const [newReplyTitle, setNewReplyTitle] = useState('')
+  const [newReplyShortcut, setNewReplyShortcut] = useState('')
+  const [newReplyContent, setNewReplyContent] = useState('')
+  const [savingInlineReply, setSavingInlineReply] = useState(false)
   const [availableChannels, setAvailableChannels] = useState<any[]>([])
   const [isSwitchingChannel, setIsSwitchingChannel] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -682,11 +689,59 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
   const handleSelectQuickReply = (content: string) => {
     setText((prev) => {
-      const replaced = prev.replace(/\/[a-z0-9_-]*$/i, '')
+      const replaced = prev.replace(/(^|\s)\/[^\s]*$/i, '$1')
       return replaced + content
     })
     setShowQuickReplies(false)
-    textareaRef.current?.focus()
+    setQuickReplySearch('')
+    setSelectedQuickReplyIdx(0)
+    setTimeout(() => textareaRef.current?.focus(), 20)
+  }
+
+  const handleSaveInlineQuickReply = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newReplyTitle.trim() || !newReplyContent.trim() || savingInlineReply) return
+    setSavingInlineReply(true)
+    try {
+      const slug = newReplyTitle
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 28)
+      let cleanShortcut = newReplyShortcut.trim()
+      if (!cleanShortcut) {
+        cleanShortcut = slug ? `/${slug}` : '/atalho'
+      } else if (!cleanShortcut.startsWith('/')) {
+        cleanShortcut = '/' + cleanShortcut.replace(/\s+/g, '-')
+      }
+
+      const { data, error } = await supabase
+        .from('chat_quick_replies')
+        .insert({
+          title: newReplyTitle.trim(),
+          shortcut: cleanShortcut,
+          content: newReplyContent.trim()
+        })
+        .select()
+        .single()
+
+      if (error) {
+        alert('Erro ao salvar mensagem rápida: ' + error.message)
+        return
+      }
+      if (data) {
+        setQuickReplies((prev) => [data, ...prev])
+        setNewReplyTitle('')
+        setNewReplyShortcut('')
+        setNewReplyContent('')
+        setShowInlineNewReply(false)
+      }
+    } finally {
+      setSavingInlineReply(false)
+    }
   }
 
   const handleAiQuickDraft = (draftText: string) => {
@@ -699,18 +754,36 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     const val = e.target.value
     setText(val)
 
-    const latestWordMatch = val.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
+    const latestWordMatch = val.match(/(^|\s)(\/[^\s]*)$/i)
     if (latestWordMatch) {
+      if (!showQuickReplies) {
+        fetchQuickReplies()
+      }
       setShowQuickReplies(true)
-    } else if (showQuickReplies && !val.includes('/')) {
+      setSelectedQuickReplyIdx(0)
+    } else if (showQuickReplies) {
       setShowQuickReplies(false)
     }
   }
 
-  const currentMatch = text.match(/(^|\s)(\/[a-z0-9_-]*)$/i)
+  const currentMatch = text.match(/(^|\s)(\/[^\s]*)$/i)
   const currentShortcutStr = currentMatch ? currentMatch[2].toLowerCase() : ''
-  const filteredReplies = currentShortcutStr
-    ? quickReplies.filter((r) => r.shortcut && r.shortcut.toLowerCase().startsWith(currentShortcutStr))
+  const slashSearchTerm = currentShortcutStr.startsWith('/')
+    ? currentShortcutStr.slice(1).trim().toLowerCase()
+    : ''
+  const effectiveQuickSearch = (slashSearchTerm || quickReplySearch.trim().toLowerCase())
+
+  const filteredReplies = effectiveQuickSearch
+    ? quickReplies.filter((r) => {
+        const sc = (r.shortcut || '').toLowerCase()
+        const tl = (r.title || '').toLowerCase()
+        const ct = (r.content || '').toLowerCase()
+        return (
+          sc.includes(effectiveQuickSearch) ||
+          tl.includes(effectiveQuickSearch) ||
+          ct.includes(effectiveQuickSearch)
+        )
+      })
     : quickReplies
 
   const conversation = context?.conversation
@@ -1359,37 +1432,132 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
       {/* CRM-Style Footer Composer (Full Width, Compact Border) */}
       <div className="px-2 py-1.5 bg-chat-surface-bg/95 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">
-        {/* Quick Replies Popup */}
-        {showQuickReplies && quickReplies.length > 0 && (
-          <div className="absolute bottom-full left-4 mb-2 w-80 bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden transform transition-all pb-1 max-h-72 overflow-y-auto z-50">
-            <div className="p-3 border-b border-slate-100 bg-slate-50/80 sticky top-0 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('quickReplies', 'title')}</span>
-              <button onClick={() => setShowQuickReplies(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-1">
-              {filteredReplies.length === 0 && (
-                <div className="p-4 text-xs text-center text-slate-400">{t('quickReplies', 'noShortcutFound')}</div>
+        {/* Quick Replies Popup (Atalho "/" estilo CRM IPTV) */}
+        {showQuickReplies && (
+          <div className="absolute bottom-full left-4 mb-2 w-96 bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all pb-1 max-h-96 flex flex-col z-50">
+            <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950 sticky top-0 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                    Mensagens Rápidas ({filteredReplies.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineNewReply(!showInlineNewReply)}
+                    className="px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition-colors cursor-pointer"
+                  >
+                    {showInlineNewReply ? 'Cancelar' : '+ Nova Frase'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickReplies(false)
+                      setShowInlineNewReply(false)
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {!currentShortcutStr && !showInlineNewReply && (
+                <input
+                  type="text"
+                  value={quickReplySearch}
+                  onChange={(e) => {
+                    setQuickReplySearch(e.target.value)
+                    setSelectedQuickReplyIdx(0)
+                  }}
+                  placeholder="Buscar frase por título, atalho ou texto..."
+                  className="w-full px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none focus:border-emerald-500"
+                />
               )}
-              {filteredReplies.map((reply) => (
-                <button
-                  key={reply.id}
-                  onClick={() => handleSelectQuickReply(reply.content)}
-                  className="w-full text-left p-3 hover:bg-emerald-50 rounded-xl transition-colors flex flex-col gap-1 border border-transparent hover:border-emerald-100/50"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-emerald-800">{reply.title}</span>
-                    {reply.shortcut && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 font-semibold border border-slate-200 rounded">
-                        {reply.shortcut}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-500 truncate">{reply.content}</span>
-                </button>
-              ))}
             </div>
+
+            {showInlineNewReply ? (
+              <form onSubmit={handleSaveInlineQuickReply} className="p-3 space-y-2 bg-emerald-50/40 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
+                <input
+                  type="text"
+                  required
+                  value={newReplyTitle}
+                  onChange={(e) => setNewReplyTitle(e.target.value)}
+                  placeholder="Título (ex: Solicitação de documento)"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={newReplyShortcut}
+                  onChange={(e) => setNewReplyShortcut(e.target.value)}
+                  placeholder="Atalho opcional (ex: /documento)"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <textarea
+                  rows={3}
+                  required
+                  value={newReplyContent}
+                  onChange={(e) => setNewReplyContent(e.target.value)}
+                  placeholder="Texto da mensagem rápida..."
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 resize-none"
+                />
+                <button
+                  type="submit"
+                  disabled={savingInlineReply}
+                  className="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingInlineReply ? 'Salvando...' : 'Salvar Mensagem Rápida'}
+                </button>
+              </form>
+            ) : (
+              <div className="p-1.5 overflow-y-auto max-h-64 space-y-1">
+                {filteredReplies.length === 0 ? (
+                  <div className="p-4 text-xs text-center text-slate-400 space-y-2">
+                    <p>{t('quickReplies', 'noShortcutFound') || 'Nenhuma frase encontrada.'}</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowInlineNewReply(true)}
+                      className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                    >
+                      + Cadastrar primeira frase rápida
+                    </button>
+                  </div>
+                ) : (
+                  filteredReplies.map((reply, rIdx) => {
+                    const isHighlighted = rIdx === selectedQuickReplyIdx
+                    return (
+                      <button
+                        key={reply.id}
+                        type="button"
+                        onMouseEnter={() => setSelectedQuickReplyIdx(rIdx)}
+                        onClick={() => handleSelectQuickReply(reply.content)}
+                        className={`w-full text-left p-2.5 rounded-xl transition-colors flex flex-col gap-1 border cursor-pointer ${
+                          isHighlighted
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 truncate">
+                            {reply.title}
+                          </span>
+                          {reply.shortcut && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800 rounded shrink-0">
+                              {reply.shortcut}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-snug">
+                          {reply.content}
+                        </span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1678,6 +1846,32 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               value={text}
               onChange={handleTextChange}
               onKeyDown={(e) => {
+                if (showQuickReplies && !showInlineNewReply) {
+                  if (e.key === 'ArrowDown' && filteredReplies.length > 0) {
+                    e.preventDefault()
+                    setSelectedQuickReplyIdx((prev) => (prev + 1) % filteredReplies.length)
+                    return
+                  }
+                  if (e.key === 'ArrowUp' && filteredReplies.length > 0) {
+                    e.preventDefault()
+                    setSelectedQuickReplyIdx((prev) => (prev - 1 + filteredReplies.length) % filteredReplies.length)
+                    return
+                  }
+                  if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.ctrlKey && !e.metaKey && filteredReplies.length > 0) {
+                    e.preventDefault()
+                    const chosen = filteredReplies[selectedQuickReplyIdx] || filteredReplies[0]
+                    if (chosen) {
+                      handleSelectQuickReply(chosen.content)
+                    }
+                    return
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setShowQuickReplies(false)
+                    return
+                  }
+                }
+
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   if (e.ctrlKey || e.metaKey) {
@@ -1701,8 +1895,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 isPrivateNote
                   ? '🔒 Escreva uma nota privada visível apenas para a equipe interna MCS...'
                   : translatorActive
-                  ? `Digite em Português (ou seu idioma) e clique em "Traduzir p/ ${getTargetLangDisplay(targetLang)}" (Ctrl+Enter)...`
-                  : t('chatArea', 'typeMessage')
+                  ? `Digite "/" para Mensagens Rápidas ou escreva em seu idioma e clique em "Traduzir p/ ${getTargetLangDisplay(targetLang)}" (Ctrl+Enter)...`
+                  : `${t('chatArea', 'typeMessage')} (Digite "/" para Mensagens Rápidas)`
               }
               rows={1}
             />
@@ -1712,11 +1906,16 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => setShowQuickReplies(!showQuickReplies)}
+                  onClick={() => {
+                    const next = !showQuickReplies
+                    if (next) fetchQuickReplies()
+                    setShowQuickReplies(next)
+                    setShowInlineNewReply(false)
+                  }}
                   className={`p-1.5 hover:bg-black/5 rounded-lg transition-colors shrink-0 cursor-pointer ${
                     showQuickReplies ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
                   }`}
-                  title={t('chatArea', 'quickReplies')}
+                  title="Mensagens Rápidas (Atalho: digite / no chat)"
                 >
                   <Zap className="w-4 h-4" />
                 </button>

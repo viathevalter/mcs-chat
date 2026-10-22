@@ -150,21 +150,32 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     if (startingId) return
 
     try {
-      const phone = worker.movil ? worker.movil.replace(/\D/g, '') : null
+      let freshWorker = worker
+      if (worker?.id) {
+        const { data: latestW } = await supabase
+          .schema('core_personal')
+          .from('workers')
+          .select('id, nome, movil, contratante, cliente, funcion')
+          .eq('id', worker.id)
+          .maybeSingle()
+        if (latestW) freshWorker = latestW
+      }
+
+      const phone = freshWorker.movil ? freshWorker.movil.replace(/\D/g, '') : null
       if (!phone) {
         alert(t('newChatModal', 'noPhone'))
         return
       }
 
       // Sempre priorizar o canal oficial da empresa contratante do trabalhador (ex: WISEOWE -> canal WISEOWE)
-      const matchedChannel = resolveChannelForWorker(worker)
+      const matchedChannel = resolveChannelForWorker(freshWorker)
       const targetChannelId = matchedChannel?.id || selectedChannelId
       if (targetChannelId) {
         setSelectedChannelId(targetChannelId)
       }
 
-      setStartingId(worker.id)
-      await createOrRedirect(phone, worker.nome, worker.id, false, targetChannelId, worker)
+      setStartingId(freshWorker.id)
+      await createOrRedirect(phone, freshWorker.nome, freshWorker.id, false, targetChannelId, freshWorker)
     } catch (err) {
       console.error(err)
       alert(t('newChatModal', 'error'))
@@ -192,11 +203,29 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     channelIdOverride?: string,
     workerObj?: any
   ) => {
-    let formattedPhone = phone
+    let formattedPhone = phone.replace(/\D/g, '')
+    if (formattedPhone.startsWith('00')) {
+      formattedPhone = formattedPhone.replace(/^00+/, '')
+    }
 
     if (!isFromWaSearch) {
-      if (phone.length <= 11 && !phone.startsWith('55') && !phone.startsWith('34') && !phone.startsWith('351')) {
-        formattedPhone = '55' + phone
+      if (formattedPhone.length === 9 && (formattedPhone.startsWith('6') || formattedPhone.startsWith('7'))) {
+        formattedPhone = '34' + formattedPhone
+      } else if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
+        formattedPhone = '351' + formattedPhone
+      } else if (formattedPhone.length === 10 && formattedPhone.startsWith('3')) {
+        formattedPhone = '57' + formattedPhone
+      } else if (
+        (formattedPhone.length === 10 || formattedPhone.length === 11) &&
+        !formattedPhone.startsWith('55') &&
+        !formattedPhone.startsWith('34') &&
+        !formattedPhone.startsWith('351') &&
+        !formattedPhone.startsWith('57') &&
+        !formattedPhone.startsWith('48') &&
+        !formattedPhone.startsWith('39') &&
+        !formattedPhone.startsWith('33')
+      ) {
+        formattedPhone = '55' + formattedPhone
       }
     }
 
@@ -206,13 +235,20 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       throw new Error('No channel')
     }
 
-    // Check if conversation exists FOR THIS SPECIFIC CHANNEL
-    const { data: existing } = await supabase
+    // Check if conversation exists FOR THIS SPECIFIC CHANNEL (by current phone or by worker_id)
+    let existingQuery = supabase
       .from('chat_conversations')
       .select('id')
-      .eq('contact_phone', formattedPhone)
       .eq('channel_id', effectiveChannelId)
-      .order('created_at', { ascending: false })
+
+    if (workerId && formattedPhone.length >= 8) {
+      existingQuery = existingQuery.or(`worker_id.eq.${workerId},contact_phone.ilike.%${formattedPhone.slice(-8)}%`)
+    } else {
+      existingQuery = existingQuery.eq('contact_phone', formattedPhone)
+    }
+
+    const { data: existing } = await existingQuery
+      .order('last_message_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -221,10 +257,13 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         .from('chat_conversations')
         .update({
           status: 'open',
+          contact_phone: formattedPhone,
+          ...(name ? { contact_name: name } : {}),
           ...(workerId ? { worker_id: workerId } : {}),
           ...(workerObj?.contratante ? { worker_company_name: workerObj.contratante } : {}),
           ...(workerObj?.cliente ? { worker_client_name: workerObj.cliente } : {}),
-          ...(workerObj?.funcion ? { worker_function_name: workerObj.funcion } : {})
+          ...(workerObj?.funcion ? { worker_function_name: workerObj.funcion } : {}),
+          updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
       onClose()

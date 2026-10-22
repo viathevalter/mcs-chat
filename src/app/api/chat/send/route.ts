@@ -11,6 +11,29 @@ function formatOutboundPreview(messageType: string, textContent: string): string
   return clean || 'Mensagem'
 }
 
+function normalizeWorkerPhone(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  let clean = rawPhone.replace(/\D/g, '')
+  if (!clean) return ''
+  if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
+  if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
+  if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
+  if (
+    (clean.length === 10 || clean.length === 11) &&
+    !clean.startsWith('34') &&
+    !clean.startsWith('55') &&
+    !clean.startsWith('57') &&
+    !clean.startsWith('351') &&
+    !clean.startsWith('48') &&
+    !clean.startsWith('39') &&
+    !clean.startsWith('33')
+  ) {
+    return '55' + clean
+  }
+  return clean
+}
+
 export async function POST(req: Request) {
   try {
     const reqData = await req.json()
@@ -40,6 +63,45 @@ export async function POST(req: Request) {
       .single()
 
     if (convError || !conv) throw new Error('Conversation not found')
+
+    // Garantir que se a conversa está vinculada a um trabalhador, usamos sempre o telefone mais recente do cadastro (core_personal.workers)
+    if (conv.worker_id) {
+      const { data: workerRow } = await supabase
+        .schema('core_personal')
+        .from('workers')
+        .select('id, nome, movil, contratante, cliente, funcion')
+        .eq('id', conv.worker_id)
+        .maybeSingle()
+
+      if (workerRow?.movil) {
+        const freshPhone = normalizeWorkerPhone(workerRow.movil)
+        const currentDigits = (conv.contact_phone || '').replace(/\D/g, '')
+        if (freshPhone.length >= 8 && currentDigits !== freshPhone && currentDigits.slice(-8) !== freshPhone.slice(-8)) {
+          const { data: conflictConv } = await supabase
+            .from('chat_conversations')
+            .select('id')
+            .eq('channel_id', conv.channel_id)
+            .neq('id', conv.id)
+            .ilike('contact_phone', `%${freshPhone.slice(-8)}%`)
+            .limit(1)
+            .maybeSingle()
+
+          if (!conflictConv) {
+            conv.contact_phone = freshPhone
+            await supabase
+              .from('chat_conversations')
+              .update({
+                contact_phone: freshPhone,
+                contact_name: workerRow.nome || conv.contact_name,
+                worker_company_name: workerRow.contratante || conv.worker_company_name,
+                worker_client_name: workerRow.cliente || conv.worker_client_name,
+                worker_function_name: workerRow.funcion || conv.worker_function_name
+              })
+              .eq('id', conv.id)
+          }
+        }
+      }
+    }
 
     const isInternalNote = messageType === 'internal_note' || messageType === 'system_block'
 

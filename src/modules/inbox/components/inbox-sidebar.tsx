@@ -40,6 +40,29 @@ function playNotificationChime() {
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
+function normalizeWorkerPhone(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  let clean = rawPhone.replace(/\D/g, '')
+  if (!clean) return ''
+  if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
+  if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
+  if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
+  if (
+    (clean.length === 10 || clean.length === 11) &&
+    !clean.startsWith('34') &&
+    !clean.startsWith('55') &&
+    !clean.startsWith('57') &&
+    !clean.startsWith('351') &&
+    !clean.startsWith('48') &&
+    !clean.startsWith('39') &&
+    !clean.startsWith('33')
+  ) {
+    return '55' + clean
+  }
+  return clean
+}
+
 function formatPhoneDisplay(rawPhone?: string | null): string {
   if (!rawPhone) return ''
   const clean = rawPhone.replace(/\D/g, '')
@@ -431,37 +454,84 @@ export default function InboxSidebar() {
   }
 
   const handleOpenOrCreateWorkerChat = async (worker: any) => {
-    const cleanPhone = (worker.movil || '').replace(/\D/g, '')
+    // 0. Buscar sempre o cadastro mais atual do trabalhador em core_personal.workers (para pegar qualquer alteração recente de telefone/empresa)
+    let freshWorker = worker
+    if (worker?.id) {
+      const { data: latestW } = await supabase
+        .schema('core_personal')
+        .from('workers')
+        .select('id, cod_colab, nome, movil, contratante, cliente, funcion, status_trabajador')
+        .eq('id', worker.id)
+        .maybeSingle()
+      if (latestW) freshWorker = latestW
+    }
+
+    const cleanPhone = normalizeWorkerPhone(freshWorker.movil)
     if (!cleanPhone) {
       alert('Este trabalhador não possui telefone celular cadastrado na ficha.')
       return
     }
 
     // 1. Determinar obrigatoriamente o canal oficial da empresa contratante do trabalhador (ex: WISEOWE -> canal WISEOWE)
-    const matchedChannel = resolveWorkerChannel(worker.contratante)
+    const matchedChannel = resolveWorkerChannel(freshWorker.contratante)
     if (!matchedChannel) {
       alert('Nenhum canal WhatsApp ativo encontrado.')
       return
     }
 
     // 2. Procurar conversa existente DESTE trabalhador ESPECIFICAMENTE no canal correto da empresa dele
-    const existingOnCorrectChannel = conversations.find(
+    // Prioriza conversa que já tenha o número atual; caso não haja, pega a conversa vinculada ao worker_id e atualiza o número!
+    const existingByNewPhone = conversations.find(
       c =>
         c.channel_id === matchedChannel.id &&
-        (c.worker_id === worker.id || (cleanPhone.length >= 8 && c.contact_phone?.includes(cleanPhone.slice(-8))))
+        cleanPhone.length >= 8 &&
+        c.contact_phone?.replace(/\D/g, '').slice(-8) === cleanPhone.slice(-8)
     )
+    const existingByWorkerId = conversations.find(
+      c => c.channel_id === matchedChannel.id && c.worker_id === freshWorker.id
+    )
+    const existingOnCorrectChannel = existingByNewPhone || existingByWorkerId
+
     if (existingOnCorrectChannel) {
+      const currentCleanConvPhone = (existingOnCorrectChannel.contact_phone || '').replace(/\D/g, '')
+      const targetCompany = freshWorker.contratante || matchedChannel.company_name || null
+      const targetClient = freshWorker.cliente || null
+      const targetFunc = freshWorker.funcion || null
+
+      if (
+        currentCleanConvPhone !== cleanPhone ||
+        existingOnCorrectChannel.contact_name !== freshWorker.nome ||
+        existingOnCorrectChannel.worker_id !== freshWorker.id ||
+        existingOnCorrectChannel.worker_company_name !== targetCompany ||
+        existingOnCorrectChannel.worker_client_name !== targetClient ||
+        existingOnCorrectChannel.worker_function_name !== targetFunc
+      ) {
+        await supabase
+          .from('chat_conversations')
+          .update({
+            contact_phone: cleanPhone,
+            contact_name: freshWorker.nome,
+            worker_id: freshWorker.id,
+            worker_company_name: targetCompany,
+            worker_client_name: targetClient,
+            worker_function_name: targetFunc,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingOnCorrectChannel.id)
+        await refetch()
+      }
+
       setSearchQuery('')
       router.push(`/inbox/${existingOnCorrectChannel.id}`)
       return
     }
 
-    // Checar também no banco para evitar duplicata no mesmo canal
+    // Checar também no banco (por worker_id ou telefone) para evitar duplicata no mesmo canal e atualizar o telefone
     const { data: dbExisting } = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('channel_id', matchedChannel.id)
-      .ilike('contact_phone', `%${cleanPhone.slice(-8)}%`)
+      .or(`worker_id.eq.${freshWorker.id},contact_phone.ilike.%${cleanPhone.slice(-8)}%`)
       .order('last_message_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -470,11 +540,13 @@ export default function InboxSidebar() {
       await supabase
         .from('chat_conversations')
         .update({
-          worker_id: worker.id,
-          contact_name: worker.nome,
-          worker_company_name: worker.contratante || matchedChannel.company_name || null,
-          worker_client_name: worker.cliente || null,
-          worker_function_name: worker.funcion || null
+          contact_phone: cleanPhone,
+          worker_id: freshWorker.id,
+          contact_name: freshWorker.nome,
+          worker_company_name: freshWorker.contratante || matchedChannel.company_name || null,
+          worker_client_name: freshWorker.cliente || null,
+          worker_function_name: freshWorker.funcion || null,
+          updated_at: new Date().toISOString()
         })
         .eq('id', dbExisting.id)
       await refetch()
@@ -488,11 +560,11 @@ export default function InboxSidebar() {
       .insert({
         channel_id: matchedChannel.id,
         contact_phone: cleanPhone,
-        contact_name: worker.nome,
-        worker_id: worker.id,
-        worker_company_name: worker.contratante || matchedChannel.company_name || null,
-        worker_client_name: worker.cliente || null,
-        worker_function_name: worker.funcion || null,
+        contact_name: freshWorker.nome,
+        worker_id: freshWorker.id,
+        worker_company_name: freshWorker.contratante || matchedChannel.company_name || null,
+        worker_client_name: freshWorker.cliente || null,
+        worker_function_name: freshWorker.funcion || null,
         status: 'open',
         unread_count: 0,
         last_message_at: new Date().toISOString()

@@ -21,6 +21,29 @@ export interface ConversationContextData {
   allocations: AllocationHistoryItem[]
 }
 
+function normalizeWorkerPhone(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  let clean = rawPhone.replace(/\D/g, '')
+  if (!clean) return ''
+  if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
+  if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
+  if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
+  if (
+    (clean.length === 10 || clean.length === 11) &&
+    !clean.startsWith('34') &&
+    !clean.startsWith('55') &&
+    !clean.startsWith('57') &&
+    !clean.startsWith('351') &&
+    !clean.startsWith('48') &&
+    !clean.startsWith('39') &&
+    !clean.startsWith('33')
+  ) {
+    return '55' + clean
+  }
+  return clean
+}
+
 export function useConversationContext(conversationId: string) {
   const [context, setContext] = useState<ConversationContextData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -86,6 +109,59 @@ export function useConversationContext(conversationId: string) {
         if (wrksByName && wrksByName.length > 0) {
           workerData = wrksByName[0]
           await supabase.from('chat_conversations').update({ worker_id: workerData.id }).eq('id', conv.id)
+        }
+      }
+
+      // 2.1 Se o trabalhador está vinculado e o telefone em core_personal.workers foi alterado, sincroniza na conversa
+      if (workerData?.id) {
+        const normalizedWorkerPhone = normalizeWorkerPhone(workerData.movil)
+        const currentConvDigits = (conv.contact_phone || '').replace(/\D/g, '')
+        const syncUpdates: Record<string, any> = {}
+
+        if (
+          normalizedWorkerPhone.length >= 8 &&
+          currentConvDigits !== normalizedWorkerPhone &&
+          currentConvDigits.slice(-8) !== normalizedWorkerPhone.slice(-8)
+        ) {
+          // Verifica se não há outra conversa no mesmo canal que já esteja com esse novo número
+          const { data: otherConv } = await supabase
+            .from('chat_conversations')
+            .select('id')
+            .eq('channel_id', conv.channel_id)
+            .neq('id', conv.id)
+            .ilike('contact_phone', `%${normalizedWorkerPhone.slice(-8)}%`)
+            .limit(1)
+            .maybeSingle()
+
+          if (!otherConv) {
+            syncUpdates.contact_phone = normalizedWorkerPhone
+            conv.contact_phone = normalizedWorkerPhone
+          }
+        }
+
+        if (workerData.nome && conv.contact_name !== workerData.nome) {
+          syncUpdates.contact_name = workerData.nome
+          conv.contact_name = workerData.nome
+        }
+        if (workerData.contratante && conv.worker_company_name !== workerData.contratante) {
+          syncUpdates.worker_company_name = workerData.contratante
+          conv.worker_company_name = workerData.contratante
+        }
+        if (workerData.cliente && conv.worker_client_name !== workerData.cliente) {
+          syncUpdates.worker_client_name = workerData.cliente
+          conv.worker_client_name = workerData.cliente
+        }
+        if (workerData.funcion && conv.worker_function_name !== workerData.funcion) {
+          syncUpdates.worker_function_name = workerData.funcion
+          conv.worker_function_name = workerData.funcion
+        }
+
+        if (Object.keys(syncUpdates).length > 0) {
+          syncUpdates.updated_at = new Date().toISOString()
+          await supabase.from('chat_conversations').update(syncUpdates).eq('id', conv.id)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mcs-chat-updated'))
+          }
         }
       }
 

@@ -39,7 +39,31 @@ export function useChat(conversationId: string) {
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
-    if (data) setMessages(data)
+    if (data) {
+      setMessages((prev) => {
+        // Evitar re-render desnecessário quando a lista de mensagens não mudou no polling
+        const nonTempPrev = prev.filter((m) => !String(m.id).startsWith('temp_'))
+        if (nonTempPrev.length === data.length) {
+          let identical = true
+          for (let i = 0; i < data.length; i++) {
+            const p = nonTempPrev[i]
+            const n = data[i]
+            if (
+              p.id !== n.id ||
+              p.content !== n.content ||
+              p.status !== n.status ||
+              p.media_url !== n.media_url ||
+              p.message_type !== n.message_type
+            ) {
+              identical = false
+              break
+            }
+          }
+          if (identical) return prev
+        }
+        return data
+      })
+    }
     setLoading(false)
   }, [conversationId])
 

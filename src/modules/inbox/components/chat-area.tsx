@@ -275,6 +275,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
   const [showAiMenu, setShowAiMenu] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isUserNearBottomRef = useRef<boolean>(true)
+  const hasInitialScrolledRef = useRef<string | null>(null)
+  const lastMessageIdRef = useRef<string | null>(null)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string>('Atendente MCS')
@@ -415,8 +420,52 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   }, [translatorActive, myLang, targetLang])
 
   useEffect(() => {
+    if (!messages || messages.length === 0) return
+    if (messages[0]?.conversation_id && messages[0].conversation_id !== conversationId) return
+
+    const latestMsg = messages[messages.length - 1]
+    const currentLastId = latestMsg?.id || null
+
+    // 1. Primeira abertura desta conversa: posiciona no final imediatamente (sem animação puxando depois)
+    if (hasInitialScrolledRef.current !== conversationId) {
+      hasInitialScrolledRef.current = conversationId
+      lastMessageIdRef.current = currentLastId
+      isUserNearBottomRef.current = true
+      setShowScrollToBottom(false)
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+      return
+    }
+
+    // 2. Se o último ID não mudou (ex: polling silencioso, atualização de status ou tradução), NUNCA mexe no scroll!
+    if (currentLastId === lastMessageIdRef.current) {
+      return
+    }
+
+    lastMessageIdRef.current = currentLastId
+    const isSentByMeJustNow = String(currentLastId).startsWith('temp_')
+
+    // 3. Só desce automaticamente se a mensagem acabou de ser enviada pelo próprio atendente
+    //    OU se o atendente já estava no final da conversa lendo as últimas mensagens.
+    //    Se ele subiu o scroll para ler o histórico, mantém a posição parada onde ele está!
+    if (isSentByMeJustNow || isUserNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, conversationId])
+
+  const handleMessagesScroll = () => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    const nearBottom = distanceFromBottom < 140
+    isUserNearBottomRef.current = nearBottom
+    setShowScrollToBottom(!nearBottom)
+  }
+
+  const scrollToLatestMessages = () => {
+    isUserNearBottomRef.current = true
+    setShowScrollToBottom(false)
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }
 
   const fetchQuickReplies = async () => {
     const { data } = await supabase.from('chat_quick_replies').select('*').order('created_at', { ascending: false })
@@ -1690,7 +1739,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
       {/* Chat Messages Timeline */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative"
         onClick={() => {
           setShowEmoji(false)
           setShowAttach(false)
@@ -1954,6 +2005,18 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         })}
         <div ref={bottomRef} />
       </div>
+
+      {/* Botão flutuante para voltar ao final quando o usuário está lendo mensagens antigas acima */}
+      {showScrollToBottom && (
+        <button
+          type="button"
+          onClick={scrollToLatestMessages}
+          className="absolute bottom-28 right-6 z-30 px-3.5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-lg flex items-center gap-1.5 transition-all cursor-pointer animate-in fade-in zoom-in-95"
+          title="Voltar para as mensagens mais recentes"
+        >
+          <span>⬇ Ir para o final</span>
+        </button>
+      )}
 
       {/* CRM-Style Footer Composer (Full Width, Compact Border) */}
       <div className="px-2 py-1.5 bg-chat-surface-bg/95 backdrop-blur-xl border-t border-chat-inbound-border sticky bottom-0 transition-colors duration-300 relative z-40">

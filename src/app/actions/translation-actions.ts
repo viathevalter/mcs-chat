@@ -94,9 +94,14 @@ export async function translateInboundMessage(
     const targetIso = LANG_TO_ISO[targetLang] || 'pt'
     let newTranslation = ''
 
+    // Para leitura de mensagens recebidas: prioriza Google GTX instantâneo (~120ms, sem fila de tokens da OpenAI)
+    newTranslation = await googleTranslateFallback(originalContent, targetIso)
+
     const openAiKey = (process.env.OPENAI_API_KEY || '').trim()
-    if (openAiKey) {
+    if ((!newTranslation || newTranslation === originalContent) && openAiKey) {
       try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 2800)
         const openai = createOpenAI({ apiKey: openAiKey })
         const systemPrompt = `Você é um tradutor instantâneo de chats de WhatsApp corporativo (MCS).
 Abaixo estará uma mensagem recebida em um chat.
@@ -106,16 +111,15 @@ RETORNE APENAS A MENSAGEM FINAL. SEM ASPAS. SEM TEXTO ADICIONAL.`
 
         const { text } = await generateText({
           model: openai('gpt-4o-mini'),
+          maxRetries: 0,
+          abortSignal: controller.signal,
           system: systemPrompt,
           prompt: originalContent,
           temperature: 0.1,
         })
-        newTranslation = text.trim()
-      } catch (aiErr) {
-        newTranslation = await googleTranslateFallback(originalContent, targetIso)
-      }
-    } else {
-      newTranslation = await googleTranslateFallback(originalContent, targetIso)
+        clearTimeout(timer)
+        if (text?.trim()) newTranslation = text.trim()
+      } catch {}
     }
 
     if (!newTranslation) newTranslation = originalContent
@@ -144,6 +148,8 @@ export async function translateOutboundMessage(originalContent: string, targetCh
 
     if (openAiKey) {
       try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 2400)
         const openai = createOpenAI({ apiKey: openAiKey })
         const systemPrompt = `Você é um comunicador profissional em um sistema corporativo (MCS).
 O operador digitou uma mensagem no idioma original dele. O destinatário fala: ${targetChatLang}.
@@ -153,10 +159,13 @@ RETORNE APENAS E EXCLUSIVAMENTE A TRADUÇÃO. NUNCA ADICIONE COMENTÁRIOS.`
 
         const { text } = await generateText({
           model: openai('gpt-4o-mini'),
+          maxRetries: 0,
+          abortSignal: controller.signal,
           system: systemPrompt,
           prompt: originalContent,
           temperature: 0.2,
         })
+        clearTimeout(timer)
         const cleaned = text.trim()
         if (cleaned) {
           return { success: true, translation: cleaned }

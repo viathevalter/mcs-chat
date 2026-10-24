@@ -575,6 +575,31 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       return NextResponse.json({ success: true, status: "Duplicate message ignored on final check" })
     }
 
+    // Pré-traduzir mensagens de texto recebidas dos trabalhadores para Português no ato do recebimento (0ms no painel)
+    let initialTranslations: Record<string, string> | undefined = undefined
+    if (!fromMe && messageType === 'text' && content && !content.startsWith('[')) {
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 1400)
+        const gtxUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt&dt=t&q=${encodeURIComponent(content)}`
+        const gtxRes = await fetch(gtxUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          cache: 'no-store',
+          signal: controller.signal
+        })
+        clearTimeout(timer)
+        if (gtxRes.ok) {
+          const gtxData = await gtxRes.json()
+          if (Array.isArray(gtxData) && Array.isArray(gtxData[0])) {
+            const ptText = gtxData[0].map((chunk: any) => chunk?.[0] || '').join('').trim()
+            if (ptText) {
+              initialTranslations = { Portuguese: ptText }
+            }
+          }
+        }
+      } catch {}
+    }
+
     await supabase.from('chat_messages').insert({
       conversation_id: conversationId,
       direction,
@@ -585,7 +610,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       external_id: pureMessageId,
       quoted: quotedMessageId,
       sender_name: fromMe ? 'WhatsApp Web / Equipe' : contactName,
-      is_private: false
+      is_private: false,
+      ...(initialTranslations ? { translations: initialTranslations } : {})
     })
 
     // 8. Triagem Inteligente por Agente de IA (Apenas se mensagem recebida e bot ativo)

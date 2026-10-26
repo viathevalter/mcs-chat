@@ -30,7 +30,16 @@ import {
   Building2,
   Briefcase,
   ArrowRightLeft,
-  UserCheck
+  UserCheck,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  RotateCcw,
+  Download,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2
 } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
@@ -319,6 +328,109 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const [isSwitchingChannel, setIsSwitchingChannel] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [attachment, setAttachment] = useState<{ file: File; type: 'image' | 'document'; previewUrl?: string } | null>(null)
+
+  // Lightbox / Visualizador de Imagens (Estilo WhatsApp Web com Zoom, Rotação, Arrastar e Galeria)
+  const [lightboxMsgId, setLightboxMsgId] = useState<string | null>(null)
+  const [lightboxZoom, setLightboxZoom] = useState<number>(1)
+  const [lightboxRotation, setLightboxRotation] = useState<number>(0)
+  const [lightboxPan, setLightboxPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [isDraggingLightbox, setIsDraggingLightbox] = useState<boolean>(false)
+  const lightboxDragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
+    x: 0,
+    y: 0,
+    panX: 0,
+    panY: 0
+  })
+
+  const imageMessages = (messages || []).filter(
+    (m: any) => m?.media_url && (m?.message_type === 'image' || /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(String(m?.media_url)))
+  )
+  const currentLightboxIndex = lightboxMsgId
+    ? imageMessages.findIndex((m: any) => m.id === lightboxMsgId)
+    : -1
+  const currentLightboxMsg = currentLightboxIndex >= 0 ? imageMessages[currentLightboxIndex] : null
+
+  const openImageLightbox = (msgId: string) => {
+    setLightboxMsgId(msgId)
+    setLightboxZoom(1)
+    setLightboxRotation(0)
+    setLightboxPan({ x: 0, y: 0 })
+  }
+
+  const closeImageLightbox = () => {
+    setLightboxMsgId(null)
+    setLightboxZoom(1)
+    setLightboxRotation(0)
+    setLightboxPan({ x: 0, y: 0 })
+    setIsDraggingLightbox(false)
+  }
+
+  const navigateLightbox = (dir: -1 | 1) => {
+    if (imageMessages.length <= 1 || currentLightboxIndex < 0) return
+    const nextIdx = (currentLightboxIndex + dir + imageMessages.length) % imageMessages.length
+    const nextMsg = imageMessages[nextIdx]
+    if (nextMsg) {
+      setLightboxMsgId(nextMsg.id)
+      setLightboxZoom(1)
+      setLightboxRotation(0)
+      setLightboxPan({ x: 0, y: 0 })
+    }
+  }
+
+  const adjustLightboxZoom = (delta: number) => {
+    setLightboxZoom((prev) => {
+      const next = Math.min(5, Math.max(0.5, Number((prev + delta).toFixed(2))))
+      if (next <= 1) setLightboxPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  const handleDownloadImage = async (url: string, msgId?: string) => {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      const ext = url.split('.').pop()?.split('?')[0] || 'jpg'
+      a.download = `foto_mcs_${msgId ? msgId.slice(0, 8) : Date.now()}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  useEffect(() => {
+    if (!lightboxMsgId) return
+    const handleLightboxKeys = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeImageLightbox()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        navigateLightbox(-1)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        navigateLightbox(1)
+      } else if (e.key === '+' || e.key === '=') {
+        e.preventDefault()
+        adjustLightboxZoom(0.35)
+      } else if (e.key === '-') {
+        e.preventDefault()
+        adjustLightboxZoom(-0.35)
+      } else if (e.key === '0') {
+        e.preventDefault()
+        setLightboxZoom(1)
+        setLightboxRotation(0)
+        setLightboxPan({ x: 0, y: 0 })
+      }
+    }
+    window.addEventListener('keydown', handleLightboxKeys)
+    return () => window.removeEventListener('keydown', handleLightboxKeys)
+  }, [lightboxMsgId, currentLightboxIndex, imageMessages.length])
 
   const docInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -1933,12 +2045,58 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         )
                       })()}
 
-                    {msg.media_url && msg.message_type === 'image' && (
-                      <div className="mb-1 max-w-sm rounded-2xl overflow-hidden mt-1 mx-1">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={msg.media_url} alt="Media" className="max-w-full h-auto rounded-lg" />
-                      </div>
-                    )}
+                    {msg.media_url &&
+                      (msg.message_type === 'image' ||
+                        /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(String(msg.media_url))) && (
+                        <div className="mb-1.5 max-w-sm rounded-xl overflow-hidden mt-1 mx-0.5 relative group/img bg-black/5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={msg.media_url}
+                            alt="Foto enviada"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openImageLightbox(msg.id)
+                            }}
+                            className="max-w-full max-h-[420px] w-auto h-auto object-contain rounded-lg cursor-zoom-in transition-transform duration-200 group-hover/img:scale-[1.01]"
+                          />
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openImageLightbox(msg.id)
+                            }}
+                            className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex flex-col justify-between p-2 cursor-zoom-in rounded-lg"
+                          >
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openImageLightbox(msg.id)
+                                }}
+                                className="px-2 py-1 rounded-lg bg-black/70 hover:bg-black text-white text-[11px] font-bold flex items-center gap-1 shadow-md cursor-pointer"
+                                title="Expandir e dar Zoom (Estilo WhatsApp)"
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                                <span>Ampliar / Zoom</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDownloadImage(msg.media_url!, msg.id)
+                                }}
+                                className="p-1.5 rounded-lg bg-black/70 hover:bg-black text-white shadow-md cursor-pointer"
+                                title="Baixar imagem"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <span className="text-[10.5px] font-semibold text-white/95 drop-shadow px-1">
+                              🔍 Clique para expandir e dar zoom
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                     {msg.media_url && msg.message_type === 'document' && (
                       <a
@@ -1965,7 +2123,8 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                     {msg.content &&
                       msg.content !== '[Mídia UAZ]' &&
                       msg.content !== '[Mensagem de Voz]' &&
-                      (translatorActive && !isNote && !['audio', 'video', 'image', 'document'].includes(msg.message_type) ? (
+                      !(msg.media_url && msg.message_type === 'image' && msg.content.trim() === '📷 Foto') &&
+                      (translatorActive && !isNote && !['audio', 'video', 'document'].includes(msg.message_type) ? (
                         <BilingualMessage msg={msg} translationActive={translatorActive} myLang={myLang} />
                       ) : (
                         <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap px-0.5">{msg.content}</p>
@@ -2591,6 +2750,270 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           </div>
         </div>
       </div>
+
+      {/* Modal Visualizador de Imagens Estilo WhatsApp Web (Zoom, Pan/Arrastar, Girar, Download e Carrossel) */}
+      {currentLightboxMsg && currentLightboxMsg.media_url && (
+        <div
+          className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex flex-col select-none animate-in fade-in duration-150"
+          onClick={closeImageLightbox}
+        >
+          {/* Barra Superior de Controles (Estilo WhatsApp Web) */}
+          <div
+            className="h-16 px-4 md:px-6 bg-slate-900/90 border-b border-white/10 flex items-center justify-between gap-3 shrink-0 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                {(context?.worker?.nome || conversation?.contact_name || 'FT').substring(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate">
+                  {currentLightboxMsg.direction === 'outbound'
+                    ? currentLightboxMsg.sender_name || currentUserName
+                    : context?.worker?.nome || conversation?.contact_name || 'Trabalhador'}
+                </p>
+                <p className="text-[11px] text-slate-400 flex items-center gap-2">
+                  <span>
+                    {currentLightboxMsg.created_at
+                      ? format(new Date(currentLightboxMsg.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                      : ''}
+                  </span>
+                  {imageMessages.length > 1 && (
+                    <span className="px-1.5 py-0.2 rounded bg-white/10 text-white font-semibold">
+                      Foto {currentLightboxIndex + 1} de {imageMessages.length}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Botões de Zoom, Rotação, Download e Fechar */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => adjustLightboxZoom(-0.35)}
+                disabled={lightboxZoom <= 0.5}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white transition-colors cursor-pointer"
+                title="Diminuir Zoom (-)"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLightboxZoom(1)
+                  setLightboxRotation(0)
+                  setLightboxPan({ x: 0, y: 0 })
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-extrabold font-mono min-w-[60px] text-center transition-colors cursor-pointer"
+                title="Clique para restaurar tamanho original (100%)"
+              >
+                {Math.round(lightboxZoom * 100)}%
+              </button>
+
+              <button
+                type="button"
+                onClick={() => adjustLightboxZoom(0.35)}
+                disabled={lightboxZoom >= 5}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white transition-colors cursor-pointer"
+                title="Aumentar Zoom (+)"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+
+              <div className="w-px h-6 bg-white/15 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => setLightboxRotation((prev) => (prev - 90) % 360)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Girar para a esquerda (90°)"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLightboxRotation((prev) => (prev + 90) % 360)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Girar para a direita (90°)"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+
+              <div className="w-px h-6 bg-white/15 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => handleDownloadImage(currentLightboxMsg.media_url!, currentLightboxMsg.id)}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                title="Baixar imagem no computador"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Baixar</span>
+              </button>
+
+              <a
+                href={currentLightboxMsg.media_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Abrir imagem original em nova guia"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+
+              <button
+                type="button"
+                onClick={closeImageLightbox}
+                className="p-2 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white transition-colors cursor-pointer ml-1"
+                title="Fechar (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Área Central da Imagem com Suporte a Roda do Mouse (Scroll Zoom), Duplo Clique e Arrastar (Pan) */}
+          <div
+            className="flex-1 relative overflow-hidden flex items-center justify-center p-4"
+            onWheel={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              const delta = e.deltaY < 0 ? 0.25 : -0.25
+              adjustLightboxZoom(delta)
+            }}
+            onMouseDown={(e) => {
+              if (e.button !== 0) return
+              e.stopPropagation()
+              setIsDraggingLightbox(true)
+              lightboxDragStartRef.current = {
+                x: e.clientX,
+                y: e.clientY,
+                panX: lightboxPan.x,
+                panY: lightboxPan.y
+              }
+            }}
+            onMouseMove={(e) => {
+              if (!isDraggingLightbox) return
+              e.stopPropagation()
+              const dx = e.clientX - lightboxDragStartRef.current.x
+              const dy = e.clientY - lightboxDragStartRef.current.y
+              setLightboxPan({
+                x: lightboxDragStartRef.current.panX + dx,
+                y: lightboxDragStartRef.current.panY + dy
+              })
+            }}
+            onMouseUp={() => setIsDraggingLightbox(false)}
+            onMouseLeave={() => setIsDraggingLightbox(false)}
+          >
+            {/* Botão Foto Anterior */}
+            {imageMessages.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigateLightbox(-1)
+                }}
+                className="absolute left-4 z-20 p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white border border-white/15 shadow-xl transition-transform hover:scale-105 cursor-pointer"
+                title="Foto anterior (←)"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+
+            {/* Imagem Ampliada */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={currentLightboxMsg.media_url}
+              alt="Visualização ampliada"
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                if (lightboxZoom > 1) {
+                  setLightboxZoom(1)
+                  setLightboxPan({ x: 0, y: 0 })
+                } else {
+                  setLightboxZoom(2.5)
+                }
+              }}
+              style={{
+                transform: `translate(${lightboxPan.x}px, ${lightboxPan.y}px) scale(${lightboxZoom}) rotate(${lightboxRotation}deg)`,
+                transition: isDraggingLightbox ? 'none' : 'transform 140ms ease-out'
+              }}
+              className={`max-h-[78vh] max-w-[90vw] object-contain rounded-lg shadow-2xl ${
+                isDraggingLightbox
+                  ? 'cursor-grabbing'
+                  : lightboxZoom > 1
+                  ? 'cursor-grab'
+                  : 'cursor-zoom-in'
+              }`}
+            />
+
+            {/* Botão Próxima Foto */}
+            {imageMessages.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigateLightbox(1)
+                }}
+                className="absolute right-4 z-20 p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white border border-white/15 shadow-xl transition-transform hover:scale-105 cursor-pointer"
+                title="Próxima foto (→)"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            )}
+
+            {/* Dica Flutuante de Uso */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-slate-900/85 border border-white/10 text-[11px] text-slate-300 font-medium pointer-events-none shadow-lg whitespace-nowrap"
+            >
+              🖱️ Roda do mouse ou duplo clique = Zoom • Arraste para mover • Setas ← → alternam fotos • ESC fecha
+            </div>
+          </div>
+
+          {/* Legenda (se houver) + Carrossel de Miniaturas da Conversa (Igual WhatsApp Web) */}
+          <div
+            className="bg-slate-900/95 border-t border-white/10 px-4 py-2.5 flex flex-col items-center gap-2 shrink-0 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {currentLightboxMsg.content &&
+              currentLightboxMsg.content.trim() !== '📷 Foto' &&
+              currentLightboxMsg.content.trim() !== '[Mídia UAZ]' && (
+                <p className="text-xs text-slate-200 max-w-2xl text-center bg-white/5 px-3 py-1 rounded-lg">
+                  {currentLightboxMsg.content}
+                </p>
+              )}
+
+            {imageMessages.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto max-w-full py-1 px-2">
+                {imageMessages.map((imgMsg: any) => {
+                  const isCurrent = imgMsg.id === currentLightboxMsg.id
+                  return (
+                    <button
+                      key={imgMsg.id}
+                      type="button"
+                      onClick={() => openImageLightbox(imgMsg.id)}
+                      className={`relative w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'border-emerald-400 scale-105 ring-2 ring-emerald-500/40'
+                          : 'border-white/15 opacity-55 hover:opacity-90'
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imgMsg.media_url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

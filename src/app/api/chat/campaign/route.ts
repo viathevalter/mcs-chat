@@ -30,6 +30,10 @@ function interpolateTemplate(
   template: string,
   worker: {
     nome?: string
+    cod_colab?: string | null
+    pasaporte?: string | null
+    nie?: string | null
+    dni?: string | null
     contratante?: string
     cliente?: string
     funcion?: string
@@ -40,6 +44,8 @@ function interpolateTemplate(
 ): string {
   const fullName = (worker.nome || 'Trabalhador').trim()
   const firstName = fullName.split(/\s+/)[0] || fullName
+  const passportDoc = (worker.pasaporte || worker.nie || worker.dni || '').trim()
+  const codColab = (worker.cod_colab || '').trim()
   const company = (worker.contratante || 'MCS').trim()
   const client = (worker.cliente || 'Obra').trim()
   const func = (worker.funcion || 'Profissional').trim()
@@ -49,6 +55,10 @@ function interpolateTemplate(
   let out = template
     .replace(/\{nome\}/gi, fullName)
     .replace(/\{primeiro_nome\}/gi, firstName)
+    .replace(/\{passaporte\}/gi, passportDoc)
+    .replace(/\{pasaporte\}/gi, passportDoc)
+    .replace(/\{documento\}/gi, passportDoc)
+    .replace(/\{cod_colab\}/gi, codColab)
     .replace(/\{empresa\}/gi, company)
     .replace(/\{contratante\}/gi, company)
     .replace(/\{cliente\}/gi, client)
@@ -141,13 +151,14 @@ export async function processDueScheduledMessages(maxItems = 3) {
       let workerCompany = item.worker_company || null
       let workerClient = item.worker_client || null
       let workerFunction = item.worker_function || null
+      let finalContent = item.content || ''
 
-      // Buscar dados mais recentes do trabalhador em core_personal.workers (garante telefone atualizado e trava anti-inativo)
+      // Buscar dados mais recentes do trabalhador em core_personal.workers (garante telefone/passaporte atualizados e trava anti-inativo)
       if (item.target_worker_id) {
         const { data: freshW } = await supabase
           .schema('core_personal')
           .from('workers')
-          .select('id, nome, movil, contratante, cliente, funcion, status_trabajador')
+          .select('id, cod_colab, nome, movil, pasaporte, nie, dni, contratante, cliente, funcion, status_trabajador')
           .eq('id', item.target_worker_id)
           .maybeSingle()
 
@@ -162,6 +173,23 @@ export async function processDueScheduledMessages(maxItems = 3) {
           if (freshW.contratante) workerCompany = freshW.contratante
           if (freshW.cliente) workerClient = freshW.cliente
           if (freshW.funcion) workerFunction = freshW.funcion
+
+          // Re-interpolar caso o texto ainda tenha alguma tag ou se o passaporte/nome foi atualizado no cadastro
+          finalContent = interpolateTemplate(
+            finalContent,
+            {
+              nome: freshW.nome || workerName,
+              cod_colab: freshW.cod_colab || item.worker_code,
+              pasaporte: freshW.pasaporte,
+              nie: freshW.nie,
+              dni: freshW.dni,
+              contratante: freshW.contratante || workerCompany || undefined,
+              cliente: freshW.cliente || workerClient || undefined,
+              funcion: freshW.funcion || workerFunction || undefined,
+              pedido_code: item.pedido_code || undefined,
+            },
+            item.link_url
+          )
         }
       }
 
@@ -195,7 +223,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
           mediaUrl: item.media_url,
           mediaType: mType,
           fileName: item.media_filename || (mType === 'document' ? 'comunicado.pdf' : 'comunicado.jpg'),
-          caption: item.content || '',
+          caption: finalContent,
           instanceName,
           apiUrl,
           apiToken,
@@ -204,7 +232,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
       } else {
         apiRes = await evolutionApi.sendText({
           number: phoneToUse,
-          text: item.content || '',
+          text: finalContent,
           instanceName,
           apiUrl,
           apiToken,
@@ -243,9 +271,9 @@ export async function processDueScheduledMessages(maxItems = 3) {
       const nowIso = new Date().toISOString()
       const previewStr = item.media_url
         ? item.media_type === 'document'
-          ? `📄 ${item.content || 'Documento de Campanha'}`
-          : `📷 ${item.content || 'Imagem de Campanha'}`
-        : item.content || 'Comunicado enviado'
+          ? `📄 ${finalContent || 'Documento de Campanha'}`
+          : `📷 ${finalContent || 'Imagem de Campanha'}`
+        : finalContent || 'Comunicado enviado'
 
       if (existingConv?.id) {
         conversationId = existingConv.id
@@ -292,7 +320,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
         await supabase.from('chat_messages').insert({
           conversation_id: conversationId,
           direction: 'outbound',
-          content: item.content || '',
+          content: finalContent,
           media_url: item.media_url || null,
           message_type: item.media_url ? (item.media_type === 'document' ? 'document' : 'image') : 'text',
           external_id: externalId,
@@ -307,6 +335,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
         .update({
           status: 'sent',
           sent_at: nowIso,
+          content: finalContent,
           worker_phone: phoneToUse,
           channel_id: channel.id,
           conversation_id: conversationId,
@@ -526,6 +555,10 @@ export async function POST(req: Request) {
         String(content),
         {
           nome: w.nome,
+          cod_colab: w.cod_colab,
+          pasaporte: w.pasaporte,
+          nie: w.nie,
+          dni: w.dni,
           contratante: w.contratante || matchedCh?.company_name,
           cliente: w.cliente,
           funcion: w.funcion,

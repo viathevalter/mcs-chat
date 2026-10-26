@@ -44,6 +44,11 @@ interface WorkerRow {
   cod_colab?: string | null
   nome: string
   movil?: string | null
+  pasaporte?: string | null
+  nie?: string | null
+  dni?: string | null
+  niss?: string | null
+  nif?: string | null
   contratante?: string | null
   cliente?: string | null
   funcion?: string | null
@@ -221,7 +226,7 @@ export default function AutomationsPage() {
           supabase
             .schema('core_personal')
             .from('workers')
-            .select('id, cod_colab, nome, movil, contratante, cliente, funcion, status_trabajador, status_seguridad')
+            .select('id, cod_colab, nome, movil, pasaporte, nie, dni, niss, nif, contratante, cliente, funcion, status_trabajador, status_seguridad')
             .order('nome', { ascending: true }),
           supabase.rpc('get_campaign_pedidos_overview'),
         ])
@@ -446,6 +451,9 @@ export default function AutomationsPage() {
       (w) =>
         w.nome?.toLowerCase().includes(q) ||
         w.cod_colab?.toLowerCase().includes(q) ||
+        w.pasaporte?.toLowerCase().includes(q) ||
+        w.nie?.toLowerCase().includes(q) ||
+        w.dni?.toLowerCase().includes(q) ||
         w.cliente?.toLowerCase().includes(q) ||
         w.contratante?.toLowerCase().includes(q) ||
         w.funcion?.toLowerCase().includes(q) ||
@@ -463,6 +471,8 @@ export default function AutomationsPage() {
           !existingIds.has(w.id) &&
           (w.nome?.toLowerCase().includes(q) ||
             w.cod_colab?.toLowerCase().includes(q) ||
+            w.pasaporte?.toLowerCase().includes(q) ||
+            w.nie?.toLowerCase().includes(q) ||
             w.movil?.toLowerCase().includes(q) ||
             w.cliente?.toLowerCase().includes(q))
       )
@@ -499,6 +509,8 @@ export default function AutomationsPage() {
   // Preview dinâmico da mensagem com os dados reais do 1º trabalhador selecionado
   const samplePreviewWorker = selectedRecipients[0] || candidateWorkers[0] || {
     nome: 'CARLOS ALBERTO PEREZ',
+    cod_colab: 'E2481',
+    pasaporte: 'GJ703064',
     contratante: 'LUMINOUS',
     cliente: 'CALDESOL',
     funcion: 'SOLDADOR MIG-MAG',
@@ -510,9 +522,21 @@ export default function AutomationsPage() {
     if (!content.trim()) return 'O preview da mensagem personalizada aparecerá aqui...'
     const fullName = (samplePreviewWorker.nome || 'Trabalhador').trim()
     const firstName = fullName.split(/\s+/)[0] || fullName
+    const passportDoc = (
+      samplePreviewWorker.pasaporte ||
+      samplePreviewWorker.nie ||
+      samplePreviewWorker.dni ||
+      'GJ703064'
+    ).trim()
+    const codColab = (samplePreviewWorker.cod_colab || 'E0001').trim()
+
     let out = content
       .replace(/\{nome\}/gi, fullName)
       .replace(/\{primeiro_nome\}/gi, firstName)
+      .replace(/\{passaporte\}/gi, passportDoc)
+      .replace(/\{pasaporte\}/gi, passportDoc)
+      .replace(/\{documento\}/gi, passportDoc)
+      .replace(/\{cod_colab\}/gi, codColab)
       .replace(/\{empresa\}/gi, samplePreviewWorker.contratante || 'LUMINOUS')
       .replace(/\{contratante\}/gi, samplePreviewWorker.contratante || 'LUMINOUS')
       .replace(/\{cliente\}/gi, samplePreviewWorker.cliente || 'Obra')
@@ -1361,6 +1385,14 @@ export default function AutomationsPage() {
                                   Seg: {w.status_seguridad}
                                 </span>
                               )}
+                              {(w.pasaporte || w.nie || w.dni) && (
+                                <span
+                                  className="px-1.5 py-0.2 rounded text-[9.5px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70"
+                                  title="Passaporte / Documento de Login no Portal"
+                                >
+                                  🪪 {w.pasaporte || w.nie || w.dni}
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-2 text-[10.5px] text-slate-500 truncate mt-0.5">
@@ -1473,16 +1505,24 @@ export default function AutomationsPage() {
                     {[
                       { tag: '{primeiro_nome}', label: '1º Nome' },
                       { tag: '{nome}', label: 'Nome Completo' },
+                      { tag: '{passaporte}', label: 'Passaporte (Login Portal)', highlight: true },
+                      { tag: '{cod_colab}', label: 'Cód. Colab' },
                       { tag: '{empresa}', label: 'Empresa' },
                       { tag: '{cliente}', label: 'Cliente' },
                       { tag: '{funcao}', label: 'Função' },
                       { tag: '{cod_pedido}', label: 'Cód. Pedido' },
+                      { tag: '{obra}', label: 'Obra' },
                     ].map((v) => (
                       <button
                         key={v.tag}
                         type="button"
-                        onClick={() => setContent((c) => `${c}${c.endsWith(' ') || !c ? '' : ' '}${v.tag}`)}
-                        className="px-1.5 py-0.5 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400 cursor-pointer"
+                        onClick={() => setContent((c) => `${c}${c.endsWith(' ') || c.endsWith('\n') || !c ? '' : ' '}${v.tag}`)}
+                        title={`Inserir variável automática: ${v.label}`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer border transition-colors ${
+                          v.highlight
+                            ? 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 border-indigo-300 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-emerald-700 dark:text-emerald-400'
+                        }`}
                       >
                         {v.tag}
                       </button>
@@ -1751,18 +1791,35 @@ export default function AutomationsPage() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1 mb-1.5">
-                    {['{primeiro_nome}', '{nome}', '{empresa}', '{cliente}', '{funcao}', '{cod_pedido}', '{obra}'].map(
-                      (tag) => (
+                    {[
+                      '{primeiro_nome}',
+                      '{nome}',
+                      '{passaporte}',
+                      '{cod_colab}',
+                      '{empresa}',
+                      '{cliente}',
+                      '{funcao}',
+                      '{cod_pedido}',
+                      '{obra}',
+                    ].map((tag) => {
+                      const isPassport = tag === '{passaporte}'
+                      return (
                         <button
                           key={tag}
                           type="button"
-                          onClick={() => setTplContent((c) => `${c} ${tag}`)}
-                          className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono font-bold text-emerald-700 cursor-pointer"
+                          onClick={() =>
+                            setTplContent((c) => `${c}${c.endsWith(' ') || c.endsWith('\n') || !c ? '' : ' '}${tag}`)
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer border transition-colors ${
+                            isPassport
+                              ? 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 border-indigo-300 text-indigo-700 dark:text-indigo-300'
+                              : 'bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-emerald-700 dark:text-emerald-400'
+                          }`}
                         >
                           {tag}
                         </button>
                       )
-                    )}
+                    })}
                   </div>
                   <textarea
                     rows={7}

@@ -747,6 +747,22 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           senderDepartment: resolvedSenderDept,
           senderUserId: currentUserId || undefined
         })
+        if (activeTab !== 'note' && currentUserId && !context?.conversation?.assigned_to) {
+          setContext((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  conversation: {
+                    ...prev.conversation,
+                    assigned_to: currentUserId,
+                    assigned_to_name: currentUserName,
+                    status: 'open'
+                  }
+                }
+              : null
+          )
+          window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+        }
       } else {
         setText(rawContent)
       }
@@ -824,6 +840,22 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         senderDepartment: resolvedSenderDept,
         senderUserId: currentUserId || undefined
       })
+      if (activeTab !== 'note' && currentUserId && !context?.conversation?.assigned_to) {
+        setContext((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                conversation: {
+                  ...prev.conversation,
+                  assigned_to: currentUserId,
+                  assigned_to_name: currentUserName,
+                  status: 'open'
+                }
+              }
+            : null
+        )
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
       setText('')
       setShowQuickReplies(false)
       setShowEmoji(false)
@@ -895,6 +927,15 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
   const handleAssign = async () => {
     if (!currentUserId || isAssigning) return
+    const currentAssigneeId = context?.conversation?.assigned_to
+    const currentAssigneeName = context?.conversation?.assigned_to_name
+    if (currentAssigneeId && currentAssigneeId !== currentUserId) {
+      const ok = confirm(
+        `Esta conversa já está em atendimento por ${currentAssigneeName || 'outro colega'}.\n\nDeseja puxar este atendimento para você?`
+      )
+      if (!ok) return
+    }
+
     setIsAssigning(true)
     try {
       await supabase
@@ -920,6 +961,10 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           : null
       )
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
+
       // Registra o Bloco de Atendimento no histórico do Chat
       await sendMessage(
         `🔄 BLOCO DE ATENDIMENTO INICIADO — ${currentUserName} (${resolvedSenderDept}) assumiu a conversa`,
@@ -931,6 +976,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         }
       )
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
       router.refresh()
     } finally {
       setIsAssigning(false)
@@ -954,6 +1002,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         .from('chat_conversations')
         .update({ status: 'closed', assigned_to: null, assigned_to_name: null })
         .eq('id', conversationId)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
       router.replace('/inbox')
     } catch (error) {
       console.error('Erro ao encerrar:', error)
@@ -1330,6 +1381,25 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
               <CheckCircle2 className="w-3.5 h-3.5" />
               {t('chatArea', 'endChat')}
             </button>
+          ) : conversation?.assigned_to ? (
+            <div className="flex items-center gap-1.5">
+              <span
+                className="px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-300 text-xs font-extrabold rounded-lg flex items-center gap-1.5"
+                title={`Esta conversa já está sendo atendida por ${conversation.assigned_to_name || 'outro atendente'}`}
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span>Com {conversation.assigned_to_name || 'Colega'}</span>
+              </span>
+              <button
+                onClick={handleAssign}
+                disabled={isAssigning}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-700 border border-slate-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                title="Puxar esta conversa para o seu atendimento"
+              >
+                <LockOpen className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Puxar p/ Mim</span>
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleAssign}

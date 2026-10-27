@@ -152,7 +152,25 @@ export function useInbox() {
             lastMessageDirection
           }
         })
-        setConversations(enriched)
+        // Deduplicação defensiva por (channel_id + telefone) para nunca exibir 2 cards do mesmo trabalhador no mesmo canal
+        const seenByChannelPhone = new Map<string, any>()
+        for (const item of enriched) {
+          const cleanDigits = String(item.contact_phone || '').replace(/\D/g, '')
+          const phoneKey = cleanDigits.length >= 9 ? cleanDigits.slice(-9) : cleanDigits
+          const dedupeKey = phoneKey ? `${item.channel_id}|${phoneKey}` : item.id
+          const prev = seenByChannelPhone.get(dedupeKey)
+          if (!prev) {
+            seenByChannelPhone.set(dedupeKey, item)
+          } else {
+            // Prioriza a conversa que possui atendente atribuído ou que está aberta
+            const prevScore = (prev.assigned_to ? 4 : 0) + (prev.status === 'open' ? 2 : 0)
+            const currScore = (item.assigned_to ? 4 : 0) + (item.status === 'open' ? 2 : 0)
+            if (currScore > prevScore) {
+              seenByChannelPhone.set(dedupeKey, item)
+            }
+          }
+        }
+        setConversations(Array.from(seenByChannelPhone.values()))
       } else {
         const { data: fallbackData } = await supabase
           .from('chat_conversations')

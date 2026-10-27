@@ -238,6 +238,11 @@ export async function POST(req: Request) {
       updatePayload.last_message_text = previewStr
       updatePayload.last_message_preview = previewStr.slice(0, 140)
       updatePayload.last_message_direction = 'outbound'
+      // Se a conversa estava livre (sem atendente) e um atendente enviou mensagem, atribui automaticamente a ele para sair de "Abertas" e ir para "Minhas"
+      if (!conv.assigned_to && senderUserId) {
+        updatePayload.assigned_to = senderUserId
+        updatePayload.assigned_to_name = senderName || 'Atendente MCS'
+      }
     }
 
     if (newlyFetchedAvatar) updatePayload.contact_avatar_url = newlyFetchedAvatar

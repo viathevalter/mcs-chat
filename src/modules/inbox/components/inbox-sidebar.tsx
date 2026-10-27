@@ -325,7 +325,7 @@ export default function InboxSidebar() {
         if (conv.assigned_to && conv.assigned_to === currentUserId) {
           minhas++
         }
-        if (!conv.assigned_to || (currentUserDepartmentId && conv.department_id === currentUserDepartmentId)) {
+        if (!conv.assigned_to) {
           abertas++
         }
       }
@@ -408,16 +408,22 @@ export default function InboxSidebar() {
       }
 
       // 7. Status Tab Filter (CRM Pattern)
+      // - "Minhas": apenas conversas ativas atribuídas ao usuário logado
+      // - "Abertas": fila livre aguardando atendimento (SEM atendente atribuído) — quando alguém assume, sai de "Abertas" e fica só em "Minhas" (e em "Todos")
+      // - "Todos": todas as conversas ativas (livres + em atendimento por qualquer colega, mostrando com quem está)
       const isClosed = conv.status === 'closed' || conv.status === 'resolved'
       if (activeFilter === 'favoritos') {
         return conv.is_pinned === true
       }
       if (activeFilter === 'minhas') {
-        return conv.assigned_to === currentUserId && !isClosed
+        return Boolean(conv.assigned_to && conv.assigned_to === currentUserId) && !isClosed
       }
       if (activeFilter === 'abertas') {
         if (isClosed) return false
-        return true
+        if (assigneeFilter !== 'all' && assigneeFilter !== 'unassigned') {
+          return true
+        }
+        return !conv.assigned_to
       }
       if (activeFilter === 'todos') {
         return !isClosed

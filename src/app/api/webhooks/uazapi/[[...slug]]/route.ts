@@ -553,9 +553,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
         .single()
 
       if (convErr) {
-        console.error("Erro ao criar conversa:", convErr)
+        // Caso 2 webhooks concorrentes cheguem no mesmo milissegundo e batam no UNIQUE INDEX (channel_id, contact_phone),
+        // recupera a conversa que acabou de ser criada pela outra requisição concorrente!
+        const { data: concurrentConv } = await supabase
+          .from('chat_conversations')
+          .select('id, bot_status, department_id')
+          .eq('channel_id', channel.id)
+          .eq('contact_phone', cleanPhone)
+          .limit(1)
+          .maybeSingle()
+
+        if (concurrentConv?.id) {
+          conversationId = concurrentConv.id
+        } else {
+          console.error("Erro ao criar conversa:", convErr)
+        }
+      } else {
+        conversationId = newConv?.id || null
       }
-      conversationId = newConv?.id || null
     }
 
     if (!conversationId) {

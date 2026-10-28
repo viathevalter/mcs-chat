@@ -530,6 +530,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
         }
       }
 
+      const isMatchedActiveOrPending =
+        !matchedWorker?.status_trabajador ||
+        ['ATIVO', 'ACTIVE'].includes(String(matchedWorker.status_trabajador).trim().toUpperCase()) ||
+        String(matchedWorker.status_trabajador).toUpperCase().includes('PENDENTE') ||
+        String(matchedWorker.status_trabajador).toUpperCase().includes('PENDIENTE')
+
       await supabase
         .from('chat_conversations')
         .update({
@@ -543,13 +549,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
           contact_avatar_url: contactAvatar || existingConv.contact_avatar_url || null,
           worker_id: existingConv.worker_id || matchedWorker?.id || null,
           worker_company_name: matchedWorker?.contratante || channel.company_name || undefined,
-          worker_client_name: matchedWorker?.cliente || undefined,
+          worker_client_name: isMatchedActiveOrPending ? (matchedWorker?.cliente || undefined) : null,
           worker_function_name: matchedWorker?.funcion || undefined,
+          worker_status: matchedWorker?.status_trabajador || undefined,
           contact_type: defaultContactType,
           updated_at: nowIso
         })
         .eq('id', conversationId)
     } else {
+      const isMatchedActiveOrPending =
+        !matchedWorker?.status_trabajador ||
+        ['ATIVO', 'ACTIVE'].includes(String(matchedWorker.status_trabajador).trim().toUpperCase()) ||
+        String(matchedWorker.status_trabajador).toUpperCase().includes('PENDENTE') ||
+        String(matchedWorker.status_trabajador).toUpperCase().includes('PENDIENTE')
+
       const { data: newConv, error: convErr } = await supabase
         .from('chat_conversations')
         .insert({
@@ -560,8 +573,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
           contact_type: defaultContactType,
           worker_id: matchedWorker?.id || null,
           worker_company_name: matchedWorker?.contratante || channel.company_name || null,
-          worker_client_name: matchedWorker?.cliente || null,
+          worker_client_name: isMatchedActiveOrPending ? (matchedWorker?.cliente || null) : null,
           worker_function_name: matchedWorker?.funcion || null,
+          worker_status: matchedWorker?.status_trabajador || null,
           department_id: channel.department_id || null,
           status: isCampaignEcho ? 'closed' : 'open',
           unread_count: fromMe ? 0 : 1,

@@ -97,7 +97,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       const { data } = await supabase
         .schema('core_personal')
         .from('workers')
-        .select('id, nome, movil, contratante, cliente, funcion')
+        .select('id, nome, movil, contratante, cliente, funcion, status_trabajador')
         .or(`nome.ilike.%${query}%,movil.ilike.%${query}%,contratante.ilike.%${query}%,cliente.ilike.%${query}%`)
         .limit(10)
 
@@ -155,7 +155,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         const { data: latestW } = await supabase
           .schema('core_personal')
           .from('workers')
-          .select('id, nome, movil, contratante, cliente, funcion')
+          .select('id, nome, movil, contratante, cliente, funcion, status_trabajador')
           .eq('id', worker.id)
           .maybeSingle()
         if (latestW) freshWorker = latestW
@@ -245,6 +245,12 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       .limit(1)
       .maybeSingle()
 
+    const isWorkerActiveOrPending =
+      !workerObj?.status_trabajador ||
+      ['ATIVO', 'ACTIVE'].includes(String(workerObj.status_trabajador).trim().toUpperCase()) ||
+      String(workerObj.status_trabajador).toUpperCase().includes('PENDENTE') ||
+      String(workerObj.status_trabajador).toUpperCase().includes('PENDIENTE')
+
     if (existing) {
       await supabase
         .from('chat_conversations')
@@ -254,8 +260,9 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
           ...(name ? { contact_name: name } : {}),
           ...(workerId ? { worker_id: workerId } : {}),
           ...(workerObj?.contratante ? { worker_company_name: workerObj.contratante } : {}),
-          ...(workerObj?.cliente ? { worker_client_name: workerObj.cliente } : {}),
+          worker_client_name: isWorkerActiveOrPending ? (workerObj?.cliente || null) : null,
           ...(workerObj?.funcion ? { worker_function_name: workerObj.funcion } : {}),
+          ...(workerObj?.status_trabajador ? { worker_status: workerObj.status_trabajador } : {}),
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -273,8 +280,9 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         contact_name: name,
         worker_id: workerId,
         worker_company_name: workerObj?.contratante || null,
-        worker_client_name: workerObj?.cliente || null,
+        worker_client_name: isWorkerActiveOrPending ? (workerObj?.cliente || null) : null,
         worker_function_name: workerObj?.funcion || null,
+        worker_status: workerObj?.status_trabajador || null,
         status: 'open',
         last_message_at: new Date().toISOString()
       })

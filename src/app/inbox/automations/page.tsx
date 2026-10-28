@@ -361,6 +361,10 @@ export default function AutomationsPage() {
     allWorkers.forEach((w) => {
       const cli = (w.cliente || '').trim()
       if (!cli) return
+      if (hideInactiveSafetyLock) {
+        if (isWorkerInactiveOrBlocked(w.status_trabajador)) return
+        if (!isWorkerActiveStatus(w.status_trabajador, includePendingIngreso)) return
+      }
       if (selectedCompanies.length > 0) {
         const emp = (w.contratante || '').trim().toUpperCase()
         if (!selectedCompanies.includes(emp)) return

@@ -24,6 +24,7 @@ export interface Conversation {
   worker_client_name?: string | null
   worker_company_name?: string | null
   worker_function_name?: string | null
+  worker_status?: string | null
   is_pinned?: boolean
   tags?: any[]
   channel?: {

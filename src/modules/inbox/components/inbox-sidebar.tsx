@@ -40,6 +40,14 @@ function playNotificationChime() {
 
 type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
+function isWorkerActiveOrPending(status?: string | null): boolean {
+  const s = (status || '').trim().toUpperCase()
+  if (!s) return true
+  if (s === 'ATIVO' || s === 'ACTIVE') return true
+  if (s.includes('PENDENTE') || s.includes('PENDIENTE')) return true
+  return false
+}
+
 function normalizeWorkerPhone(rawPhone?: string | null): string {
   if (!rawPhone) return ''
   const trimmed = rawPhone.trim()
@@ -235,11 +243,15 @@ export default function InboxSidebar() {
     })
   }, [channels, companyFilter, audienceFilter])
 
-  // Derive unique clients / obras from conversations
+  // Derive unique clients / obras from conversations (somente trabalhadores Ativos ou Pendente Ingresso)
   const availableClients = useMemo(() => {
     const set = new Set<string>()
     conversations.forEach(c => {
-      if (c.worker_client_name && c.worker_client_name.trim()) {
+      if (
+        c.worker_client_name &&
+        c.worker_client_name.trim() &&
+        (!c.worker_status || isWorkerActiveOrPending(c.worker_status))
+      ) {
         set.add(c.worker_client_name.trim())
       }
     })
@@ -353,9 +365,10 @@ export default function InboxSidebar() {
         if (comp !== companyFilter) return false
       }
 
-      // 5. Client / Obra Filter (Dropdown)
+      // 5. Client / Obra Filter (Dropdown) — somente trabalhadores Ativos ou Pendente Ingresso naquele cliente
       if (clientFilter !== 'all') {
         if ((conv.worker_client_name || '').trim() !== clientFilter) return false
+        if (conv.worker_status && !isWorkerActiveOrPending(conv.worker_status)) return false
       }
 
       // 5.1 Tag Filter (Dropdown)
@@ -492,8 +505,9 @@ export default function InboxSidebar() {
     if (existingOnCorrectChannel) {
       const currentCleanConvPhone = (existingOnCorrectChannel.contact_phone || '').replace(/\D/g, '')
       const targetCompany = freshWorker.contratante || matchedChannel.company_name || null
-      const targetClient = freshWorker.cliente || null
+      const targetClient = isWorkerActiveOrPending(freshWorker.status_trabajador) ? freshWorker.cliente || null : null
       const targetFunc = freshWorker.funcion || null
+      const targetStatus = freshWorker.status_trabajador || null
 
       if (
         currentCleanConvPhone !== cleanPhone ||
@@ -501,7 +515,8 @@ export default function InboxSidebar() {
         existingOnCorrectChannel.worker_id !== freshWorker.id ||
         existingOnCorrectChannel.worker_company_name !== targetCompany ||
         existingOnCorrectChannel.worker_client_name !== targetClient ||
-        existingOnCorrectChannel.worker_function_name !== targetFunc
+        existingOnCorrectChannel.worker_function_name !== targetFunc ||
+        existingOnCorrectChannel.worker_status !== targetStatus
       ) {
         await supabase
           .from('chat_conversations')
@@ -512,6 +527,7 @@ export default function InboxSidebar() {
             worker_company_name: targetCompany,
             worker_client_name: targetClient,
             worker_function_name: targetFunc,
+            worker_status: targetStatus,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingOnCorrectChannel.id)
@@ -533,6 +549,8 @@ export default function InboxSidebar() {
       .limit(1)
       .maybeSingle()
 
+    const effectiveWorkerClient = isWorkerActiveOrPending(freshWorker.status_trabajador) ? freshWorker.cliente || null : null
+
     if (dbExisting?.id) {
       await supabase
         .from('chat_conversations')
@@ -541,8 +559,9 @@ export default function InboxSidebar() {
           worker_id: freshWorker.id,
           contact_name: freshWorker.nome,
           worker_company_name: freshWorker.contratante || matchedChannel.company_name || null,
-          worker_client_name: freshWorker.cliente || null,
+          worker_client_name: effectiveWorkerClient,
           worker_function_name: freshWorker.funcion || null,
+          worker_status: freshWorker.status_trabajador || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', dbExisting.id)
@@ -560,8 +579,9 @@ export default function InboxSidebar() {
         contact_name: freshWorker.nome,
         worker_id: freshWorker.id,
         worker_company_name: freshWorker.contratante || matchedChannel.company_name || null,
-        worker_client_name: freshWorker.cliente || null,
+        worker_client_name: effectiveWorkerClient,
         worker_function_name: freshWorker.funcion || null,
+        worker_status: freshWorker.status_trabajador || null,
         status: 'open',
         unread_count: 0,
         last_message_at: new Date().toISOString()
@@ -983,12 +1003,27 @@ export default function InboxSidebar() {
                   title={`Iniciar ou abrir conversa pelo canal WhatsApp oficial da empresa ${w.contratante || ''}`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                      {w.nome}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                        {w.nome}
+                      </span>
+                      {w.status_trabajador && (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
+                            isWorkerActiveOrPending(w.status_trabajador)
+                              ? (w.status_trabajador || '').toUpperCase().includes('PEND')
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-rose-100 text-rose-700 border border-rose-200'
+                          }`}
+                        >
+                          {w.status_trabajador}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate">
                       {w.contratante && <span className="font-bold text-emerald-600">📱 Canal: {w.contratante}</span>}
-                      {w.cliente && <span>• 🏗️ {w.cliente}</span>}
+                      {w.cliente && isWorkerActiveOrPending(w.status_trabajador) && <span>• 🏗️ {w.cliente}</span>}
                     </div>
                   </div>
                   <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded-md shrink-0">
@@ -1021,7 +1056,8 @@ export default function InboxSidebar() {
               const workerCompany = (conv.worker_company_name || '').toUpperCase()
               const companyBadge = channelCompany || workerCompany
               const isChannelMismatch = Boolean(workerCompany && channelCompany && workerCompany !== channelCompany)
-              const clientBadge = conv.worker_client_name
+              const workerIsActiveOrPending = !conv.worker_status || isWorkerActiveOrPending(conv.worker_status)
+              const clientBadge = workerIsActiveOrPending ? conv.worker_client_name : null
               const convAudience = resolveConvAudience(conv)
               const channelLabel = conv.channel?.display_label || conv.channel?.name
               const readableLastMsg = conv.lastMessage || conv.last_message_text || conv.last_message_preview || 'Conversa iniciada'

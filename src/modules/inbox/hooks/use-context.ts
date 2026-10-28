@@ -65,8 +65,8 @@ export function useConversationContext(conversationId: string) {
       let companyData: any = null
       let allocationHistory: AllocationHistoryItem[] = []
 
-      // 2. Fetch Worker if worker_id is set or match by phone (movil) or name
-      const workerCols = 'id, empresa_id, cod_colab, nome, movil, dni, nie, nif, pasaporte, status_trabajador, status_seguridad, contratante, cliente, cod_cliente, funcion, cod_funcion, data_ingresso, data_baixa, data_alta_seguridad, data_baixa_seguridad, foto'
+      // 2. Fetch Worker if worker_id is set or match by phone (movil / telefones_adicionais) or name
+      const workerCols = 'id, empresa_id, cod_colab, nome, movil, telefones_adicionais, dni, nie, nif, pasaporte, status_trabajador, status_seguridad, contratante, cliente, cod_cliente, funcion, cod_funcion, data_ingresso, data_baixa, data_alta_seguridad, data_baixa_seguridad, foto'
 
       if (conv.worker_id) {
         const { data: wrk } = await supabase
@@ -82,17 +82,24 @@ export function useConversationContext(conversationId: string) {
       if (!workerData && conv.contact_phone) {
         const cleanPhone = conv.contact_phone.replace(/\D/g, '')
         if (cleanPhone.length >= 8) {
-          const last8 = cleanPhone.slice(-8)
-          const { data: wrks } = await supabase
-            .schema('core_personal')
-            .from('workers')
-            .select(workerCols)
-            .ilike('movil', `%${last8}%`)
-            .limit(1)
-          
-          if (wrks && wrks.length > 0) {
-            workerData = wrks[0]
-            await supabase.from('chat_conversations').update({ worker_id: workerData.id }).eq('id', conv.id)
+          // 1º tenta match via RPC (que cruza movil principal + telefones_adicionais)
+          const { data: rpcMatch } = await supabase.rpc('match_worker_by_phone', {
+            p_raw_phone: cleanPhone,
+            p_company_name: conv.channel?.company_name || null
+          })
+
+          if (rpcMatch?.matched && rpcMatch?.id) {
+            const { data: wrk } = await supabase
+              .schema('core_personal')
+              .from('workers')
+              .select(workerCols)
+              .eq('id', rpcMatch.id)
+              .maybeSingle()
+
+            if (wrk) {
+              workerData = wrk
+              await supabase.from('chat_conversations').update({ worker_id: workerData.id }).eq('id', conv.id)
+            }
           }
         }
       }
@@ -112,13 +119,23 @@ export function useConversationContext(conversationId: string) {
         }
       }
 
-      // 2.1 Se o trabalhador está vinculado e o telefone em core_personal.workers foi alterado, sincroniza na conversa
+      // 2.1 Se o trabalhador está vinculado, sincroniza nome/empresa/cliente/função na conversa
+      // (Se o trabalhador tiver telefones_adicionais ou se o telefone atual já bater com qualquer número dele, NUNCA sobrescreve o contact_phone da conversa!)
       if (workerData?.id) {
         const normalizedWorkerPhone = normalizeWorkerPhone(workerData.movil)
+        const extraPhonesList: string[] = Array.isArray(workerData.telefones_adicionais)
+          ? workerData.telefones_adicionais.map((p: string) => normalizeWorkerPhone(p)).filter(Boolean)
+          : []
+        const allWorkerPhones = [normalizedWorkerPhone, ...extraPhonesList].filter(p => p.length >= 8)
         const currentConvDigits = (conv.contact_phone || '').replace(/\D/g, '')
+        const matchesAnyWorkerPhone = allWorkerPhones.some(
+          p => p === currentConvDigits || p.slice(-8) === currentConvDigits.slice(-8)
+        )
         const syncUpdates: Record<string, any> = {}
 
         if (
+          !matchesAnyWorkerPhone &&
+          extraPhonesList.length === 0 &&
           normalizedWorkerPhone.length >= 8 &&
           currentConvDigits !== normalizedWorkerPhone &&
           currentConvDigits.slice(-8) !== normalizedWorkerPhone.slice(-8)

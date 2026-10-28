@@ -490,6 +490,18 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
                 <Phone className="w-2.5 h-2.5 text-slate-400" />
                 {conversation?.contact_phone || 'Sem número'}
               </span>
+              {Array.isArray(worker?.telefones_adicionais) &&
+                worker.telefones_adicionais
+                  .filter((p: string) => p && p.replace(/\D/g, '') !== (conversation?.contact_phone || '').replace(/\D/g, ''))
+                  .map((p: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="font-mono text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800"
+                      title="Outro número cadastrado deste trabalhador"
+                    >
+                      📱 {p}
+                    </span>
+                  ))}
               {worker?.documento && (
                 <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700">
                   {worker.documento}

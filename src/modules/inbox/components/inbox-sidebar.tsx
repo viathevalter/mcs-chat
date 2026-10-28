@@ -196,7 +196,7 @@ export default function InboxSidebar() {
         const { data } = await supabase
           .schema('core_personal')
           .from('workers')
-          .select('id, cod_colab, nome, movil, contratante, cliente, funcion, status_trabajador')
+          .select('id, cod_colab, nome, movil, telefones_adicionais, contratante, cliente, funcion, status_trabajador')
           .or(`nome.ilike.%${q}%,movil.ilike.%${q}%,cliente.ilike.%${q}%,contratante.ilike.%${q}%`)
           .limit(8)
         setGlobalWorkers(data || [])
@@ -463,20 +463,25 @@ export default function InboxSidebar() {
     return workerChannels[0] || channels[0] || null
   }
 
-  const handleOpenOrCreateWorkerChat = async (worker: any) => {
+  const handleOpenOrCreateWorkerChat = async (worker: any, phoneOverride?: string) => {
     // 0. Buscar sempre o cadastro mais atual do trabalhador em core_personal.workers (para pegar qualquer alteração recente de telefone/empresa)
     let freshWorker = worker
     if (worker?.id) {
       const { data: latestW } = await supabase
         .schema('core_personal')
         .from('workers')
-        .select('id, cod_colab, nome, movil, contratante, cliente, funcion, status_trabajador')
+        .select('id, cod_colab, nome, movil, telefones_adicionais, contratante, cliente, funcion, status_trabajador')
         .eq('id', worker.id)
         .maybeSingle()
       if (latestW) freshWorker = latestW
     }
 
-    const cleanPhone = normalizeWorkerPhone(freshWorker.movil)
+    const extraPhones: string[] = Array.isArray(freshWorker.telefones_adicionais)
+      ? freshWorker.telefones_adicionais.filter(Boolean)
+      : []
+    const hasMultiplePhones = extraPhones.length > 0
+    const rawChosenPhone = phoneOverride || freshWorker.movil || extraPhones[0]
+    const cleanPhone = normalizeWorkerPhone(rawChosenPhone)
     if (!cleanPhone) {
       alert('Este trabalhador não possui telefone celular cadastrado na ficha.')
       return
@@ -490,16 +495,16 @@ export default function InboxSidebar() {
     }
 
     // 2. Procurar conversa existente DESTE trabalhador ESPECIFICAMENTE no canal correto da empresa dele
-    // Prioriza conversa que já tenha o número atual; caso não haja, pega a conversa vinculada ao worker_id e atualiza o número!
+    // Se o trabalhador possui múltiplos números (hasMultiplePhones), busca estritamente pelo número escolhido para não sobrescrever a conversa do outro número!
     const existingByNewPhone = conversations.find(
       c =>
         c.channel_id === matchedChannel.id &&
         cleanPhone.length >= 8 &&
         c.contact_phone?.replace(/\D/g, '').slice(-8) === cleanPhone.slice(-8)
     )
-    const existingByWorkerId = conversations.find(
-      c => c.channel_id === matchedChannel.id && c.worker_id === freshWorker.id
-    )
+    const existingByWorkerId = !hasMultiplePhones
+      ? conversations.find(c => c.channel_id === matchedChannel.id && c.worker_id === freshWorker.id)
+      : undefined
     const existingOnCorrectChannel = existingByNewPhone || existingByWorkerId
 
     if (existingOnCorrectChannel) {
@@ -539,12 +544,19 @@ export default function InboxSidebar() {
       return
     }
 
-    // Checar também no banco (por worker_id ou telefone) para evitar duplicata no mesmo canal e atualizar o telefone
-    const { data: dbExisting } = await supabase
+    // Checar também no banco (se tiver múltiplos números, busca pelo telefone escolhido)
+    let dbExistingQuery = supabase
       .from('chat_conversations')
       .select('id')
       .eq('channel_id', matchedChannel.id)
-      .or(`worker_id.eq.${freshWorker.id},contact_phone.ilike.%${cleanPhone.slice(-8)}%`)
+
+    if (hasMultiplePhones) {
+      dbExistingQuery = dbExistingQuery.ilike('contact_phone', `%${cleanPhone.slice(-8)}%`)
+    } else {
+      dbExistingQuery = dbExistingQuery.or(`worker_id.eq.${freshWorker.id},contact_phone.ilike.%${cleanPhone.slice(-8)}%`)
+    }
+
+    const { data: dbExisting } = await dbExistingQuery
       .order('last_message_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -994,43 +1006,69 @@ export default function InboxSidebar() {
               {searchingWorkers && <span className="animate-pulse">Buscando...</span>}
             </div>
             <div className="space-y-1">
-              {globalWorkers.map(w => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => handleOpenOrCreateWorkerChat(w)}
-                  className="w-full text-left p-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800 border border-indigo-100 dark:border-indigo-900/50 transition-colors flex items-center justify-between gap-2 cursor-pointer"
-                  title={`Iniciar ou abrir conversa pelo canal WhatsApp oficial da empresa ${w.contratante || ''}`}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                        {w.nome}
-                      </span>
-                      {w.status_trabajador && (
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
-                            isWorkerActiveOrPending(w.status_trabajador)
-                              ? (w.status_trabajador || '').toUpperCase().includes('PEND')
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-rose-100 text-rose-700 border border-rose-200'
-                          }`}
+              {globalWorkers.map(w => {
+                const allWPhones = [
+                  w.movil,
+                  ...(Array.isArray(w.telefones_adicionais) ? w.telefones_adicionais : [])
+                ].filter(Boolean)
+                return (
+                  <div
+                    key={w.id}
+                    className="w-full text-left p-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-indigo-50/60 dark:hover:bg-slate-800 border border-indigo-100 dark:border-indigo-900/50 transition-colors flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                            {w.nome}
+                          </span>
+                          {w.status_trabajador && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
+                                isWorkerActiveOrPending(w.status_trabajador)
+                                  ? (w.status_trabajador || '').toUpperCase().includes('PEND')
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-rose-100 text-rose-700 border border-rose-200'
+                              }`}
+                            >
+                              {w.status_trabajador}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate">
+                          {w.contratante && <span className="font-bold text-emerald-600">📱 Canal: {w.contratante}</span>}
+                          {w.cliente && isWorkerActiveOrPending(w.status_trabajador) && <span>• 🏗️ {w.cliente}</span>}
+                        </div>
+                      </div>
+                      {allWPhones.length <= 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOrCreateWorkerChat(w)}
+                          className="px-2 py-0.5 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shrink-0 cursor-pointer"
                         >
-                          {w.status_trabajador}
-                        </span>
+                          Conversar via {w.contratante || 'WhatsApp'}
+                        </button>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate">
-                      {w.contratante && <span className="font-bold text-emerald-600">📱 Canal: {w.contratante}</span>}
-                      {w.cliente && isWorkerActiveOrPending(w.status_trabajador) && <span>• 🏗️ {w.cliente}</span>}
-                    </div>
+                    {allWPhones.length > 1 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <span className="text-[9.5px] font-bold text-slate-400">Abrir nº:</span>
+                        {allWPhones.map((ph: string, pIdx: number) => (
+                          <button
+                            key={pIdx}
+                            type="button"
+                            onClick={() => handleOpenOrCreateWorkerChat(w, ph)}
+                            className="px-2 py-0.5 text-[10px] font-mono font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md cursor-pointer"
+                          >
+                            📱 {ph}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded-md shrink-0">
-                    Conversar via {w.contratante || 'WhatsApp'}
-                  </span>
-                </button>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

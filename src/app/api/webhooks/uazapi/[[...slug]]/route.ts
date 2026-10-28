@@ -461,7 +461,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
     let conversationId: string | null = null
     const { data: existingConv } = await supabase
       .from('chat_conversations')
-      .select('id, bot_status, department_id, unread_count, worker_id, contact_avatar_url')
+      .select('id, status, bot_status, department_id, unread_count, worker_id, contact_avatar_url')
       .eq('channel_id', channel.id)
       .eq('contact_phone', cleanPhone)
       .limit(1)
@@ -470,8 +470,30 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
     const nowIso = new Date().toISOString()
     const direction = fromMe ? 'outbound' : 'inbound'
 
+    // Verificar se este evento fromMe é eco de uma campanha disparada nos últimos 2 minutos
+    let isCampaignEcho = false
+    if (fromMe) {
+      const twoMinAgo = new Date(Date.now() - 120000).toISOString()
+      const { data: recentCampItem } = await supabase
+        .from('chat_scheduled_messages')
+        .select('id')
+        .eq('worker_phone', cleanPhone)
+        .in('status', ['sending', 'sent'])
+        .gte('updated_at', twoMinAgo)
+        .limit(1)
+        .maybeSingle()
+      if (recentCampItem?.id) {
+        isCampaignEcho = true
+      }
+    }
+
     if (existingConv) {
       conversationId = existingConv.id
+      const preservedOrNextStatus = isCampaignEcho
+        ? 'closed'
+        : fromMe
+          ? existingConv.status || 'open'
+          : 'open'
 
       // Deduplicação inteligente de eco (caso a mensagem tenha acabado de ser enviada pelo painel MCS Chat há < 60s)
       if (fromMe && content) {
@@ -495,7 +517,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
           await supabase
             .from('chat_conversations')
             .update({
-              status: 'open',
+              status: preservedOrNextStatus,
               last_message_at: nowIso,
               last_message_text: previewText,
               last_message_preview: previewText.slice(0, 140),
@@ -511,7 +533,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
       await supabase
         .from('chat_conversations')
         .update({
-          status: 'open',
+          status: preservedOrNextStatus,
           last_message_at: nowIso,
           last_message_text: previewText,
           last_message_preview: previewText.slice(0, 140),
@@ -541,7 +563,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
           worker_client_name: matchedWorker?.cliente || null,
           worker_function_name: matchedWorker?.funcion || null,
           department_id: channel.department_id || null,
-          status: 'open',
+          status: isCampaignEcho ? 'closed' : 'open',
           unread_count: fromMe ? 0 : 1,
           last_message_at: nowIso,
           last_message_text: previewText,

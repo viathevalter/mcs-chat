@@ -5,24 +5,15 @@ import { randomUUID } from 'crypto'
 
 function normalizeWorkerPhone(rawPhone?: string | null): string {
   if (!rawPhone) return ''
-  let clean = rawPhone.replace(/\D/g, '')
+  const trimmed = rawPhone.trim()
+  const hasExplicitCountryCode = trimmed.startsWith('+') || trimmed.startsWith('00')
+  let clean = trimmed.replace(/\D/g, '')
   if (!clean) return ''
   if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (hasExplicitCountryCode) return clean
   if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
   if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
   if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
-  if (
-    (clean.length === 10 || clean.length === 11) &&
-    !clean.startsWith('34') &&
-    !clean.startsWith('55') &&
-    !clean.startsWith('57') &&
-    !clean.startsWith('351') &&
-    !clean.startsWith('48') &&
-    !clean.startsWith('39') &&
-    !clean.startsWith('33')
-  ) {
-    return '55' + clean
-  }
   return clean
 }
 
@@ -632,7 +623,8 @@ export async function processDueScheduledMessages(maxItems = 3) {
           : String(rawExtId)
         : null
 
-      // Garantir registro na conversa do trabalhador no MCS Chat para histórico completo
+      // Garantir registro na conversa do trabalhador no MCS Chat sempre com status 'closed' (Fechada)
+      // para não cair na fila "Abertas" e não bagunçar o atendimento / transferências
       let conversationId: string | null = null
       const { data: existingConv } = await supabase
         .from('chat_conversations')
@@ -665,6 +657,8 @@ export async function processDueScheduledMessages(maxItems = 3) {
             worker_company_name: workerCompany || channel.company_name || undefined,
             worker_client_name: workerClient || undefined,
             worker_function_name: workerFunction || undefined,
+            status: 'closed',
+            unread_count: 0,
             last_message_at: sentIso,
             last_message_text: previewStr,
             last_message_preview: previewStr.slice(0, 140),
@@ -673,7 +667,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
           })
           .eq('id', conversationId)
       } else {
-        const { data: createdConv } = await supabase
+        const { data: createdConv, error: createConvErr } = await supabase
           .from('chat_conversations')
           .insert({
             channel_id: channel.id,
@@ -683,7 +677,7 @@ export async function processDueScheduledMessages(maxItems = 3) {
             worker_company_name: workerCompany || channel.company_name || null,
             worker_client_name: workerClient || null,
             worker_function_name: workerFunction || null,
-            status: 'open',
+            status: 'closed',
             unread_count: 0,
             last_message_at: sentIso,
             last_message_text: previewStr,
@@ -692,7 +686,33 @@ export async function processDueScheduledMessages(maxItems = 3) {
           })
           .select('id')
           .single()
-        conversationId = createdConv?.id || null
+
+        if (createConvErr) {
+          const { data: fallbackConv } = await supabase
+            .from('chat_conversations')
+            .select('id')
+            .eq('channel_id', channel.id)
+            .eq('contact_phone', phoneToUse)
+            .limit(1)
+            .maybeSingle()
+          if (fallbackConv?.id) {
+            conversationId = fallbackConv.id
+            await supabase
+              .from('chat_conversations')
+              .update({
+                status: 'closed',
+                unread_count: 0,
+                last_message_at: sentIso,
+                last_message_text: previewStr,
+                last_message_preview: previewStr.slice(0, 140),
+                last_message_direction: 'outbound',
+                updated_at: sentIso,
+              })
+              .eq('id', conversationId)
+          }
+        } else {
+          conversationId = createdConv?.id || null
+        }
       }
 
       if (conversationId) {

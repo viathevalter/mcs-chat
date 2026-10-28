@@ -209,23 +209,16 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     }
 
     if (!isFromWaSearch) {
-      if (formattedPhone.length === 9 && (formattedPhone.startsWith('6') || formattedPhone.startsWith('7'))) {
-        formattedPhone = '34' + formattedPhone
-      } else if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
-        formattedPhone = '351' + formattedPhone
-      } else if (formattedPhone.length === 10 && formattedPhone.startsWith('3')) {
-        formattedPhone = '57' + formattedPhone
-      } else if (
-        (formattedPhone.length === 10 || formattedPhone.length === 11) &&
-        !formattedPhone.startsWith('55') &&
-        !formattedPhone.startsWith('34') &&
-        !formattedPhone.startsWith('351') &&
-        !formattedPhone.startsWith('57') &&
-        !formattedPhone.startsWith('48') &&
-        !formattedPhone.startsWith('39') &&
-        !formattedPhone.startsWith('33')
-      ) {
-        formattedPhone = '55' + formattedPhone
+      const rawMovil = (workerObj?.movil || phone || '').trim()
+      const hasExplicitDdi = rawMovil.startsWith('+') || rawMovil.startsWith('00')
+      if (!hasExplicitDdi) {
+        if (formattedPhone.length === 9 && (formattedPhone.startsWith('6') || formattedPhone.startsWith('7'))) {
+          formattedPhone = '34' + formattedPhone
+        } else if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
+          formattedPhone = '351' + formattedPhone
+        } else if (formattedPhone.length === 10 && formattedPhone.startsWith('3')) {
+          formattedPhone = '57' + formattedPhone
+        }
       }
     }
 

@@ -42,24 +42,15 @@ type FilterType = 'minhas' | 'favoritos' | 'abertas' | 'todos' | 'fechadas'
 
 function normalizeWorkerPhone(rawPhone?: string | null): string {
   if (!rawPhone) return ''
-  let clean = rawPhone.replace(/\D/g, '')
+  const trimmed = rawPhone.trim()
+  const hasExplicitCountryCode = trimmed.startsWith('+') || trimmed.startsWith('00')
+  let clean = trimmed.replace(/\D/g, '')
   if (!clean) return ''
   if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (hasExplicitCountryCode) return clean
   if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
   if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
   if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
-  if (
-    (clean.length === 10 || clean.length === 11) &&
-    !clean.startsWith('34') &&
-    !clean.startsWith('55') &&
-    !clean.startsWith('57') &&
-    !clean.startsWith('351') &&
-    !clean.startsWith('48') &&
-    !clean.startsWith('39') &&
-    !clean.startsWith('33')
-  ) {
-    return '55' + clean
-  }
   return clean
 }
 

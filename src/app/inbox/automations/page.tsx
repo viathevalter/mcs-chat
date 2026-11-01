@@ -137,14 +137,23 @@ function normalizePhoneDigits(raw?: string | null): string {
 
 function isWorkerActiveStatus(status?: string | null, includePendingEntry = true): boolean {
   const s = (status || '').trim().toUpperCase()
-  if (s === 'ATIVO' || s === 'ACTIVE') return true
+  if (s === 'ATIVO' || s === 'ACTIVO' || s === 'ACTIVE') return true
   if (includePendingEntry && (s.includes('PENDENTE') || s.includes('PENDIENTE'))) return true
   return false
 }
 
 function isWorkerInactiveOrBlocked(status?: string | null): boolean {
   const s = (status || '').trim().toUpperCase()
-  return s === 'INATIVO' || s === 'DESISTIU' || s === 'DESLIGADO' || s === 'BAIXA' || s === 'AFASTADO'
+  if (!s) return true
+  return (
+    s.includes('INATIV') ||
+    s.includes('INACTIV') ||
+    s.includes('DESIST') ||
+    s.includes('DESLIG') ||
+    s.includes('BAIXA') ||
+    s.includes('BAJA') ||
+    s.includes('AFAST')
+  )
 }
 
 export default function AutomationsPage() {
@@ -430,14 +439,12 @@ export default function AutomationsPage() {
 
     return allWorkers
       .filter((w) => {
-        // Sempre inclui se foi adicionado manualmente pelo operador
-        if (manualSet.has(w.id)) return true
+        // Trava de segurança permanente anti-inativos/desistentes/não-contratados
+        if (isWorkerInactiveOrBlocked(w.status_trabajador)) return false
+        if (!isWorkerActiveStatus(w.status_trabajador, includePendingIngreso)) return false
 
-        // Trava de segurança anti-inativos
-        if (hideInactiveSafetyLock) {
-          if (isWorkerInactiveOrBlocked(w.status_trabajador)) return false
-          if (!isWorkerActiveStatus(w.status_trabajador, includePendingIngreso)) return false
-        }
+        // Inclui se foi adicionado manualmente pelo operador (e está ativo/pendente)
+        if (manualSet.has(w.id)) return true
 
         if (segmentMode === 'pedido') {
           if (selectedPedidos.length === 0) return false
@@ -463,7 +470,7 @@ export default function AutomationsPage() {
           return selectedCompanies.includes(wEmp)
         }
 
-        // Modo 'manual' (Todos os ativos / Busca livre)
+        // Modo 'manual' (Busca livre / Seleção individual)
         return true
       })
       .map((w) => {
@@ -487,9 +494,22 @@ export default function AutomationsPage() {
     extraManualWorkerIds,
   ])
 
-  // Sempre que a lista de candidatos mudar por troca de filtro de pedido/cliente/empresa, pré-seleciona todos que estão ativos e têm telefone válido
+  // Pré-seleciona automaticamente apenas quando filtrado por Pedido, Cliente ou Empresa;
+  // No modo 'manual' (Busca Livre), NUNCA seleciona todos os trabalhadores automaticamente para evitar disparos acidentais em massa
   useEffect(() => {
     const validIds = new Set<string>()
+    if (segmentMode === 'manual') {
+      const manualExtraSet = new Set(extraManualWorkerIds)
+      candidateWorkers.forEach((w) => {
+        const clean = normalizePhoneDigits(w.movil)
+        const blocked = isWorkerInactiveOrBlocked(w.status_trabajador)
+        if (manualExtraSet.has(w.id) && clean.length >= 8 && !blocked) {
+          validIds.add(w.id)
+        }
+      })
+      setSelectedWorkerIds(validIds)
+      return
+    }
     candidateWorkers.forEach((w) => {
       const clean = normalizePhoneDigits(w.movil)
       const blocked = isWorkerInactiveOrBlocked(w.status_trabajador)
@@ -498,7 +518,7 @@ export default function AutomationsPage() {
       }
     })
     setSelectedWorkerIds(validIds)
-  }, [candidateWorkers])
+  }, [candidateWorkers, segmentMode, extraManualWorkerIds])
 
   const displayedCandidateWorkers = useMemo(() => {
     const q = workerTableSearch.trim().toLowerCase()
@@ -1301,26 +1321,23 @@ export default function AutomationsPage() {
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-extrabold">👷 Todos Ativos</div>
-                    <div className="text-[9.5px] opacity-75 truncate">Seleção livre / geral</div>
+                    <div className="font-extrabold">👷 Seleção Individual</div>
+                    <div className="text-[9.5px] opacity-75 truncate">Escolha manual</div>
                   </button>
                 </div>
               </div>
 
-              {/* Trava de Segurança de Status (Evitar enviar para Inativos) */}
+              {/* Trava de Segurança Permanente de Status (Evitar enviar para Inativos / Não contratados) */}
               <div className="px-3 py-2 bg-emerald-50/60 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/40 space-y-1.5">
-                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    Bloquear Inativos / Baixas
+                    Trava Anti-Inativos / Baixas
                   </span>
-                  <input
-                    type="checkbox"
-                    checked={hideInactiveSafetyLock}
-                    onChange={(e) => setHideInactiveSafetyLock(e.target.checked)}
-                    className="rounded accent-emerald-600 w-3.5 h-3.5"
-                  />
-                </label>
+                  <span className="text-[9.5px] font-extrabold uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded">
+                    Sempre Ativa
+                  </span>
+                </div>
 
                 <label className="flex items-center justify-between gap-2 cursor-pointer">
                   <span className="text-[10.5px] font-semibold text-slate-600 dark:text-slate-300">

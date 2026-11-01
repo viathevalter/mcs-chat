@@ -166,14 +166,23 @@ export function computeNextRunAt(rule: any, baseDate = new Date()): string {
 
 function isWorkerActiveStatusServer(status?: string | null, includePendingEntry = true): boolean {
   const s = (status || '').trim().toUpperCase()
-  if (s === 'ATIVO' || s === 'ACTIVE') return true
+  if (s === 'ATIVO' || s === 'ACTIVO' || s === 'ACTIVE') return true
   if (includePendingEntry && (s.includes('PENDENTE') || s.includes('PENDIENTE'))) return true
   return false
 }
 
 function isWorkerBlockedStatusServer(status?: string | null): boolean {
   const s = (status || '').trim().toUpperCase()
-  return s === 'INATIVO' || s === 'DESISTIU' || s === 'DESLIGADO' || s === 'BAIXA' || s === 'AFASTADO'
+  if (!s) return true
+  return (
+    s.includes('INATIV') ||
+    s.includes('INACTIV') ||
+    s.includes('DESIST') ||
+    s.includes('DESLIG') ||
+    s.includes('BAIXA') ||
+    s.includes('BAJA') ||
+    s.includes('AFAST')
+  )
 }
 
 async function resolveDynamicRecipients(supabase: any, segmentConfig: any): Promise<any[]> {
@@ -448,11 +457,37 @@ export async function processDueScheduledMessages(maxItems = 3) {
     .select('*')
     .eq('is_active', true)
 
-  // 0.1 Ativar campanhas agendadas únicas cujo horário programado já chegou
+  // 0.0 Trava Anti-Fila Antiga: Cancelar automaticamente qualquer mensagem pendente cujo horário previsto já passou há mais de 4 horas
+  // (Impede que uma campanha iniciada e abandonada na sexta-feira volte a disparar sozinha dias depois ao abrir o sistema)
+  const staleCutoffIso = new Date(Date.now() - 4 * 3600 * 1000).toISOString()
+  const { data: staleItems } = await supabase
+    .from('chat_scheduled_messages')
+    .update({
+      status: 'cancelled',
+      error_message: 'Expirado automaticamente por segurança (fila antiga com mais de 4h de atraso)',
+      updated_at: nowIso,
+    })
+    .eq('status', 'pending')
+    .lt('scheduled_for', staleCutoffIso)
+    .select('campaign_id')
+
+  if (staleItems && staleItems.length > 0) {
+    const staleCampIds = Array.from(new Set(staleItems.map((s: any) => s.campaign_id).filter(Boolean)))
+    if (staleCampIds.length > 0) {
+      await supabase
+        .from('chat_campaigns')
+        .update({ status: 'cancelled', updated_at: nowIso })
+        .in('id', staleCampIds)
+        .eq('status', 'running')
+    }
+  }
+
+  // 0.1 Ativar campanhas agendadas únicas cujo horário programado já chegou (dentro da janela válida de 4h)
   await supabase
     .from('chat_campaigns')
     .update({ status: 'running', updated_at: nowIso })
     .eq('status', 'scheduled')
+    .gte('scheduled_start_at', staleCutoffIso)
     .lte('scheduled_start_at', nowIso)
 
   // 0.2 Verificar se alguma campanha recorrente ativa atingiu o horário de disparo (next_run_at <= now)
@@ -534,9 +569,13 @@ export async function processDueScheduledMessages(maxItems = 3) {
           .maybeSingle()
 
         if (freshW) {
-          const st = (freshW.status_trabajador || '').trim().toUpperCase()
-          if (st === 'INATIVO' || st === 'DESISTIU' || st === 'DESLIGADO' || st === 'BAIXA') {
-            throw new Error(`Envio bloqueado por segurança: Trabalhador consta atualmente como ${freshW.status_trabajador}`)
+          if (
+            isWorkerBlockedStatusServer(freshW.status_trabajador) ||
+            !isWorkerActiveStatusServer(freshW.status_trabajador, true)
+          ) {
+            throw new Error(
+              `Envio bloqueado por segurança: Trabalhador consta atualmente como "${freshW.status_trabajador || 'Sem Contrato Ativo'}"`
+            )
           }
           const latestPhone = normalizeWorkerPhone(freshW.movil)
           if (latestPhone.length >= 8) phoneToUse = latestPhone
@@ -1008,8 +1047,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Digite o conteúdo da mensagem da campanha.' }, { status: 400 })
     }
 
-    if (!Array.isArray(recipients) || recipients.length === 0) {
-      return NextResponse.json({ error: 'Selecione pelo menos 1 trabalhador para receber a campanha.' }, { status: 400 })
+    const rawRecipients = Array.isArray(recipients) ? recipients : []
+    const safeRecipients = rawRecipients.filter((r: any) => {
+      if (!r) return false
+      if (r.status_trabajador !== undefined) {
+        if (isWorkerBlockedStatusServer(r.status_trabajador)) return false
+        if (!isWorkerActiveStatusServer(r.status_trabajador, true)) return false
+      }
+      return true
+    })
+
+    if (safeRecipients.length === 0) {
+      return NextResponse.json(
+        { error: 'Selecione pelo menos 1 trabalhador Ativo ou Pendente de Ingresso para receber a campanha.' },
+        { status: 400 }
+      )
     }
 
     const { data: channels } = await supabase
@@ -1052,7 +1104,7 @@ export async function POST(req: Request) {
       .insert({
         name: campaignName,
         category,
-        target_summary: targetSummary || `${recipients.length} trabalhador(es) selecionado(s)`,
+        target_summary: targetSummary || `${safeRecipients.length} trabalhador(es) selecionado(s)`,
         channel_mode: channelMode,
         channel_id: channelId || null,
         cadence_mode: cadenceMode,
@@ -1069,7 +1121,7 @@ export async function POST(req: Request) {
         last_run_at: sendFirstBatchNow ? new Date().toISOString() : null,
         runs_count: sendFirstBatchNow ? 1 : 0,
         status: initialStatus,
-        total_recipients: recipients.length,
+        total_recipients: safeRecipients.length,
         sent_count: 0,
         failed_count: 0,
         created_by_name: createdByName,
@@ -1091,7 +1143,7 @@ export async function POST(req: Request) {
       const queueItems = buildQueueItemsForCampaign({
         campaignId: createdCamp.id,
         batchId,
-        recipients,
+        recipients: safeRecipients,
         startTimeMs,
         cadenceMode,
         channelMode,

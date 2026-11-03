@@ -17,6 +17,21 @@ function normalizeWorkerPhone(rawPhone?: string | null): string {
   return clean
 }
 
+function sanitizeWhatsAppFormatting(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    // Remove linhas que contêm apenas um asterisco órfão (ex: "\n*.\n")
+    .replace(/\n\s*\*([.,;]?)\s*(?=\n|$)/g, '$1\n')
+    // Se escreveu "*Campo:*Valor" sem espaço após o *, adiciona espaço para o WhatsApp aplicar o negrito
+    .replace(/(\*[^*\n]{1,60}:\*)(?=[A-Za-zÀ-ÿ0-9+#])/g, '$1 ')
+    // Se escreveu "*Campo*:Valor" sem espaço após os dois-pontos
+    .replace(/(\*[^*\n]{1,60}\*:)(?=[A-Za-zÀ-ÿ0-9+#])/g, '$1 ')
+    // Remove til (~) solto antes de nomes copiados do WhatsApp (ex: "~Migue") para não riscar o texto
+    .replace(/(^|\s)~([A-Za-zÀ-ÿ])/g, '$1$2')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
+}
+
 function interpolateTemplate(
   template: string,
   worker: {
@@ -48,24 +63,22 @@ function interpolateTemplate(
   const enderecoAloj = (worker.alojamento_endereco || worker.alojamento_nome || '').trim()
 
   let out = template
-    .replace(/\{nome\}/gi, fullName)
-    .replace(/\{primeiro_nome\}/gi, firstName)
-    .replace(/\{passaporte\}/gi, passportDoc)
-    .replace(/\{pasaporte\}/gi, passportDoc)
-    .replace(/\{documento\}/gi, passportDoc)
-    .replace(/\{cod_colab\}/gi, codColab)
-    .replace(/\{empresa\}/gi, company)
-    .replace(/\{contratante\}/gi, company)
-    .replace(/\{cliente\}/gi, client)
-    .replace(/\{funcao\}/gi, func)
-    .replace(/\{funcion\}/gi, func)
-    .replace(/\{cod_pedido\}/gi, pedido || client)
-    .replace(/\{obra\}/gi, obra)
-    .replace(/\{alojamento\}/gi, alojamento)
-    .replace(/\{alojamiento\}/gi, alojamento)
-    .replace(/\{endereco_alojamento\}/gi, enderecoAloj)
-    .replace(/\{direccion_alojamento\}/gi, enderecoAloj)
-    .replace(/\{direccion_alojamiento\}/gi, enderecoAloj)
+    .replace(/\{\s*(nome|nombre|nombre\s+completo|full[_\s]*name)\s*\}/gi, fullName)
+    .replace(/\{\s*(primeiro_nome|primer[_\s]*nombre|nombre\s+de\s+pila|first[_\s]*name)\s*\}/gi, firstName)
+    .replace(/\{\s*(passaporte|pasaporte|documento|passport)\s*\}/gi, passportDoc)
+    .replace(/\{\s*(cod_colab|codigo_colab)\s*\}/gi, codColab)
+    .replace(/\{\s*(empresa|contratante)\s*\}/gi, company)
+    .replace(/\{\s*(cliente)\s*\}/gi, client)
+    .replace(/\{\s*(funcao|funci[oó]n|role)\s*\}/gi, func)
+    .replace(/\{\s*(cod_pedido|c[oó]digo[_\s]*pedido|order[_\s]*code|cod[_\s]*encargo)\s*\}/gi, pedido || client)
+    .replace(/\{\s*(obra|trabajo|trabajar|work[_\s]*site)\s*\}/gi, obra)
+    .replace(/\{\s*(alojamento|alojamiento|housing)\s*\}/gi, alojamento)
+    .replace(
+      /\{\s*(endereco_alojamento|direcci[oó]n[_\s]*de[_\s]*alojamiento|direcci[oó]n[_\s]*alojamiento|direccion_alojamento)\s*\}/gi,
+      enderecoAloj
+    )
+
+  out = sanitizeWhatsAppFormatting(out)
 
   if (linkUrl && linkUrl.trim() && !out.includes(linkUrl.trim())) {
     out = `${out.trim()}\n\n🔗 ${linkUrl.trim()}`
@@ -882,6 +895,59 @@ export async function processDueScheduledMessages(maxItems = 3) {
   }
 
   return { processed, sent, failed }
+}
+
+export async function GET(req: Request) {
+  try {
+    const supabase = createAdminClient()
+    const url = new URL(req.url)
+    const campaignId = url.searchParams.get('campaignId')
+
+    if (campaignId) {
+      const { data: items } = await supabase
+        .from('chat_scheduled_messages')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .order('scheduled_for', { ascending: true })
+      return NextResponse.json({ success: true, items: items || [] })
+    }
+
+    const [chRes, wrkRes, pedRes, alojRes, tplRes, campRes] = await Promise.all([
+      supabase
+        .from('chat_channels')
+        .select('*')
+        .eq('is_active', true)
+        .order('company_name', { ascending: true }),
+      supabase
+        .schema('core_personal')
+        .from('workers')
+        .select('id, cod_colab, nome, movil, pasaporte, nie, dni, niss, nif, contratante, cliente, funcion, status_trabajador, status_seguridad')
+        .order('nome', { ascending: true }),
+      supabase.rpc('get_campaign_pedidos_overview'),
+      supabase.rpc('get_campaign_alojamentos_overview'),
+      supabase
+        .from('chat_campaign_templates')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('chat_campaigns')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ])
+
+    return NextResponse.json({
+      success: true,
+      channels: chRes.data || [],
+      workers: wrkRes.data || [],
+      pedidos: pedRes.data || [],
+      alojamentos: alojRes.data || [],
+      templates: tplRes.data || [],
+      campaigns: campRes.data || [],
+    })
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+  }
 }
 
 export async function POST(req: Request) {

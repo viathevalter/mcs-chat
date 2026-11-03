@@ -319,28 +319,47 @@ export default function AutomationsPage() {
           supabase.rpc('get_campaign_alojamentos_overview'),
         ])
 
-        if (chRes.data) {
-          setChannels(chRes.data)
-          const firstWorkerCh = chRes.data.find((c: any) => (c.channel_type || 'workers') === 'workers') || chRes.data[0]
+        let chList = chRes.data || []
+        let wrkList = wrkRes.data || []
+        let pedList = Array.isArray(pedRes.data) ? pedRes.data : []
+        let alojList = Array.isArray(alojRes.data) ? alojRes.data : []
+
+        if (wrkList.length === 0 || chList.length === 0 || pedList.length === 0) {
+          try {
+            const fbRes = await fetch('/api/chat/campaign', { cache: 'no-store' })
+            const fbJson = await fbRes.json()
+            if (fbJson?.success) {
+              if (chList.length === 0 && Array.isArray(fbJson.channels)) chList = fbJson.channels
+              if (wrkList.length === 0 && Array.isArray(fbJson.workers)) wrkList = fbJson.workers
+              if (pedList.length === 0 && Array.isArray(fbJson.pedidos)) pedList = fbJson.pedidos
+              if (alojList.length === 0 && Array.isArray(fbJson.alojamentos)) alojList = fbJson.alojamentos
+              if (Array.isArray(fbJson.templates) && fbJson.templates.length > 0) setTemplates(fbJson.templates)
+              if (Array.isArray(fbJson.campaigns) && fbJson.campaigns.length > 0) {
+                setCampaigns(fbJson.campaigns)
+                if (fbJson.campaigns[0]?.id) setSelectedCampaignId(fbJson.campaigns[0].id)
+              }
+            }
+          } catch {}
+        }
+
+        if (chList.length > 0) {
+          setChannels(chList)
+          const firstWorkerCh = chList.find((c: any) => (c.channel_type || 'workers') === 'workers') || chList[0]
           if (firstWorkerCh) setSelectedChannelId(firstWorkerCh.id)
         }
 
-        if (wrkRes.data) {
-          setAllWorkers(wrkRes.data)
+        if (wrkList.length > 0) {
+          setAllWorkers(wrkList)
         }
 
-        if (Array.isArray(pedRes.data)) {
-          setPedidosList(pedRes.data)
-          if (pedRes.data.length > 0) {
-            setSelectedPedidos([pedRes.data[0].cod_pedido])
-          }
+        if (pedList.length > 0) {
+          setPedidosList(pedList)
+          setSelectedPedidos([pedList[0].cod_pedido])
         }
 
-        if (Array.isArray(alojRes.data)) {
-          setAlojamentosList(alojRes.data)
-          if (alojRes.data.length > 0) {
-            setSelectedAlojamentos([alojRes.data[0].alojamento_id])
-          }
+        if (alojList.length > 0) {
+          setAlojamentosList(alojList)
+          setSelectedAlojamentos([alojList[0].alojamento_id])
         }
 
         await Promise.all([loadTemplates(), loadCampaignsHistory()])
@@ -774,42 +793,68 @@ export default function AutomationsPage() {
       'GJ703064'
     ).trim()
     const codColab = (samplePreviewWorker.cod_colab || 'E0001').trim()
+    const hasRealWorkerSelected = Boolean(selectedRecipients[0] || candidateWorkers[0])
     const alojNome = (
       samplePreviewWorker.alojamento_nome ||
       samplePreviewWorker.alojamento_endereco ||
-      'BARCELONA - c/ calvari 54'
+      (hasRealWorkerSelected ? '[⚠️ Sem alojamento vinculado]' : 'BARCELONA - c/ calvari 54')
     ).trim()
     const alojEnd = (
       samplePreviewWorker.alojamento_endereco ||
       samplePreviewWorker.alojamento_nome ||
-      'c/ calvari 54, Barcelona'
+      (hasRealWorkerSelected ? '[⚠️ Sem endereço de alojamento vinculado]' : 'c/ calvari 54, Barcelona')
     ).trim()
 
     let out = content
-      .replace(/\{nome\}/gi, fullName)
-      .replace(/\{primeiro_nome\}/gi, firstName)
-      .replace(/\{passaporte\}/gi, passportDoc)
-      .replace(/\{pasaporte\}/gi, passportDoc)
-      .replace(/\{documento\}/gi, passportDoc)
-      .replace(/\{cod_colab\}/gi, codColab)
-      .replace(/\{empresa\}/gi, samplePreviewWorker.contratante || 'LUMINOUS')
-      .replace(/\{contratante\}/gi, samplePreviewWorker.contratante || 'LUMINOUS')
-      .replace(/\{cliente\}/gi, samplePreviewWorker.cliente || 'Obra')
-      .replace(/\{funcao\}/gi, samplePreviewWorker.funcion || 'Especialista')
-      .replace(/\{funcion\}/gi, samplePreviewWorker.funcion || 'Especialista')
-      .replace(/\{cod_pedido\}/gi, samplePreviewWorker.pedido_code || selectedPedidos[0] || 'PED-2026')
-      .replace(/\{obra\}/gi, samplePreviewWorker.obra_nome || samplePreviewWorker.cliente || 'Obra')
-      .replace(/\{alojamento\}/gi, alojNome)
-      .replace(/\{alojamiento\}/gi, alojNome)
-      .replace(/\{endereco_alojamento\}/gi, alojEnd)
-      .replace(/\{direccion_alojamento\}/gi, alojEnd)
-      .replace(/\{direccion_alojamiento\}/gi, alojEnd)
+      .replace(/\{\s*(nome|nombre|nombre\s+completo|full[_\s]*name)\s*\}/gi, fullName)
+      .replace(/\{\s*(primeiro_nome|primer[_\s]*nombre|nombre\s+de\s+pila|first[_\s]*name)\s*\}/gi, firstName)
+      .replace(/\{\s*(passaporte|pasaporte|documento|passport)\s*\}/gi, passportDoc)
+      .replace(/\{\s*(cod_colab|codigo_colab)\s*\}/gi, codColab)
+      .replace(/\{\s*(empresa|contratante)\s*\}/gi, samplePreviewWorker.contratante || 'LUMINOUS')
+      .replace(/\{\s*(cliente)\s*\}/gi, samplePreviewWorker.cliente || 'Obra')
+      .replace(/\{\s*(funcao|funci[oó]n|role)\s*\}/gi, samplePreviewWorker.funcion || 'Especialista')
+      .replace(/\{\s*(cod_pedido|c[oó]digo[_\s]*pedido|order[_\s]*code|cod[_\s]*encargo)\s*\}/gi, samplePreviewWorker.pedido_code || selectedPedidos[0] || 'PED-2026')
+      .replace(/\{\s*(obra|trabajo|trabajar|work[_\s]*site)\s*\}/gi, samplePreviewWorker.obra_nome || samplePreviewWorker.cliente || 'Obra')
+      .replace(/\{\s*(alojamento|alojamiento|housing)\s*\}/gi, alojNome)
+      .replace(
+        /\{\s*(endereco_alojamento|direcci[oó]n[_\s]*de[_\s]*alojamiento|direcci[oó]n[_\s]*alojamiento|direccion_alojamento)\s*\}/gi,
+        alojEnd
+      )
+      .replace(/\r\n/g, '\n')
+      .replace(/\n\s*\*([.,;]?)\s*(?=\n|$)/g, '$1\n')
+      .replace(/(\*[^*\n]{1,60}:\*)(?=[A-Za-zÀ-ÿ0-9+#])/g, '$1 ')
+      .replace(/(\*[^*\n]{1,60}\*:)(?=[A-Za-zÀ-ÿ0-9+#])/g, '$1 ')
+      .replace(/(^|\s)~([A-Za-zÀ-ÿ])/g, '$1$2')
 
     if (linkUrl.trim() && !out.includes(linkUrl.trim())) {
       out = `${out.trim()}\n\n🔗 ${linkUrl.trim()}`
     }
     return out
-  }, [content, linkUrl, samplePreviewWorker, selectedPedidos, isEs])
+  }, [content, linkUrl, samplePreviewWorker, selectedRecipients, candidateWorkers, selectedPedidos, isEs])
+
+  const renderWhatsAppFormattedNodes = useCallback((rawText: string) => {
+    const parts = rawText.split(/(\*[^*\n]+\*|\[[^\]]+\])/g)
+    return parts.map((part, idx) => {
+      if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+        return (
+          <strong key={idx} className="font-extrabold text-slate-950 dark:text-white">
+            {part.slice(1, -1)}
+          </strong>
+        )
+      }
+      if (part.startsWith('[') && part.endsWith(']')) {
+        return (
+          <span
+            key={idx}
+            className="px-1 py-0.2 rounded bg-amber-200/90 text-amber-950 font-bold border border-amber-400"
+          >
+            {part}
+          </span>
+        )
+      }
+      return <span key={idx}>{part}</span>
+    })
+  }, [])
 
   const handleToggleWorker = (id: string) => {
     setSelectedWorkerIds((prev) => {
@@ -2342,7 +2387,7 @@ export default function AutomationsPage() {
                       <span>🇪🇸 {tr('Traduzir p/ Espanhol', 'Traducir al Español')}</span>
                     </button>
                   </div>
-                  <div className="flex items-center gap-1 flex-wrap mb-1.5">
+                  <div translate="no" className="notranslate flex items-center gap-1 flex-wrap mb-1.5">
                     {[
                       { tag: '{primeiro_nome}', label: tr('1º Nome', '1er Nombre') },
                       { tag: '{nome}', label: tr('Nome Completo', 'Nombre Completo') },
@@ -2359,9 +2404,10 @@ export default function AutomationsPage() {
                       <button
                         key={v.tag}
                         type="button"
+                        translate="no"
                         onClick={() => setContent((c) => `${c}${c.endsWith(' ') || c.endsWith('\n') || !c ? '' : ' '}${v.tag}`)}
                         title={`Inserir variável automática: ${v.label}`}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer border transition-colors ${
+                        className={`notranslate px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer border transition-colors ${
                           v.highlight
                             ? 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 border-indigo-300 text-indigo-700 dark:text-indigo-300'
                             : 'bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-emerald-700 dark:text-emerald-400'
@@ -2382,6 +2428,33 @@ export default function AutomationsPage() {
                     )}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-slate-800 dark:text-slate-100 leading-relaxed"
                   />
+
+                  {/* Preview Real Estilo WhatsApp sempre visível logo abaixo da mensagem */}
+                  <div
+                    key={`preview_top_${samplePreviewWorker.id || samplePreviewWorker.nome}_${content.length}_${selectedRecipients.length}`}
+                    translate="no"
+                    className="notranslate mt-2 rounded-xl bg-[#efeae2] dark:bg-slate-800 p-2.5 border border-emerald-300/70 dark:border-slate-700 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      <span className="truncate">
+                        📱 {tr('Preview WhatsApp', 'Vista Previa WhatsApp')}:{' '}
+                        <strong className="text-emerald-800 dark:text-emerald-400">{samplePreviewWorker.nome}</strong>
+                      </span>
+                      <span className="shrink-0 ml-2 px-1.5 py-0.2 rounded bg-white/80 dark:bg-slate-900 text-[9.5px] font-extrabold text-emerald-700">
+                        Canal: {samplePreviewWorker.contratante || 'Oficial'}
+                      </span>
+                    </div>
+                    <div className="bg-[#d9fdd3] dark:bg-emerald-950 text-slate-900 dark:text-slate-100 rounded-xl rounded-tr-xs p-2.5 text-[11.5px] shadow-2xs whitespace-pre-wrap leading-snug max-h-44 overflow-y-auto">
+                      {mediaUrl && (
+                        <div className="mb-1.5 px-2 py-1 rounded bg-black/5 text-[10px] font-bold flex items-center gap-1">
+                          {mediaType === 'image'
+                            ? `📷 [${tr('Imagem anexada', 'Imagen adjunta')}]`
+                            : `📄 [${mediaFilename || tr('Documento', 'Documento')}]`}
+                        </div>
+                      )}
+                      {renderWhatsAppFormattedNodes(renderedPreviewText)}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Anexos Multimídia: Imagem, PDF/Documento e Link */}
@@ -2712,7 +2785,11 @@ export default function AutomationsPage() {
                 </div>
 
                 {/* Preview Real Estilo WhatsApp */}
-                <div className="rounded-xl bg-[#efeae2] dark:bg-slate-800 p-2.5 border border-slate-200 dark:border-slate-700">
+                <div
+                  key={`preview_bottom_${samplePreviewWorker.id || samplePreviewWorker.nome}_${content.length}_${selectedRecipients.length}`}
+                  translate="no"
+                  className="notranslate rounded-xl bg-[#efeae2] dark:bg-slate-800 p-2.5 border border-slate-200 dark:border-slate-700"
+                >
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1">
                     <span>
                       📱 {tr('Preview WhatsApp', 'Vista Previa WhatsApp')} ({samplePreviewWorker.nome})
@@ -2727,7 +2804,7 @@ export default function AutomationsPage() {
                           : `📄 [${mediaFilename || tr('Documento', 'Documento')}]`}
                       </div>
                     )}
-                    {renderedPreviewText}
+                    {renderWhatsAppFormattedNodes(renderedPreviewText)}
                   </div>
                 </div>
 

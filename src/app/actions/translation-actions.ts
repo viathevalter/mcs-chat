@@ -137,24 +137,60 @@ RETORNE APENAS A MENSAGEM FINAL. SEM ASPAS. SEM TEXTO ADICIONAL.`
   }
 }
 
+function normalizeTemplateVariableTags(input: string): string {
+  return input
+    .replace(/\{\s*(nombre\s+de\s+pila|primer[_\s]*nombre|first[_\s]*name)\s*\}/gi, '{primeiro_nome}')
+    .replace(/\{\s*(nombre\s+completo|nombre|full[_\s]*name)\s*\}/gi, '{nome}')
+    .replace(/\{\s*(pasaporte|passport|documento)\s*\}/gi, '{passaporte}')
+    .replace(/\{\s*(alojamiento|housing)\s*\}/gi, '{alojamento}')
+    .replace(/\{\s*(direcci[oó]n[_\s]*de[_\s]*alojamiento|direcci[oó]n[_\s]*alojamiento|endereco[_\s]*de[_\s]*alojamento)\s*\}/gi, '{endereco_alojamento}')
+    .replace(/\{\s*(funci[oó]n|funcion|role)\s*\}/gi, '{funcao}')
+    .replace(/\{\s*(order[_\s]*code|c[oó]digo[_\s]*pedido|cod[_\s]*encargo)\s*\}/gi, '{cod_pedido}')
+    .replace(/\{\s*(trabajar|trabajo|work[_\s]*site)\s*\}/gi, '{obra}')
+}
+
+function maskTemplateVariables(input: string): { masked: string; vars: string[] } {
+  const normalized = normalizeTemplateVariableTags(input)
+  const vars: string[] = []
+  const masked = normalized.replace(/\{[a-zA-Z0-9_À-ÿ\s]+\}/g, (match) => {
+    const idx = vars.length
+    vars.push(match)
+    return `__MCS_VAR_${idx}__`
+  })
+  return { masked, vars }
+}
+
+function unmaskTemplateVariables(translated: string, vars: string[]): string {
+  let out = translated
+  vars.forEach((originalTag, idx) => {
+    const re = new RegExp(`__\\s*MCS[\\s_]*VAR[\\s_]*${idx}\\s*__`, 'gi')
+    out = out.replace(re, originalTag)
+  })
+  return normalizeTemplateVariableTags(out)
+}
+
 export async function translateOutboundMessage(originalContent: string, targetChatLang: string) {
   try {
     if (!originalContent || !originalContent.trim()) {
       return { success: false, error: 'Empty content' }
     }
 
+    const { masked, vars } = maskTemplateVariables(originalContent)
     const targetIso = LANG_TO_ISO[targetChatLang] || 'es'
     const openAiKey = (process.env.OPENAI_API_KEY || '').trim()
 
     if (openAiKey) {
       try {
         const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 2400)
+        const timer = setTimeout(() => controller.abort(), 3200)
         const openai = createOpenAI({ apiKey: openAiKey })
         const systemPrompt = `Você é um comunicador profissional em um sistema corporativo (MCS).
 O operador digitou uma mensagem no idioma original dele. O destinatário fala: ${targetChatLang}.
 Sua tarefa é traduzir a mensagem com tom profissional, claro e educado para ${targetChatLang}.
-Não perca links, números de telefone e nem variáveis.
+REGRAS CRÍTICAS DE FORMATAÇÃO WHATSAPP:
+1. Preserve EXATAMENTE todas as quebras de linha, parágrafos, emojis e marcadores de negrito do WhatsApp (*texto*).
+2. NUNCA altere, traduza nem remova tokens de variáveis como __MCS_VAR_0__, __MCS_VAR_1__, links ou números de telefone.
+3. Sempre mantenha um espaço após o fechamento de negrito (ex: *Dirección:* texto).
 RETORNE APENAS E EXCLUSIVAMENTE A TRADUÇÃO. NUNCA ADICIONE COMENTÁRIOS.`
 
         const { text } = await generateText({
@@ -162,26 +198,27 @@ RETORNE APENAS E EXCLUSIVAMENTE A TRADUÇÃO. NUNCA ADICIONE COMENTÁRIOS.`
           maxRetries: 0,
           abortSignal: controller.signal,
           system: systemPrompt,
-          prompt: originalContent,
-          temperature: 0.2,
+          prompt: masked,
+          temperature: 0.15,
         })
         clearTimeout(timer)
-        const cleaned = text.trim()
+        const cleaned = unmaskTemplateVariables(text.trim(), vars)
         if (cleaned) {
           return { success: true, translation: cleaned }
         }
       } catch (aiErr) {
-        const fallback = await googleTranslateFallback(originalContent, targetIso)
-        return { success: true, translation: fallback }
+        const fallback = await googleTranslateFallback(masked, targetIso)
+        return { success: true, translation: unmaskTemplateVariables(fallback, vars) }
       }
     }
 
-    const fallback = await googleTranslateFallback(originalContent, targetIso)
-    return { success: true, translation: fallback }
+    const fallback = await googleTranslateFallback(masked, targetIso)
+    return { success: true, translation: unmaskTemplateVariables(fallback, vars) }
   } catch (error: any) {
     console.error("Error in outbound translation:", error)
+    const { masked, vars } = maskTemplateVariables(originalContent)
     const targetIso = LANG_TO_ISO[targetChatLang] || 'es'
-    const fallback = await googleTranslateFallback(originalContent, targetIso)
-    return { success: true, translation: fallback }
+    const fallback = await googleTranslateFallback(masked, targetIso)
+    return { success: true, translation: unmaskTemplateVariables(fallback, vars) }
   }
 }

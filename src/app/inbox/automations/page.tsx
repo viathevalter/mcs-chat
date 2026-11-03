@@ -3759,11 +3759,24 @@ export default function AutomationsPage() {
                                 )}
                               </div>
 
-                              {item.error_message && (
-                                <p className="text-[11px] font-semibold text-rose-600 mt-0.5">
-                                  ⚠️ Motivo da falha: {item.error_message}
-                                </p>
-                              )}
+                              {item.error_message && (() => {
+                                const rawErr = String(item.error_message || '').toLowerCase()
+                                const isNoWa =
+                                  rawErr.includes('is not on whatsapp') ||
+                                  rawErr.includes('not on whatsapp') ||
+                                  rawErr.includes('usync returned no lid') ||
+                                  rawErr.includes('failed to resolve lid') ||
+                                  rawErr.includes('sem whatsapp')
+                                return (
+                                  <p className="text-[11px] font-bold text-rose-700 bg-rose-100/70 border border-rose-200 px-2 py-1 rounded-lg mt-1 inline-block">
+                                    {isNoWa
+                                      ? isEs
+                                        ? `🚫 Número +${(item.worker_phone || '').replace(/\D/g, '')} NO tiene cuenta activa en WhatsApp (Meta / UazAPI). Verifique otro teléfono y actualice la ficha del trabajador.`
+                                        : `🚫 O número +${(item.worker_phone || '').replace(/\D/g, '')} NÃO possui conta ativa no WhatsApp (Meta / UazAPI). Verifique outro telefone e atualize o cadastro do trabalhador.`
+                                      : `⚠️ ${isEs ? 'Motivo del fallo' : 'Motivo da falha'}: ${item.error_message}`}
+                                  </p>
+                                )
+                              })()}
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">

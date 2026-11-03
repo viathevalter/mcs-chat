@@ -1,88 +1,135 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { evolutionApi } from '@/lib/whatsapp/evolution-api'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { evolutionApi, classifyWhatsAppSendError } from '@/lib/whatsapp/evolution-api'
+
+function normalizePhoneForCheck(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  const trimmed = String(rawPhone).trim()
+  const hasExplicitCountryCode = trimmed.startsWith('+') || trimmed.startsWith('00')
+  let clean = trimmed.replace(/\D/g, '')
+  if (!clean) return ''
+  if (clean.startsWith('00')) clean = clean.replace(/^00+/, '')
+  if (hasExplicitCountryCode) return clean
+  if (clean.length === 9 && (clean.startsWith('6') || clean.startsWith('7'))) return '34' + clean
+  if (clean.length === 9 && clean.startsWith('9')) return '351' + clean
+  if (clean.length === 10 && clean.startsWith('3')) return '57' + clean
+  return clean
+}
 
 export async function POST(request: Request) {
   try {
-    const { phone, channelId } = await request.json()
+    const { phone, channelId, fastCheck = false, alternatePhones = [] } = await request.json()
 
-    if (!phone || !channelId) {
-      return NextResponse.json({ error: 'Missing phone or channelId' }, { status: 400 })
+    const normalizedPhone = normalizePhoneForCheck(phone)
+    if (!normalizedPhone) {
+      return NextResponse.json({ error: 'Missing phone' }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
+    const supabase = createAdminClient()
 
-    // Verify auth
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Get channel (or fallback to any connected channel if channelId is missing)
+    let channel: any = null
+    if (channelId) {
+      const { data: found } = await supabase
+        .from('chat_channels')
+        .select('*')
+        .eq('id', channelId)
+        .maybeSingle()
+      if (found) channel = found
     }
 
-    // Get channel
-    const { data: channel, error: channelError } = await supabase
-      .from('chat_channels')
-      .select('*')
-      .eq('id', channelId)
-      .eq('is_active', true)
-      .single()
+    if (!channel) {
+      const { data: fallbackCh } = await supabase
+        .from('chat_channels')
+        .select('*')
+        .eq('is_active', true)
+        .eq('status', 'connected')
+        .limit(1)
+        .maybeSingle()
+      channel = fallbackCh
+    }
 
-    if (channelError || !channel) {
+    if (!channel) {
       return NextResponse.json({ error: 'Channel not found or inactive' }, { status: 404 })
     }
 
+    const instanceName = channel.instance_name || channel.name
+    const apiUrl = channel.api_url || 'https://mcs-chat.uazapi.com'
+    const apiToken = channel.instance_token || channel.api_token
+    const provider = channel.provider || 'uazapi'
+
     // Call evolutionApi to check the number
     let result = await evolutionApi.checkNumber({
-      number: phone,
-      instanceName: channel.name,
-      apiUrl: channel.api_url,
-      apiToken: channel.api_token,
-      provider: channel.provider
+      number: normalizedPhone,
+      instanceName,
+      apiUrl,
+      apiToken,
+      provider,
+      fastCheck: Boolean(fastCheck)
     })
 
     // Brazilian 9th digit fallback logic
-    if (!result.exists && phone.startsWith('55')) {
-      let altPhone = null;
-      
-      // If it has 12 digits (55 + 2 DDD + 8 NUM), it's missing the 9. Add the 9.
-      if (phone.length === 12) {
-        altPhone = phone.slice(0, 4) + '9' + phone.slice(4);
-      } 
-      // If it has 13 digits (55 + 2 DDD + 9 + 8 NUM), try without the 9.
-      else if (phone.length === 13 && phone[4] === '9') {
-        altPhone = phone.slice(0, 4) + phone.slice(5);
+    if (!result.exists && normalizedPhone.startsWith('55')) {
+      let altPhone = null
+      if (normalizedPhone.length === 12) {
+        altPhone = normalizedPhone.slice(0, 4) + '9' + normalizedPhone.slice(4)
+      } else if (normalizedPhone.length === 13 && normalizedPhone[4] === '9') {
+        altPhone = normalizedPhone.slice(0, 4) + normalizedPhone.slice(5)
       }
 
       if (altPhone) {
-        console.log(`[check-number] Checking alt phone ${altPhone} for ${phone}`);
         const altResult = await evolutionApi.checkNumber({
           number: altPhone,
-          instanceName: channel.name,
-          apiUrl: channel.api_url,
-          apiToken: channel.api_token,
-          provider: channel.provider
+          instanceName,
+          apiUrl,
+          apiToken,
+          provider,
+          fastCheck: Boolean(fastCheck)
         })
         if (altResult.exists) {
-          result = altResult;
+          result = altResult
         }
       }
     }
 
-    // Add debug context
-    console.log(`[check-number] Final result for ${phone}:`, result);
-    return NextResponse.json(result)
+    // Check alternate phones (e.g. telefones_adicionais / secondary worker numbers) if provided
+    const validAlternates: Array<{ phone: string; displayName?: string }> = []
+    if (!result.exists && Array.isArray(alternatePhones) && alternatePhones.length > 0) {
+      const uniqueAlts = Array.from(
+        new Set(
+          alternatePhones
+            .map((p: string) => normalizePhoneForCheck(p))
+            .filter((p: string) => p.length >= 8 && p !== normalizedPhone && p.slice(-8) !== normalizedPhone.slice(-8))
+        )
+      )
+      for (const altP of uniqueAlts.slice(0, 4)) {
+        const altRes = await evolutionApi.checkNumber({
+          number: altP,
+          instanceName,
+          apiUrl,
+          apiToken,
+          provider,
+          fastCheck: true
+        })
+        if (altRes.exists) {
+          validAlternates.push({
+            phone: altRes.formattedNumber || altP,
+            displayName: altRes.displayName
+          })
+        }
+      }
+    }
 
+    const classification = !result.exists
+      ? classifyWhatsAppSendError(result.rawError || 'is not on WhatsApp', normalizedPhone)
+      : null
+
+    return NextResponse.json({
+      ...result,
+      checkedPhone: normalizedPhone,
+      validAlternates,
+      ...(classification ? { classification } : {})
+    })
   } catch (error: any) {
     console.error('Error checking number:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

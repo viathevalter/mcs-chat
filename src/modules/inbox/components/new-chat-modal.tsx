@@ -30,6 +30,12 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const [workers, setWorkers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [startingId, setStartingId] = useState<string | null>(null)
+  const [dbPhoneWarning, setDbPhoneWarning] = useState<{
+    worker: any
+    checkedPhone: string
+    targetChannelId: string
+    validAlternates: Array<{ phone: string; displayName?: string }>
+  } | null>(null)
 
   // WA direct fields
   const [waDdi, setWaDdi] = useState('34')
@@ -55,6 +61,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       setActiveTab('db')
       setStartingId(null)
       setWaDdi('34')
+      setDbPhoneWarning(null)
     } else {
       fetchChannels()
     }
@@ -97,7 +104,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       const { data } = await supabase
         .schema('core_personal')
         .from('workers')
-        .select('id, nome, movil, contratante, cliente, funcion, status_trabajador')
+        .select('id, nome, movil, telefones_adicionais, contratante, cliente, funcion, status_trabajador')
         .or(`nome.ilike.%${query}%,movil.ilike.%${query}%,contratante.ilike.%${query}%,cliente.ilike.%${query}%`)
         .limit(10)
 
@@ -146,7 +153,7 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     }
   }
 
-  const handleStartChatDb = async (worker: any) => {
+  const handleStartChatDb = async (worker: any, overridePhone?: string, bypassWaCheck: boolean = false) => {
     if (startingId) return
 
     try {
@@ -155,13 +162,14 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         const { data: latestW } = await supabase
           .schema('core_personal')
           .from('workers')
-          .select('id, nome, movil, contratante, cliente, funcion, status_trabajador')
+          .select('id, nome, movil, telefones_adicionais, contratante, cliente, funcion, status_trabajador')
           .eq('id', worker.id)
           .maybeSingle()
         if (latestW) freshWorker = latestW
       }
 
-      const phone = freshWorker.movil ? freshWorker.movil.replace(/\D/g, '') : null
+      const rawPhoneToUse = overridePhone || freshWorker.movil
+      const phone = rawPhoneToUse ? String(rawPhoneToUse).replace(/\D/g, '') : null
       if (!phone) {
         alert(t('newChatModal', 'noPhone'))
         return
@@ -175,7 +183,41 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       }
 
       setStartingId(freshWorker.id)
-      await createOrRedirect(phone, freshWorker.nome, freshWorker.id, false, targetChannelId, freshWorker)
+
+      // Verificar rapidamente na UazAPI (/chat/check) se o número possui WhatsApp antes de abrir
+      if (!bypassWaCheck && targetChannelId) {
+        try {
+          const allWorkerPhones = [
+            freshWorker.movil,
+            ...(Array.isArray(freshWorker.telefones_adicionais) ? freshWorker.telefones_adicionais : [])
+          ].filter(Boolean)
+
+          const checkRes = await fetch('/api/chat/check-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: rawPhoneToUse,
+              channelId: targetChannelId,
+              fastCheck: true,
+              alternatePhones: allWorkerPhones
+            })
+          })
+          const checkData = await checkRes.json().catch(() => ({}))
+          if (checkRes.ok && !checkData.exists && checkData.confirmedNotOnWhatsapp) {
+            setDbPhoneWarning({
+              worker: freshWorker,
+              checkedPhone: checkData.checkedPhone || phone,
+              targetChannelId,
+              validAlternates: Array.isArray(checkData.validAlternates) ? checkData.validAlternates : []
+            })
+            setStartingId(null)
+            return
+          }
+        } catch {}
+      }
+
+      setDbPhoneWarning(null)
+      await createOrRedirect(phone, freshWorker.nome, freshWorker.id, Boolean(overridePhone), targetChannelId, freshWorker)
     } catch (err) {
       console.error(err)
       alert(t('newChatModal', 'error'))
@@ -384,6 +426,62 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
               {/* Results DB */}
               <div className="p-4">
+                {dbPhoneWarning && (
+                  <div className="mb-4 p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-red-900 space-y-3 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="inline-block px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-black uppercase mb-1">
+                          🚫 Número Sem WhatsApp Ativo
+                        </span>
+                        <h5 className="font-extrabold text-sm text-red-900">
+                          O número +{dbPhoneWarning.checkedPhone} de {dbPhoneWarning.worker?.nome} NÃO possui WhatsApp!
+                        </h5>
+                        <p className="text-xs text-red-700 mt-0.5 leading-relaxed">
+                          A API do WhatsApp (Meta / UazAPI) informou que este número não tem conta registrada no WhatsApp.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDbPhoneWarning(null)}
+                        className="text-red-400 hover:text-red-700 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {dbPhoneWarning.validAlternates.length > 0 && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                        <p className="text-xs font-extrabold text-emerald-900">
+                          ✅ Encontramos outro número deste trabalhador com WhatsApp ativo:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {dbPhoneWarning.validAlternates.map(alt => (
+                            <button
+                              key={alt.phone}
+                              type="button"
+                              onClick={() => handleStartChatDb(dbPhoneWarning.worker, alt.phone, true)}
+                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>📲 Abrir no WhatsApp Ativo (+{alt.phone})</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleStartChatDb(dbPhoneWarning.worker, dbPhoneWarning.checkedPhone, true)}
+                        className="px-3 py-1.5 rounded-lg bg-white hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold cursor-pointer"
+                      >
+                        Abrir conversa mesmo assim (+{dbPhoneWarning.checkedPhone})
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {loading && (
                   <div className="p-8 flex justify-center">
                     <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
@@ -401,6 +499,9 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 {!loading &&
                   workers.map(worker => {
                     const workerCh = resolveChannelForWorker(worker)
+                    const extraPhones: string[] = Array.isArray(worker.telefones_adicionais)
+                      ? worker.telefones_adicionais.filter(Boolean)
+                      : []
                     return (
                       <div
                         key={worker.id}
@@ -415,6 +516,20 @@ export function NewChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                             <h4 className="font-bold text-slate-700 text-[14px] truncate">{worker.nome}</h4>
                             <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 font-medium mt-0.5">
                               <span>{worker.movil || 'Sem número'}</span>
+                              {extraPhones.map((ep, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleStartChatDb(worker, ep)
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold"
+                                  title="Iniciar conversa neste telefone adicional do trabalhador"
+                                >
+                                  📱 +{String(ep).replace(/\D/g, '')}
+                                </button>
+                              ))}
                               {worker.contratante && (
                                 <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase">
                                   📱 Canal: {worker.contratante}

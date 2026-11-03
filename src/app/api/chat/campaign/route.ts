@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { evolutionApi } from '@/lib/whatsapp/evolution-api'
+import { evolutionApi, classifyWhatsAppSendError } from '@/lib/whatsapp/evolution-api'
 import { randomUUID } from 'crypto'
 
 function normalizeWorkerPhone(rawPhone?: string | null): string {
@@ -835,11 +835,13 @@ export async function processDueScheduledMessages(maxItems = 3) {
       sent++
     } catch (err: any) {
       failed++
+      const rawErrStr = err?.message || 'Falha no disparo WhatsApp'
+      const classified = classifyWhatsAppSendError(rawErrStr, item.worker_phone)
       await supabase
         .from('chat_scheduled_messages')
         .update({
           status: 'failed',
-          error_message: err?.message || 'Falha no disparo WhatsApp',
+          error_message: classified.isNoWhatsApp ? classified.friendlyPt : rawErrStr,
           updated_at: new Date().toISOString(),
         })
         .eq('id', item.id)

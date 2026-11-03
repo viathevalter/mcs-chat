@@ -161,6 +161,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ slug?:
             .from('chat_messages')
             .update({ status: 'delivered' })
             .in('external_id', possibleIds)
+        } else if (rawStatus.includes('error') || rawStatus.includes('fail') || rawStatus === '0') {
+          await supabase
+            .from('chat_messages')
+            .update({ status: 'failed' })
+            .in('external_id', possibleIds)
         }
       }
       return NextResponse.json({ success: true, event: "message_updated" })

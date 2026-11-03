@@ -218,7 +218,7 @@ export function useChat(conversationId: string) {
           msg.id === optId
             ? resData?.message || {
                 ...msg,
-                status: messageType === 'internal_note' || messageType === 'system_block' ? 'delivered' : 'sent'
+                status: !res.ok || resData?.sendFailed ? 'failed' : messageType === 'internal_note' || messageType === 'system_block' ? 'delivered' : 'sent'
               }
             : msg
         )
@@ -226,9 +226,13 @@ export function useChat(conversationId: string) {
 
       await fetchMessages()
       notifyInboxUpdated()
+      return resData
     } catch (err) {
       console.error('Error sending message:', err)
-      setMessages((prev) => prev.filter((msg) => msg.id !== optId))
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === optId ? { ...msg, status: 'failed' } : msg))
+      )
+      return { success: false, sendFailed: true }
     }
   }
 

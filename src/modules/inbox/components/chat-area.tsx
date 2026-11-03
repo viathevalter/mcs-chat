@@ -274,7 +274,8 @@ interface QuickReply {
 }
 
 export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: ChatAreaProps) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
+  const isEs = String(lang || '').toUpperCase() === 'ES'
   const router = useRouter()
   const { messages, loading, sendMessage, editMessage, refetchMessages } = useChat(conversationId)
   const { context, setContext } = useConversationContext(conversationId)
@@ -1214,6 +1215,155 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
   }
 
+  // Verificação em tempo real na UazAPI (/chat/check) se o número desta conversa possui WhatsApp ativo
+  const [waPhoneCheck, setWaPhoneCheck] = useState<{
+    checking: boolean
+    exists: boolean | null
+    confirmedNotOnWhatsapp: boolean
+    checkedPhone: string
+    validAlternates: Array<{ phone: string; displayName?: string }>
+    friendlyPt?: string
+    friendlyEs?: string
+  }>({
+    checking: false,
+    exists: null,
+    confirmedNotOnWhatsapp: false,
+    checkedPhone: '',
+    validAlternates: []
+  })
+  const [isSwitchingPhone, setIsSwitchingPhone] = useState(false)
+
+  const verifyConversationWhatsAppNumber = async (phoneToCheck?: string) => {
+    const rawPhone = (phoneToCheck || conversation?.contact_phone || '').replace(/\D/g, '')
+    if (!rawPhone || rawPhone.length < 7) return
+
+    const workerPrimary = context?.worker?.movil || ''
+    const workerExtras: string[] = Array.isArray(context?.worker?.telefones_adicionais)
+      ? context.worker.telefones_adicionais
+      : []
+    const alternatePhones = [workerPrimary, ...workerExtras].filter(Boolean)
+
+    setWaPhoneCheck(prev => ({ ...prev, checking: true, checkedPhone: rawPhone }))
+    try {
+      const res = await fetch('/api/chat/check-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: rawPhone,
+          channelId: conversation?.channel_id || undefined,
+          fastCheck: true,
+          alternatePhones
+        })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setWaPhoneCheck({
+          checking: false,
+          exists: Boolean(data.exists),
+          confirmedNotOnWhatsapp: Boolean(data.confirmedNotOnWhatsapp),
+          checkedPhone: data.checkedPhone || rawPhone,
+          validAlternates: Array.isArray(data.validAlternates) ? data.validAlternates : [],
+          friendlyPt: data.classification?.friendlyPt,
+          friendlyEs: data.classification?.friendlyEs
+        })
+      } else {
+        setWaPhoneCheck(prev => ({ ...prev, checking: false }))
+      }
+    } catch {
+      setWaPhoneCheck(prev => ({ ...prev, checking: false }))
+    }
+  }
+
+  useEffect(() => {
+    const currentPhone = (conversation?.contact_phone || '').replace(/\D/g, '')
+    if (!currentPhone || !conversation?.channel_id) return
+    if (waPhoneCheck.checkedPhone === currentPhone && waPhoneCheck.exists !== null) return
+    verifyConversationWhatsAppNumber(currentPhone)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.id, conversation?.contact_phone, conversation?.channel_id, context?.worker?.id])
+
+  const handleSwitchToPhone = async (targetRawPhone: string) => {
+    const cleanTarget = targetRawPhone.replace(/\D/g, '')
+    if (!cleanTarget || !conversation?.channel_id || isSwitchingPhone) return
+    setIsSwitchingPhone(true)
+    try {
+      const { data: existingOnChannel } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('channel_id', conversation.channel_id)
+        .neq('id', conversationId)
+        .ilike('contact_phone', `%${cleanTarget.slice(-8)}%`)
+        .order('last_message_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existingOnChannel?.id) {
+        await supabase
+          .from('chat_conversations')
+          .update({
+            status: 'open',
+            worker_id: conversation?.worker_id || context?.worker?.id || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingOnChannel.id)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId: existingOnChannel.id } }))
+        }
+        router.push(`/inbox/${existingOnChannel.id}`)
+        return
+      }
+
+      await supabase
+        .from('chat_conversations')
+        .update({
+          contact_phone: cleanTarget,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+
+      setContext((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              conversation: {
+                ...prev.conversation,
+                contact_phone: cleanTarget
+              }
+            }
+          : null
+      )
+      await verifyConversationWhatsAppNumber(cleanTarget)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+      }
+    } finally {
+      setIsSwitchingPhone(false)
+    }
+  }
+
+  // Detectar se alguma mensagem recente enviada nesta conversa falhou por número sem WhatsApp
+  const latestFailedNoWaMsg = [...(messages || [])]
+    .reverse()
+    .find(
+      (m: any) =>
+        m.direction === 'outbound' &&
+        (m.status === 'failed' || m.status === 'error') &&
+        (m.translations?._error_code === 'NO_WHATSAPP' || m.translations?._error_code === 'INVALID_NUMBER')
+    )
+  const hasNoWhatsAppAlert = Boolean(waPhoneCheck.confirmedNotOnWhatsapp || latestFailedNoWaMsg)
+  const alternatePhonesFromMsg: string[] = latestFailedNoWaMsg?.translations?._error_alt_phones
+    ? String(latestFailedNoWaMsg.translations._error_alt_phones)
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+    : []
+  const effectiveValidAlternates: string[] = Array.from(
+    new Set([
+      ...waPhoneCheck.validAlternates.map(a => a.phone),
+      ...alternatePhonesFromMsg
+    ])
+  )
+
   const workerClient =
     context?.worker?.cliente ||
     conversation?.worker_client_name ||
@@ -1310,8 +1460,38 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
 
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {context?.conversation?.contact_phone && (
-                <span className="text-[11px] font-mono font-medium text-slate-500">
-                  +{context.conversation.contact_phone.replace(/\D/g, '')}
+                <span className="text-[11px] font-mono font-medium text-slate-500 flex items-center gap-1">
+                  <span>+{context.conversation.contact_phone.replace(/\D/g, '')}</span>
+                  {waPhoneCheck.checking ? (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-500 border border-slate-200 inline-flex items-center gap-1">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      {isEs ? 'Verificando WA...' : 'Verificando WA...'}
+                    </span>
+                  ) : hasNoWhatsAppAlert ? (
+                    <button
+                      type="button"
+                      onClick={() => verifyConversationWhatsAppNumber()}
+                      className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-red-600 text-white border border-red-700 inline-flex items-center gap-1 animate-pulse cursor-pointer"
+                      title={
+                        isEs
+                          ? 'Este número NO tiene WhatsApp activo en Meta/UazAPI. Haz clic para volver a comprobar.'
+                          : 'Este número NÃO possui WhatsApp ativo na Meta/UazAPI. Clique para testar novamente.'
+                      }
+                    >
+                      <span>🚫 {isEs ? '¡SIN WHATSAPP!' : 'SEM WHATSAPP!'}</span>
+                    </button>
+                  ) : waPhoneCheck.exists === true ? (
+                    <span
+                      className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-0.5"
+                      title={
+                        isEs
+                          ? 'Número verificado con cuenta activa en WhatsApp'
+                          : 'Número verificado com conta ativa no WhatsApp'
+                      }
+                    >
+                      ✓ WhatsApp OK
+                    </span>
+                  ) : null}
                 </span>
               )}
               {conversation?.department?.name && (
@@ -1919,6 +2099,63 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         </div>
       )}
 
+      {/* Alerta Crítico: Número sem conta ativa no WhatsApp (Retorno UazAPI / Meta) */}
+      {hasNoWhatsAppAlert && (
+        <div className="bg-red-600 text-white border-b-2 border-red-800 px-4 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 z-10 shadow-md">
+          <div className="flex items-start md:items-center gap-2.5 text-xs leading-snug min-w-0">
+            <span className="px-2 py-0.5 rounded bg-white text-red-700 text-[10.5px] font-black uppercase shrink-0 shadow-xs">
+              🚫 {isEs ? 'NÚMERO SIN WHATSAPP' : 'NÚMERO SEM WHATSAPP'}
+            </span>
+            <div className="min-w-0">
+              <p className="font-extrabold text-[12.5px]">
+                {isEs
+                  ? `El número +${(conversation?.contact_phone || '').replace(/\D/g, '')} NO tiene cuenta activa en WhatsApp (confirmado por Meta / UazAPI).`
+                  : `O número +${(conversation?.contact_phone || '').replace(/\D/g, '')} NÃO possui conta ativa no WhatsApp (confirmado pela Meta / UazAPI).`}
+              </p>
+              <p className="text-[11px] text-red-100 font-medium mt-0.5">
+                {isEs
+                  ? '⚠️ Las mensagens enviadas a este número NO llegarán al trabajador. Verifique otro teléfono o actualice el cadastro del trabajador.'
+                  : '⚠️ As mensagens enviadas para este número NÃO chegarão ao trabalhador. Verifique outro telefone ou atualize o cadastro do trabalhador.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {effectiveValidAlternates.map((altPhone) => (
+              <button
+                key={altPhone}
+                type="button"
+                disabled={isSwitchingPhone}
+                onClick={() => handleSwitchToPhone(altPhone)}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-black shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <span>📲 {isEs ? `Cambiar a WhatsApp Activo (+${altPhone})` : `Mudar p/ WhatsApp Ativo (+${altPhone})`}</span>
+              </button>
+            ))}
+
+            {togglePanel && !isPanelOpen && (
+              <button
+                type="button"
+                onClick={togglePanel}
+                className="px-2.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+              >
+                📋 {isEs ? 'Ver Ficha del Trabajador' : 'Ver Ficha do Trabalhador'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={waPhoneCheck.checking}
+              onClick={() => verifyConversationWhatsAppNumber()}
+              className="px-2.5 py-1.5 bg-red-800/80 hover:bg-red-900 text-white border border-red-400/40 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+            >
+              {waPhoneCheck.checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <span>🔄</span>}
+              <span>{isEs ? 'Probar de nuevo' : 'Testar novamente'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Chat Messages Timeline */}
       <div
         ref={messagesContainerRef}
@@ -2080,7 +2317,9 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                       isOutbound
                         ? isNote
                           ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl rounded-br-xs shadow-amber-200/50'
-                          : 'bg-[var(--chat-outbound-bg-start)] text-[var(--chat-outbound-fg)] border border-[var(--chat-outbound-border)] rounded-2xl rounded-br-xs shadow-sm'
+                          : msg.status === 'failed' || msg.status === 'error'
+                            ? 'bg-red-50 dark:bg-red-950/60 text-red-950 dark:text-red-100 border-2 border-red-400 dark:border-red-600 rounded-2xl rounded-br-xs shadow-sm'
+                            : 'bg-[var(--chat-outbound-bg-start)] text-[var(--chat-outbound-fg)] border border-[var(--chat-outbound-border)] rounded-2xl rounded-br-xs shadow-sm'
                         : 'bg-[var(--chat-inbound-bg)] border border-[var(--chat-inbound-border)] rounded-2xl rounded-bl-xs text-[var(--chat-inbound-fg)] shadow-sm'
                     }`}
                   >
@@ -2200,12 +2439,47 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap px-0.5">{msg.content}</p>
                       ))}
 
+                    {isOutbound && !isNote && (msg.status === 'failed' || msg.status === 'error') && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-red-600 text-white text-xs leading-snug shadow-xs space-y-1.5">
+                        <div className="font-extrabold flex items-center gap-1.5">
+                          <span>🚫</span>
+                          <span>
+                            {(isEs
+                              ? (msg as any).translations?._error_badge_es || 'MENSAGEM NO ENTREGADA (SIN WHATSAPP)'
+                              : (msg as any).translations?._error_badge_pt || 'MENSAGEM NÃO ENTREGUE (SEM WHATSAPP)'
+                            ).toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-red-50 font-medium">
+                          {isEs
+                            ? (msg as any).translations?._error_es ||
+                              `El número +${(conversation?.contact_phone || '').replace(/\D/g, '')} no tiene cuenta activa en WhatsApp o hubo un error al enviar en la API.`
+                            : (msg as any).translations?._error_pt ||
+                              `O número +${(conversation?.contact_phone || '').replace(/\D/g, '')} não possui conta ativa no WhatsApp ou houve falha de envio na API.`}
+                        </p>
+                        {effectiveValidAlternates.length > 0 && (
+                          <div className="pt-1 flex flex-wrap gap-1.5">
+                            {effectiveValidAlternates.map(altP => (
+                              <button
+                                key={altP}
+                                type="button"
+                                onClick={() => handleSwitchToPhone(altP)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-[11px] cursor-pointer transition-colors"
+                              >
+                                📲 {isEs ? `Usar WhatsApp Activo (+${altP})` : `Usar WhatsApp Ativo (+${altP})`}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div
-                      className={`flex justify-end gap-1 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity ${
+                      className={`flex items-center justify-end gap-1.5 mt-1 opacity-75 group-hover:opacity-100 transition-opacity ${
                         isOutbound
                           ? isNote
                             ? 'text-amber-700'
-                            : 'text-chat-outbound-fg opacity-80'
+                            : 'text-chat-outbound-fg opacity-85'
                           : 'text-chat-inbound-fg opacity-60'
                       }`}
                     >
@@ -2213,16 +2487,43 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         {time} {isNote && '• 🔒 Nota Interna'}
                       </span>
                       {isOutbound && !isNote && (
-                        msg.status === 'error' ? (
-                          <span className="text-[10px] text-red-400">{t('chatArea', 'error')}</span>
+                        msg.status === 'failed' || msg.status === 'error' ? (
+                          <span className="text-[10px] font-extrabold text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/60 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                            ❌ {isEs ? 'No entregado' : 'Não entregue'}
+                          </span>
                         ) : msg.status === 'read' ? (
-                          <CheckCheck className="w-4 h-4 text-sky-500" />
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400"
+                            title={isEs ? 'Leído por el trabajador' : 'Lida pelo trabalhador'}
+                          >
+                            <CheckCheck className="w-4 h-4 text-sky-500" />
+                            <span>{isEs ? 'Leído' : 'Lida'}</span>
+                          </span>
                         ) : msg.status === 'delivered' ? (
-                          <CheckCheck className="w-4 h-4" />
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300"
+                            title={isEs ? 'Entregado en el WhatsApp del trabajador' : 'Entregue no WhatsApp do trabalhador'}
+                          >
+                            <CheckCheck className="w-4 h-4" />
+                            <span>{isEs ? 'Entregado' : 'Entregue'}</span>
+                          </span>
                         ) : msg.status === 'sending' ? (
-                          <Clock className="w-3.5 h-3.5" />
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium opacity-75">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{isEs ? 'Enviando...' : 'Enviando...'}</span>
+                          </span>
                         ) : (
-                          <Check className="w-4 h-4" />
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[10px] font-medium"
+                            title={
+                              isEs
+                                ? 'Enviado al servidor (esperando recepción en el teléfono del trabajador)'
+                                : 'Enviada ao servidor (aguardando celular do trabalhador receber)'
+                            }
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>{isEs ? 'Enviado' : 'Enviada'}</span>
+                          </span>
                         )
                       )}
                     </div>

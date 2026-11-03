@@ -26,6 +26,59 @@ export interface SendMediaProps {
   readChat?: boolean;
 }
 
+export function classifyWhatsAppSendError(rawError: string, phone?: string): {
+  isNoWhatsApp: boolean;
+  code: 'NO_WHATSAPP' | 'INVALID_NUMBER' | 'SEND_FAILED';
+  friendlyPt: string;
+  friendlyEs: string;
+  shortBadgePt: string;
+  shortBadgeEs: string;
+} {
+  const errLower = String(rawError || '').toLowerCase();
+  const cleanPhone = (phone || '').replace(/\D/g, '');
+  const phoneLabel = cleanPhone ? `+${cleanPhone}` : 'informado';
+
+  const isNoWhatsApp =
+    errLower.includes('is not on whatsapp') ||
+    errLower.includes('not on whatsapp') ||
+    errLower.includes('usync returned no lid') ||
+    errLower.includes('failed to resolve lid') ||
+    errLower.includes('not registered on whatsapp') ||
+    errLower.includes('isInWhatsapp":false'.toLowerCase()) ||
+    errLower.includes('no whatsapp account');
+
+  if (isNoWhatsApp) {
+    return {
+      isNoWhatsApp: true,
+      code: 'NO_WHATSAPP',
+      friendlyPt: `🚫 O número ${phoneLabel} NÃO possui conta ativa no WhatsApp (a Meta informou que este telefone não tem WhatsApp instalado/registrado). Verifique se o trabalhador possui outro número ou atualize o cadastro.`,
+      friendlyEs: `🚫 El número ${phoneLabel} NO tiene cuenta activa en WhatsApp (Meta informó que este teléfono no tiene WhatsApp instalado/registrado). Verifique si el trabajador tiene otro número o actualice su ficha.`,
+      shortBadgePt: `🚫 Número sem WhatsApp (${phoneLabel})`,
+      shortBadgeEs: `🚫 Número sin WhatsApp (${phoneLabel})`
+    };
+  }
+
+  if (cleanPhone.length > 0 && cleanPhone.length < 9) {
+    return {
+      isNoWhatsApp: true,
+      code: 'INVALID_NUMBER',
+      friendlyPt: `⚠️ O número ${phoneLabel} está incompleto ou inválido no cadastro e não pôde receber mensagens no WhatsApp. Atualize o telefone na ficha do trabalhador.`,
+      friendlyEs: `⚠️ El número ${phoneLabel} está incompleto o inválido en el registro y no pudo recibir mensajes en WhatsApp. Actualice el teléfono en la ficha del trabajador.`,
+      shortBadgePt: `⚠️ Telefone incompleto (${phoneLabel})`,
+      shortBadgeEs: `⚠️ Teléfono incompleto (${phoneLabel})`
+    };
+  }
+
+  return {
+    isNoWhatsApp: false,
+    code: 'SEND_FAILED',
+    friendlyPt: `❌ Falha ao entregar mensagem para ${phoneLabel} na API do WhatsApp. Verifique se o número possui WhatsApp ativo.`,
+    friendlyEs: `❌ Error al entregar mensaje a ${phoneLabel} en la API de WhatsApp. Verifique si el número tiene WhatsApp activo.`,
+    shortBadgePt: `❌ Falha no envio (${phoneLabel})`,
+    shortBadgeEs: `❌ Error de envío (${phoneLabel})`
+  };
+}
+
 export const evolutionApi = {
   async sendText({
     number,
@@ -433,7 +486,7 @@ export const evolutionApi = {
     }
   },
 
-  async checkNumber({ number, instanceName, apiUrl, apiToken, provider = 'uazapi' }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string }): Promise<{ exists: boolean, formattedNumber?: string, displayName?: string, profilePictureUrl?: string }> {
+  async checkNumber({ number, instanceName, apiUrl, apiToken, provider = 'uazapi', fastCheck = false }: { number: string, instanceName: string, apiUrl: string, apiToken: string, provider?: string, fastCheck?: boolean }): Promise<{ exists: boolean, confirmedNotOnWhatsapp?: boolean, rawError?: string, formattedNumber?: string, displayName?: string, profilePictureUrl?: string }> {
     try {
       const finalUrl = apiUrl || process.env.UAZ_API_URL || 'https://mcs-chat.uazapi.com';
       const finalToken = apiToken || process.env.UAZ_GLOBAL_KEY;
@@ -487,41 +540,55 @@ export const evolutionApi = {
         let dName = resultObj.pushName || resultObj.name || resultObj.verifiedName || undefined;
         let profilePic: string | undefined = undefined;
 
-        try {
-          if (isUazapi) {
-            const dtUrl = `${cleanUrl}/chat/details`;
-            let dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
-            if (dtRes.ok) {
-              let dtData = await dtRes.json();
-              if (dtData && !dtData.wa_name && !dtData.name && !dtData.image && !dtData.imagePreview) {
-                await new Promise(r => setTimeout(r, 1200));
-                dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
-                if (dtRes.ok) dtData = await dtRes.json();
-              }
-
-              if (dtData) {
-                if (!dName || dName.trim() === '') {
-                  dName = dtData.wa_name || dtData.name || dtData.wa_contactName || dtData.verifiedName || undefined;
+        if (!fastCheck) {
+          try {
+            if (isUazapi) {
+              const dtUrl = `${cleanUrl}/chat/details`;
+              let dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
+              if (dtRes.ok) {
+                let dtData = await dtRes.json();
+                if (dtData && !dtData.wa_name && !dtData.name && !dtData.image && !dtData.imagePreview) {
+                  await new Promise(r => setTimeout(r, 1200));
+                  dtRes = await fetch(dtUrl, { method: 'POST', headers, body: JSON.stringify({ number: cleanNumber }) });
+                  if (dtRes.ok) dtData = await dtRes.json();
                 }
-                profilePic = dtData.imagePreview || dtData.image || undefined;
+
+                if (dtData) {
+                  if (!dName || dName.trim() === '') {
+                    dName = dtData.wa_name || dtData.name || dtData.wa_contactName || dtData.verifiedName || undefined;
+                  }
+                  profilePic = dtData.imagePreview || dtData.image || undefined;
+                }
               }
+            } else {
+              profilePic = await this.fetchProfilePictureUrl({ number: cleanNumber, instanceName, apiUrl: finalUrl, apiToken: finalToken, provider: 'evolution' }) || undefined;
             }
-          } else {
-            profilePic = await this.fetchProfilePictureUrl({ number: cleanNumber, instanceName, apiUrl: finalUrl, apiToken: finalToken, provider: 'evolution' }) || undefined;
+          } catch (err) {
+            console.error('[UazAPI] Failed to fetch extended check details', err);
           }
-        } catch (err) {
-          console.error('[UazAPI] Failed to fetch extended check details', err);
         }
 
         if (dName && dName.trim() === '') dName = undefined;
 
-        return { exists: true, formattedNumber: fmt, displayName: dName, profilePictureUrl: profilePic };
+        return { exists: true, confirmedNotOnWhatsapp: false, formattedNumber: fmt, displayName: dName, profilePictureUrl: profilePic };
       }
 
-      return { exists: false };
+      const explicitlyNotOnWa =
+        Boolean(resultObj) &&
+        (resultObj.isInWhatsapp === false ||
+          resultObj.isInWhatsapp === 'false' ||
+          resultObj.exists === false ||
+          resultObj.exists === 'false' ||
+          String(resultObj.error || '').toLowerCase().includes('not on whatsapp'));
+
+      return {
+        exists: false,
+        confirmedNotOnWhatsapp: explicitlyNotOnWa,
+        rawError: resultObj?.error || 'Number is not on WhatsApp'
+      };
     } catch (e: any) {
       console.error(`[UazAPI] Failed to check number ${number}:`, e);
-      return { exists: false };
+      return { exists: false, confirmedNotOnWhatsapp: false, rawError: e.message };
     }
   }
 };

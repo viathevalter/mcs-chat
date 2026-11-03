@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { translateOutboundMessage } from '@/app/actions/translation-actions'
+import { useI18n } from '@/contexts/i18n-context'
 import Link from 'next/link'
 
 interface WorkerRow {
@@ -61,6 +62,10 @@ interface WorkerRow {
   status_seguridad?: string | null
   pedido_code?: string | null
   obra_nome?: string | null
+  alojamento_id?: string | null
+  alojamento_nome?: string | null
+  alojamento_endereco?: string | null
+  alojamento_municipio?: string | null
 }
 
 interface PedidoOverview {
@@ -71,6 +76,19 @@ interface PedidoOverview {
   status_pedido?: string | null
   worker_ids: string[]
   worker_codes: string[]
+  alojamentos?: string[]
+}
+
+interface AlojamentoOverview {
+  alojamento_id: string
+  alojamento_nome: string
+  endereco: string
+  municipio: string
+  provincia: string
+  capacidade_total: number
+  worker_ids: string[]
+  worker_codes: string[]
+  clientes: string[]
 }
 
 interface CampaignTemplate {
@@ -157,12 +175,17 @@ function isWorkerInactiveOrBlocked(status?: string | null): boolean {
 }
 
 export default function AutomationsPage() {
+  const { lang } = useI18n()
+  const isEs = lang === 'ES'
+  const tr = useCallback((ptText: string, esText: string) => (isEs ? esText : ptText), [isEs])
+
   // Navegação principal do módulo
   const [activeView, setActiveView] = useState<'builder' | 'scheduled' | 'templates' | 'history'>('builder')
 
   // Dados Base carregados do Supabase
   const [allWorkers, setAllWorkers] = useState<WorkerRow[]>([])
   const [pedidosList, setPedidosList] = useState<PedidoOverview[]>([])
+  const [alojamentosList, setAlojamentosList] = useState<AlojamentoOverview[]>([])
   const [channels, setChannels] = useState<any[]>([])
   const [templates, setTemplates] = useState<CampaignTemplate[]>([])
   const [campaigns, setCampaigns] = useState<any[]>([])
@@ -170,11 +193,14 @@ export default function AutomationsPage() {
   const [currentUserName, setCurrentUserName] = useState('Operador MCS')
 
   // Segmentação (Pilar 2)
-  const [segmentMode, setSegmentMode] = useState<'pedido' | 'clients' | 'companies' | 'manual'>('pedido')
+  const [segmentMode, setSegmentMode] = useState<'pedido' | 'clients' | 'alojamentos' | 'companies' | 'manual'>('pedido')
   const [selectedPedidos, setSelectedPedidos] = useState<string[]>([])
   const [pedidoSearch, setPedidoSearch] = useState('')
   const [selectedClients, setSelectedClients] = useState<string[]>([])
   const [clientSearch, setClientSearch] = useState('')
+  const [selectedAlojamentos, setSelectedAlojamentos] = useState<string[]>([])
+  const [alojamentoSearch, setAlojamentoSearch] = useState('')
+  const [subFilterAlojamentoId, setSubFilterAlojamentoId] = useState<string>('ALL')
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [includePendingIngreso, setIncludePendingIngreso] = useState(true)
   const [hideInactiveSafetyLock, setHideInactiveSafetyLock] = useState(true)
@@ -278,7 +304,7 @@ export default function AutomationsPage() {
     async function init() {
       setLoadingInitial(true)
       try {
-        const [chRes, wrkRes, pedRes] = await Promise.all([
+        const [chRes, wrkRes, pedRes, alojRes] = await Promise.all([
           supabase
             .from('chat_channels')
             .select('*')
@@ -290,6 +316,7 @@ export default function AutomationsPage() {
             .select('id, cod_colab, nome, movil, pasaporte, nie, dni, niss, nif, contratante, cliente, funcion, status_trabajador, status_seguridad')
             .order('nome', { ascending: true }),
           supabase.rpc('get_campaign_pedidos_overview'),
+          supabase.rpc('get_campaign_alojamentos_overview'),
         ])
 
         if (chRes.data) {
@@ -306,6 +333,13 @@ export default function AutomationsPage() {
           setPedidosList(pedRes.data)
           if (pedRes.data.length > 0) {
             setSelectedPedidos([pedRes.data[0].cod_pedido])
+          }
+        }
+
+        if (Array.isArray(alojRes.data)) {
+          setAlojamentosList(alojRes.data)
+          if (alojRes.data.length > 0) {
+            setSelectedAlojamentos([alojRes.data[0].alojamento_id])
           }
         }
 
@@ -365,8 +399,37 @@ export default function AutomationsPage() {
       .sort((a, b) => b.totalActive - a.totalActive || a.name.localeCompare(b.name))
   }, [allWorkers, includePendingIngreso])
 
+  // Mapa global de Trabalhador -> Alojamento atual (para exibir em Pedidos, Clientes e na lista nominal)
+  const workerAlojamentoMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        alojamento_id: string
+        alojamento_nome: string
+        alojamento_endereco: string
+        alojamento_municipio: string
+      }
+    >()
+    alojamentosList.forEach((al) => {
+      const meta = {
+        alojamento_id: al.alojamento_id,
+        alojamento_nome: al.alojamento_nome,
+        alojamento_endereco: al.endereco || al.alojamento_nome,
+        alojamento_municipio: al.municipio || al.provincia || '',
+      }
+      ;(al.worker_ids || []).forEach((id) => {
+        if (id) map.set(id, meta)
+      })
+      ;(al.worker_codes || []).forEach((code) => {
+        const normCode = String(code || '').trim().toUpperCase()
+        if (normCode) map.set(normCode, meta)
+      })
+    })
+    return map
+  }, [alojamentosList])
+
   const clientsStats = useMemo(() => {
-    const map = new Map<string, { totalActive: number; totalAll: number; companies: Set<string> }>()
+    const map = new Map<string, { totalActive: number; totalAll: number; companies: Set<string>; alojamentos: Set<string> }>()
     allWorkers.forEach((w) => {
       const cli = (w.cliente || '').trim()
       if (!cli) return
@@ -378,9 +441,14 @@ export default function AutomationsPage() {
         const emp = (w.contratante || '').trim().toUpperCase()
         if (!selectedCompanies.includes(emp)) return
       }
-      const cur = map.get(cli) || { totalActive: 0, totalAll: 0, companies: new Set<string>() }
+      const cur = map.get(cli) || { totalActive: 0, totalAll: 0, companies: new Set<string>(), alojamentos: new Set<string>() }
       cur.totalAll++
       if (w.contratante) cur.companies.add(w.contratante.trim().toUpperCase())
+      const codeKey = (w.cod_colab || '').trim().toUpperCase()
+      const alojMeta = workerAlojamentoMap.get(w.id) || (codeKey ? workerAlojamentoMap.get(codeKey) : undefined)
+      if (alojMeta?.alojamento_nome) {
+        cur.alojamentos.add(alojMeta.alojamento_nome)
+      }
       if (isWorkerActiveStatus(w.status_trabajador, includePendingIngreso)) {
         cur.totalActive++
       }
@@ -392,27 +460,54 @@ export default function AutomationsPage() {
         totalActive: info.totalActive,
         totalAll: info.totalAll,
         companies: Array.from(info.companies),
+        alojamentos: Array.from(info.alojamentos),
       }))
       .filter((c) => (hideInactiveSafetyLock ? c.totalActive > 0 : true))
       .sort((a, b) => b.totalActive - a.totalActive || a.name.localeCompare(b.name))
-  }, [allWorkers, selectedCompanies, includePendingIngreso, hideInactiveSafetyLock])
+  }, [allWorkers, selectedCompanies, includePendingIngreso, hideInactiveSafetyLock, workerAlojamentoMap])
 
   const filteredPedidosList = useMemo(() => {
     const q = pedidoSearch.trim().toLowerCase()
     return pedidosList.filter((p) => {
       if (!q) return true
+      const alojMatch = (p.alojamentos || []).some((a) => a.toLowerCase().includes(q))
       return (
         p.cod_pedido?.toLowerCase().includes(q) ||
         p.cliente_nome?.toLowerCase().includes(q) ||
-        p.obra_nome?.toLowerCase().includes(q)
+        p.obra_nome?.toLowerCase().includes(q) ||
+        alojMatch
       )
     })
   }, [pedidosList, pedidoSearch])
 
   const filteredClientsList = useMemo(() => {
     const q = clientSearch.trim().toLowerCase()
-    return clientsStats.filter((c) => !q || c.name.toLowerCase().includes(q))
+    return clientsStats.filter(
+      (c) =>
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.alojamentos.some((a) => a.toLowerCase().includes(q))
+    )
   }, [clientsStats, clientSearch])
+
+  const filteredAlojamentosList = useMemo(() => {
+    const q = alojamentoSearch.trim().toLowerCase()
+    return alojamentosList.filter((al) => {
+      if (!q) return true
+      return (
+        al.alojamento_nome?.toLowerCase().includes(q) ||
+        al.endereco?.toLowerCase().includes(q) ||
+        al.municipio?.toLowerCase().includes(q) ||
+        al.provincia?.toLowerCase().includes(q) ||
+        (al.clientes || []).some((c) => c.toLowerCase().includes(q))
+      )
+    })
+  }, [alojamentosList, alojamentoSearch])
+
+  // Sempre que mudar o modo de segmentação principal, reseta sub-filtro de alojamento
+  useEffect(() => {
+    setSubFilterAlojamentoId('ALL')
+  }, [segmentMode, selectedPedidos, selectedClients, selectedCompanies])
 
   // Trabalhadores resultantes da segmentação atual + adições manuais avulsas
   const candidateWorkers = useMemo(() => {
@@ -421,19 +516,37 @@ export default function AutomationsPage() {
     const pedidoWorkerCodes = new Set<string>()
     const workerPedidoMap = new Map<string, { cod_pedido: string; obra_nome: string }>()
 
-    if (segmentMode === 'pedido') {
-      pedidosList
-        .filter((p) => selectedPedidos.includes(p.cod_pedido))
-        .forEach((p) => {
-          ;(p.worker_ids || []).forEach((id) => {
-            pedidoWorkerIds.add(id)
-            workerPedidoMap.set(id, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
-          })
-          ;(p.worker_codes || []).forEach((code) => {
-            const normCode = String(code).trim().toUpperCase()
-            pedidoWorkerCodes.add(normCode)
-            workerPedidoMap.set(normCode, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
-          })
+    const alojSelectedWorkerIds = new Set<string>()
+    const alojSelectedWorkerCodes = new Set<string>()
+
+    // Mapear pedidos para todos os trabalhadores (para que mesmo filtrando por Cliente ou Alojamento apareça o Pedido do trabalhador!)
+    pedidosList.forEach((p) => {
+      const isSelectedPed = selectedPedidos.includes(p.cod_pedido)
+      ;(p.worker_ids || []).forEach((id) => {
+        if (!workerPedidoMap.has(id) || isSelectedPed) {
+          workerPedidoMap.set(id, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
+        }
+        if (segmentMode === 'pedido' && isSelectedPed) {
+          pedidoWorkerIds.add(id)
+        }
+      })
+      ;(p.worker_codes || []).forEach((code) => {
+        const normCode = String(code).trim().toUpperCase()
+        if (!workerPedidoMap.has(normCode) || isSelectedPed) {
+          workerPedidoMap.set(normCode, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
+        }
+        if (segmentMode === 'pedido' && isSelectedPed) {
+          pedidoWorkerCodes.add(normCode)
+        }
+      })
+    })
+
+    if (segmentMode === 'alojamentos') {
+      alojamentosList
+        .filter((al) => selectedAlojamentos.includes(al.alojamento_id))
+        .forEach((al) => {
+          ;(al.worker_ids || []).forEach((id) => alojSelectedWorkerIds.add(id))
+          ;(al.worker_codes || []).forEach((code) => alojSelectedWorkerCodes.add(String(code).trim().toUpperCase()))
         })
     }
 
@@ -450,6 +563,12 @@ export default function AutomationsPage() {
           if (selectedPedidos.length === 0) return false
           const codeKey = (w.cod_colab || '').trim().toUpperCase()
           return pedidoWorkerIds.has(w.id) || (codeKey !== '' && pedidoWorkerCodes.has(codeKey))
+        }
+
+        if (segmentMode === 'alojamentos') {
+          if (selectedAlojamentos.length === 0) return false
+          const codeKey = (w.cod_colab || '').trim().toUpperCase()
+          return alojSelectedWorkerIds.has(w.id) || (codeKey !== '' && alojSelectedWorkerCodes.has(codeKey))
         }
 
         if (segmentMode === 'clients') {
@@ -476,10 +595,15 @@ export default function AutomationsPage() {
       .map((w) => {
         const codeKey = (w.cod_colab || '').trim().toUpperCase()
         const pedMeta = workerPedidoMap.get(w.id) || (codeKey ? workerPedidoMap.get(codeKey) : undefined)
+        const alojMeta = workerAlojamentoMap.get(w.id) || (codeKey ? workerAlojamentoMap.get(codeKey) : undefined)
         return {
           ...w,
           pedido_code: pedMeta?.cod_pedido || null,
           obra_nome: pedMeta?.obra_nome || w.cliente || null,
+          alojamento_id: alojMeta?.alojamento_id || null,
+          alojamento_nome: alojMeta?.alojamento_nome || null,
+          alojamento_endereco: alojMeta?.alojamento_endereco || null,
+          alojamento_municipio: alojMeta?.alojamento_municipio || null,
         }
       })
   }, [
@@ -487,14 +611,41 @@ export default function AutomationsPage() {
     segmentMode,
     pedidosList,
     selectedPedidos,
+    alojamentosList,
+    selectedAlojamentos,
     selectedClients,
     selectedCompanies,
     hideInactiveSafetyLock,
     includePendingIngreso,
     extraManualWorkerIds,
+    workerAlojamentoMap,
   ])
 
-  // Pré-seleciona automaticamente apenas quando filtrado por Pedido, Cliente ou Empresa;
+  // Resumo dos alojamentos onde estão os trabalhadores do filtro atual (Pedido / Cliente / Empresa)
+  const candidateAlojamentosBreakdown = useMemo(() => {
+    const map = new Map<string, { id: string; nome: string; endereco: string; count: number }>()
+    let withoutAlojCount = 0
+    candidateWorkers.forEach((w) => {
+      if (w.alojamento_id && w.alojamento_nome) {
+        const cur = map.get(w.alojamento_id) || {
+          id: w.alojamento_id,
+          nome: w.alojamento_nome,
+          endereco: w.alojamento_endereco || w.alojamento_nome,
+          count: 0,
+        }
+        cur.count++
+        map.set(w.alojamento_id, cur)
+      } else {
+        withoutAlojCount++
+      }
+    })
+    return {
+      items: Array.from(map.values()).sort((a, b) => b.count - a.count || a.nome.localeCompare(b.nome)),
+      withoutAlojCount,
+    }
+  }, [candidateWorkers])
+
+  // Pré-seleciona automaticamente apenas quando filtrado por Pedido, Cliente, Alojamento ou Empresa;
   // No modo 'manual' (Busca Livre), NUNCA seleciona todos os trabalhadores automaticamente para evitar disparos acidentais em massa
   useEffect(() => {
     const validIds = new Set<string>()
@@ -511,6 +662,10 @@ export default function AutomationsPage() {
       return
     }
     candidateWorkers.forEach((w) => {
+      if (subFilterAlojamentoId !== 'ALL') {
+        if (subFilterAlojamentoId === 'NONE' && w.alojamento_id) return
+        if (subFilterAlojamentoId !== 'NONE' && w.alojamento_id !== subFilterAlojamentoId) return
+      }
       const clean = normalizePhoneDigits(w.movil)
       const blocked = isWorkerInactiveOrBlocked(w.status_trabajador)
       if (clean.length >= 8 && !blocked) {
@@ -518,13 +673,17 @@ export default function AutomationsPage() {
       }
     })
     setSelectedWorkerIds(validIds)
-  }, [candidateWorkers, segmentMode, extraManualWorkerIds])
+  }, [candidateWorkers, segmentMode, extraManualWorkerIds, subFilterAlojamentoId])
 
   const displayedCandidateWorkers = useMemo(() => {
     const q = workerTableSearch.trim().toLowerCase()
-    if (!q) return candidateWorkers
-    return candidateWorkers.filter(
-      (w) =>
+    return candidateWorkers.filter((w) => {
+      if (subFilterAlojamentoId !== 'ALL') {
+        if (subFilterAlojamentoId === 'NONE' && w.alojamento_id) return false
+        if (subFilterAlojamentoId !== 'NONE' && w.alojamento_id !== subFilterAlojamentoId) return false
+      }
+      if (!q) return true
+      return (
         w.nome?.toLowerCase().includes(q) ||
         w.cod_colab?.toLowerCase().includes(q) ||
         w.pasaporte?.toLowerCase().includes(q) ||
@@ -533,9 +692,13 @@ export default function AutomationsPage() {
         w.cliente?.toLowerCase().includes(q) ||
         w.contratante?.toLowerCase().includes(q) ||
         w.funcion?.toLowerCase().includes(q) ||
-        w.movil?.toLowerCase().includes(q)
-    )
-  }, [candidateWorkers, workerTableSearch])
+        w.movil?.toLowerCase().includes(q) ||
+        w.alojamento_nome?.toLowerCase().includes(q) ||
+        w.alojamento_endereco?.toLowerCase().includes(q) ||
+        w.alojamento_municipio?.toLowerCase().includes(q)
+      )
+    })
+  }, [candidateWorkers, workerTableSearch, subFilterAlojamentoId])
 
   const manualSearchResults = useMemo(() => {
     const q = manualAddSearch.trim().toLowerCase()
@@ -592,10 +755,16 @@ export default function AutomationsPage() {
     funcion: 'SOLDADOR MIG-MAG',
     pedido_code: selectedPedidos[0] || 'PED-2026-000954',
     obra_nome: 'CALDESOL',
+    alojamento_nome: 'BARCELONA - c/ calvari 54 puerta 14 olesa d Montserrat',
+    alojamento_endereco: 'c/ calvari 54 puerta 14 olesa d Montserrat',
   }
 
   const renderedPreviewText = useMemo(() => {
-    if (!content.trim()) return 'O preview da mensagem personalizada aparecerá aqui...'
+    if (!content.trim()) {
+      return isEs
+        ? 'La vista previa del mensaje personalizado aparecerá aquí...'
+        : 'O preview da mensagem personalizada aparecerá aqui...'
+    }
     const fullName = (samplePreviewWorker.nome || 'Trabalhador').trim()
     const firstName = fullName.split(/\s+/)[0] || fullName
     const passportDoc = (
@@ -605,6 +774,16 @@ export default function AutomationsPage() {
       'GJ703064'
     ).trim()
     const codColab = (samplePreviewWorker.cod_colab || 'E0001').trim()
+    const alojNome = (
+      samplePreviewWorker.alojamento_nome ||
+      samplePreviewWorker.alojamento_endereco ||
+      'BARCELONA - c/ calvari 54'
+    ).trim()
+    const alojEnd = (
+      samplePreviewWorker.alojamento_endereco ||
+      samplePreviewWorker.alojamento_nome ||
+      'c/ calvari 54, Barcelona'
+    ).trim()
 
     let out = content
       .replace(/\{nome\}/gi, fullName)
@@ -620,12 +799,17 @@ export default function AutomationsPage() {
       .replace(/\{funcion\}/gi, samplePreviewWorker.funcion || 'Especialista')
       .replace(/\{cod_pedido\}/gi, samplePreviewWorker.pedido_code || selectedPedidos[0] || 'PED-2026')
       .replace(/\{obra\}/gi, samplePreviewWorker.obra_nome || samplePreviewWorker.cliente || 'Obra')
+      .replace(/\{alojamento\}/gi, alojNome)
+      .replace(/\{alojamiento\}/gi, alojNome)
+      .replace(/\{endereco_alojamento\}/gi, alojEnd)
+      .replace(/\{direccion_alojamento\}/gi, alojEnd)
+      .replace(/\{direccion_alojamiento\}/gi, alojEnd)
 
     if (linkUrl.trim() && !out.includes(linkUrl.trim())) {
       out = `${out.trim()}\n\n🔗 ${linkUrl.trim()}`
     }
     return out
-  }, [content, linkUrl, samplePreviewWorker, selectedPedidos])
+  }, [content, linkUrl, samplePreviewWorker, selectedPedidos, isEs])
 
   const handleToggleWorker = (id: string) => {
     setSelectedWorkerIds((prev) => {
@@ -738,6 +922,11 @@ export default function AutomationsPage() {
       let summary = ''
       if (segmentMode === 'pedido' && selectedPedidos.length > 0) {
         summary = `Pedido(s): ${selectedPedidos.join(', ')} (${selectedRecipients.length} trab.)`
+      } else if (segmentMode === 'alojamentos' && selectedAlojamentos.length > 0) {
+        const alojNames = alojamentosList
+          .filter((a) => selectedAlojamentos.includes(a.alojamento_id))
+          .map((a) => a.alojamento_nome)
+        summary = `Alojamento(s): ${alojNames.slice(0, 2).join(', ')}${alojNames.length > 2 ? ` +${alojNames.length - 2}` : ''} (${selectedRecipients.length} trab.)`
       } else if (segmentMode === 'clients' && selectedClients.length > 0) {
         summary = `Cliente(s): ${selectedClients.slice(0, 3).join(', ')}${selectedClients.length > 3 ? ` +${selectedClients.length - 3}` : ''} (${selectedRecipients.length} trab.)`
       } else if (segmentMode === 'companies' && selectedCompanies.length > 0) {
@@ -750,6 +939,7 @@ export default function AutomationsPage() {
         segmentMode,
         selectedPedidos,
         selectedClients,
+        selectedAlojamentos,
         selectedCompanies,
         hideInactiveSafetyLock,
         includePendingIngreso,
@@ -1007,6 +1197,7 @@ export default function AutomationsPage() {
       if (seg.segmentMode) setSegmentMode(seg.segmentMode)
       if (Array.isArray(seg.selectedPedidos)) setSelectedPedidos(seg.selectedPedidos)
       if (Array.isArray(seg.selectedClients)) setSelectedClients(seg.selectedClients)
+      if (Array.isArray(seg.selectedAlojamentos)) setSelectedAlojamentos(seg.selectedAlojamentos)
       if (Array.isArray(seg.selectedCompanies)) setSelectedCompanies(seg.selectedCompanies)
       if (typeof seg.hideInactiveSafetyLock === 'boolean') setHideInactiveSafetyLock(seg.hideInactiveSafetyLock)
       if (typeof seg.includePendingIngreso === 'boolean') setIncludePendingIngreso(seg.includePendingIngreso)
@@ -1182,10 +1373,16 @@ export default function AutomationsPage() {
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight truncate">
-              Central de Campanhas, Agendamentos & Comunicados Recorrentes
+              {tr(
+                'Central de Campanhas, Agendamentos & Comunicados Recorrentes',
+                'Central de Campañas, Programaciones y Comunicados Recurrentes'
+              )}
             </h1>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Disparos imediatos, agendados ou recorrentes (Folha de Horas) com segmentação viva e proteção Anti-Ban
+              {tr(
+                'Disparos por Pedido, Cliente, Alojamento ou Empresa com segmentação viva e proteção Anti-Ban',
+                'Envíos por Pedido, Cliente, Alojamiento o Empresa con segmentación viva y protección Anti-Ban'
+              )}
             </p>
           </div>
         </div>
@@ -1202,7 +1399,7 @@ export default function AutomationsPage() {
             }`}
           >
             <Send className="w-3.5 h-3.5" />
-            <span>1. Montar & Programar</span>
+            <span>{tr('1. Montar & Programar', '1. Crear y Programar')}</span>
           </button>
 
           <button
@@ -1215,10 +1412,12 @@ export default function AutomationsPage() {
             }`}
           >
             <Repeat className="w-3.5 h-3.5" />
-            <span>2. Agendadas & Recorrentes ({scheduledAndRecurringCampaigns.length})</span>
+            <span>
+              {tr('2. Agendadas & Recorrentes', '2. Programadas y Recurrentes')} ({scheduledAndRecurringCampaigns.length})
+            </span>
             {historyKpis.activeRecurring > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-indigo-500 text-white text-[9.5px] font-extrabold">
-                {historyKpis.activeRecurring} ativa(s)
+                {historyKpis.activeRecurring} {tr('ativa(s)', 'activa(s)')}
               </span>
             )}
           </button>
@@ -1233,7 +1432,9 @@ export default function AutomationsPage() {
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>3. Templates ({templates.length})</span>
+            <span>
+              {tr('3. Templates', '3. Plantillas')} ({templates.length})
+            </span>
           </button>
 
           <button
@@ -1246,7 +1447,9 @@ export default function AutomationsPage() {
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>4. Campanhas Enviadas & Controle ({campaigns.length})</span>
+            <span>
+              {tr('4. Campanhas Enviadas & Controle', '4. Campañas Enviadas y Control')} ({campaigns.length})
+            </span>
             {campaigns.some((c) => c.status === 'running') && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
             )}
@@ -1258,16 +1461,16 @@ export default function AutomationsPage() {
       <div className="flex-1 overflow-hidden p-3">
         {activeView === 'builder' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 h-full">
-            {/* COLUNA 1 (3 cols): Filtros Online de Segmentação (Pedidos, Clientes, Empresas, Trava Anti-Inativo) */}
+            {/* COLUNA 1 (3 cols): Filtros Online de Segmentação (Pedidos, Clientes, Alojamentos, Empresas, Trava Anti-Inativo) */}
             <div className="lg:col-span-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col h-full overflow-hidden">
               <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <Filter className="w-3.5 h-3.5 text-emerald-600" />
-                    1. Segmentação Online
+                    {tr('1. Segmentação Online', '1. Segmentación Online')}
                   </span>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                    Base Viva
+                    {tr('Base Viva', 'Base Viva')}
                   </span>
                 </div>
 
@@ -1282,8 +1485,10 @@ export default function AutomationsPage() {
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-extrabold">📋 Por Pedido</div>
-                    <div className="text-[9.5px] opacity-75 truncate">Início obra / Alojamento</div>
+                    <div className="font-extrabold">📋 {tr('Por Pedido', 'Por Pedido')}</div>
+                    <div className="text-[9.5px] opacity-75 truncate">
+                      {tr('Início obra / Alojamento', 'Inicio obra / Alojamiento')}
+                    </div>
                   </button>
 
                   <button
@@ -1295,8 +1500,33 @@ export default function AutomationsPage() {
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-extrabold">🏗️ Por Cliente(s)</div>
-                    <div className="text-[9.5px] opacity-75 truncate">1 ou vários clientes</div>
+                    <div className="font-extrabold">🏗️ {tr('Por Cliente(s)', 'Por Cliente(s)')}</div>
+                    <div className="text-[9.5px] opacity-75 truncate">
+                      {tr('Ver trab. e alojamentos', 'Ver trab. y alojamientos')}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSegmentMode('alojamentos')}
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer col-span-2 ${
+                      segmentMode === 'alojamentos'
+                        ? 'border-amber-600 bg-amber-50/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 shadow-2xs'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-extrabold">🏠 {tr('Por Alojamento', 'Por Alojamiento')}</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 text-[9.5px] font-extrabold">
+                        {alojamentosList.length} {tr('ativos', 'activos')}
+                      </span>
+                    </div>
+                    <div className="text-[9.5px] opacity-75 truncate">
+                      {tr(
+                        'Selecionar alojamento e ver trabalhadores alocados',
+                        'Seleccionar alojamiento y ver trabajadores alojados'
+                      )}
+                    </div>
                   </button>
 
                   <button
@@ -1308,7 +1538,7 @@ export default function AutomationsPage() {
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-extrabold">🏢 Por Empresa</div>
+                    <div className="font-extrabold">🏢 {tr('Por Empresa', 'Por Empresa')}</div>
                     <div className="text-[9.5px] opacity-75 truncate">Luminous, Wiseowe...</div>
                   </button>
 
@@ -1321,8 +1551,10 @@ export default function AutomationsPage() {
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-extrabold">👷 Seleção Individual</div>
-                    <div className="text-[9.5px] opacity-75 truncate">Escolha manual</div>
+                    <div className="font-extrabold">👷 {tr('Seleção Individual', 'Selección Individual')}</div>
+                    <div className="text-[9.5px] opacity-75 truncate">
+                      {tr('Escolha manual', 'Elección manual')}
+                    </div>
                   </button>
                 </div>
               </div>
@@ -1332,16 +1564,16 @@ export default function AutomationsPage() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    Trava Anti-Inativos / Baixas
+                    {tr('Trava Anti-Inativos / Baixas', 'Bloqueo Anti-Inactivos / Bajas')}
                   </span>
                   <span className="text-[9.5px] font-extrabold uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded">
-                    Sempre Ativa
+                    {tr('Sempre Ativa', 'Siempre Activo')}
                   </span>
                 </div>
 
                 <label className="flex items-center justify-between gap-2 cursor-pointer">
                   <span className="text-[10.5px] font-semibold text-slate-600 dark:text-slate-300">
-                    Incluir "Pendente Ingresso" (Novos)
+                    {tr('Incluir "Pendente Ingresso" (Novos)', 'Incluir "Pendiente Ingreso" (Nuevos)')}
                   </span>
                   <input
                     type="checkbox"
@@ -1358,7 +1590,7 @@ export default function AutomationsPage() {
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                        Selecionar Pedido(s) ({selectedPedidos.length})
+                        {tr('Selecionar Pedido(s)', 'Seleccionar Pedido(s)')} ({selectedPedidos.length})
                       </span>
                       {selectedPedidos.length > 0 && (
                         <button
@@ -1366,7 +1598,7 @@ export default function AutomationsPage() {
                           onClick={() => setSelectedPedidos([])}
                           className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
                         >
-                          Limpar
+                          {tr('Limpar', 'Limpiar')}
                         </button>
                       )}
                     </div>
@@ -1376,14 +1608,18 @@ export default function AutomationsPage() {
                         type="text"
                         value={pedidoSearch}
                         onChange={(e) => setPedidoSearch(e.target.value)}
-                        placeholder="Buscar código PED-2026, cliente ou obra..."
+                        placeholder={tr(
+                          'Buscar pedido, cliente, obra ou alojamento...',
+                          'Buscar pedido, cliente, obra o alojamiento...'
+                        )}
                         className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                     <div className="space-y-1 pt-1">
                       {filteredPedidosList.map((ped) => {
                         const checked = selectedPedidos.includes(ped.cod_pedido)
-                        const totalLinked = (ped.worker_ids?.length || 0) + (ped.worker_codes?.length || 0)
+                        const totalLinked = ped.worker_ids?.length || ped.worker_codes?.length || 0
+                        const pedAlojamentos = Array.isArray(ped.alojamentos) ? ped.alojamentos : []
                         return (
                           <label
                             key={ped.cod_pedido}
@@ -1405,13 +1641,13 @@ export default function AutomationsPage() {
                               }}
                               className="mt-0.5 accent-emerald-600"
                             />
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex items-center justify-between gap-1">
                                 <span className="font-extrabold text-slate-900 dark:text-white truncate">
                                   {ped.cod_pedido}
                                 </span>
                                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                                  {totalLinked} alocados
+                                  {totalLinked} {tr('alocados', 'asignados')}
                                 </span>
                               </div>
                               <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">
@@ -1419,6 +1655,19 @@ export default function AutomationsPage() {
                               </p>
                               {ped.obra_nome && ped.obra_nome !== ped.cliente_nome && (
                                 <p className="text-[10px] text-slate-500 truncate">📍 {ped.obra_nome}</p>
+                              )}
+                              {pedAlojamentos.length > 0 && (
+                                <div className="pt-0.5 flex flex-col gap-0.5">
+                                  {pedAlojamentos.map((alName) => (
+                                    <p
+                                      key={alName}
+                                      className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/70 px-1.5 py-0.5 rounded truncate"
+                                      title={alName}
+                                    >
+                                      🏠 {alName}
+                                    </p>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </label>
@@ -1433,7 +1682,7 @@ export default function AutomationsPage() {
                     {/* Filtro opcional de empresa acima dos clientes */}
                     <div>
                       <span className="text-[10.5px] font-bold text-slate-500 block mb-1">
-                        Filtrar clientes por Empresa (opcional):
+                        {tr('Filtrar clientes por Empresa (opcional):', 'Filtrar clientes por Empresa (opcional):')}
                       </span>
                       <div className="flex flex-wrap gap-1">
                         {companiesStats.map((emp) => {
@@ -1462,7 +1711,8 @@ export default function AutomationsPage() {
 
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                        Clientes / Obras ({selectedClients.length} selecionados)
+                        {tr('Clientes / Obras', 'Clientes / Obras')} ({selectedClients.length}{' '}
+                        {tr('selecionados', 'seleccionados')})
                       </span>
                       {selectedClients.length > 0 && (
                         <button
@@ -1470,7 +1720,7 @@ export default function AutomationsPage() {
                           onClick={() => setSelectedClients([])}
                           className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
                         >
-                          Limpar
+                          {tr('Limpar', 'Limpiar')}
                         </button>
                       )}
                     </div>
@@ -1481,7 +1731,7 @@ export default function AutomationsPage() {
                         type="text"
                         value={clientSearch}
                         onChange={(e) => setClientSearch(e.target.value)}
-                        placeholder="Buscar cliente ou obra..."
+                        placeholder={tr('Buscar cliente, obra ou alojamento...', 'Buscar cliente, obra o alojamiento...')}
                         className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -1492,13 +1742,13 @@ export default function AutomationsPage() {
                         return (
                           <label
                             key={cli.name}
-                            className={`flex items-center justify-between gap-2 p-2 rounded-xl border text-xs cursor-pointer transition-all ${
+                            className={`flex items-start justify-between gap-2 p-2 rounded-xl border text-xs cursor-pointer transition-all ${
                               checked
                                 ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500'
                                 : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:bg-slate-50'
                             }`}
                           >
-                            <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-start gap-2 min-w-0 flex-1">
                               <input
                                 type="checkbox"
                                 checked={checked}
@@ -1509,20 +1759,122 @@ export default function AutomationsPage() {
                                       : [...prev, cli.name]
                                   )
                                 }
-                                className="accent-emerald-600 shrink-0"
+                                className="mt-0.5 accent-emerald-600 shrink-0"
                               />
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1 space-y-0.5">
                                 <p className="font-bold text-slate-800 dark:text-slate-100 truncate text-[11.5px]">
                                   {cli.name}
                                 </p>
                                 <p className="text-[9.5px] text-slate-500 truncate">
                                   📱 {cli.companies.join(' • ') || 'MCS'}
                                 </p>
+                                {cli.alojamentos && cli.alojamentos.length > 0 && (
+                                  <div className="pt-0.5 flex flex-col gap-0.5">
+                                    {cli.alojamentos.map((alName) => (
+                                      <p
+                                        key={alName}
+                                        className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/70 px-1.5 py-0.5 rounded truncate"
+                                        title={alName}
+                                      >
+                                        🏠 {alName}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold shrink-0">
-                              {cli.totalActive} ativos
+                              {cli.totalActive} {tr('ativos', 'activos')}
                             </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {segmentMode === 'alojamentos' && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        {tr('Selecionar Alojamento(s)', 'Seleccionar Alojamiento(s)')} ({selectedAlojamentos.length})
+                      </span>
+                      {selectedAlojamentos.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAlojamentos([])}
+                          className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                        >
+                          {tr('Limpar', 'Limpiar')}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={alojamentoSearch}
+                        onChange={(e) => setAlojamentoSearch(e.target.value)}
+                        placeholder={tr(
+                          'Buscar alojamento, endereço, cidade ou cliente...',
+                          'Buscar alojamiento, dirección, ciudad o cliente...'
+                        )}
+                        className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 pt-1">
+                      {filteredAlojamentosList.map((al) => {
+                        const checked = selectedAlojamentos.includes(al.alojamento_id)
+                        const totalLinked = al.worker_ids?.length || al.worker_codes?.length || 0
+                        return (
+                          <label
+                            key={al.alojamento_id}
+                            className={`flex items-start gap-2 p-2 rounded-xl border text-xs cursor-pointer transition-all ${
+                              checked
+                                ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500'
+                                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setSelectedAlojamentos((prev) =>
+                                  prev.includes(al.alojamento_id)
+                                    ? prev.filter((x) => x !== al.alojamento_id)
+                                    : [...prev, al.alojamento_id]
+                                )
+                              }}
+                              className="mt-0.5 accent-amber-600 shrink-0"
+                            />
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <div className="flex items-center justify-between gap-1">
+                                <span
+                                  className="font-extrabold text-slate-900 dark:text-white truncate text-[11px]"
+                                  title={al.alojamento_nome}
+                                >
+                                  🏠 {al.alojamento_nome}
+                                </span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 shrink-0">
+                                  {totalLinked} {tr('alocados', 'alojados')}
+                                </span>
+                              </div>
+                              {al.endereco && al.endereco !== al.alojamento_nome && (
+                                <p className="text-[10px] text-slate-500 truncate" title={al.endereco}>
+                                  📍 {al.endereco}
+                                </p>
+                              )}
+                              {al.clientes && al.clientes.length > 0 && (
+                                <p
+                                  className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 truncate"
+                                  title={al.clientes.join(' • ')}
+                                >
+                                  🏗️ {al.clientes.join(' • ')}
+                                </p>
+                              )}
+                            </div>
                           </label>
                         )
                       })}
@@ -1533,7 +1885,10 @@ export default function AutomationsPage() {
                 {segmentMode === 'companies' && (
                   <div className="space-y-1.5">
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                      Selecione 1 ou mais Empresas Contratantes:
+                      {tr(
+                        'Selecione 1 ou mais Empresas Contratantes:',
+                        'Seleccione 1 o más Empresas Contratantes:'
+                      )}
                     </span>
                     {companiesStats.map((emp) => {
                       const checked = selectedCompanies.includes(emp.name)
@@ -1564,7 +1919,7 @@ export default function AutomationsPage() {
                             </span>
                           </div>
                           <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            {emp.totalActive} ativos
+                            {emp.totalActive} {tr('ativos', 'activos')}
                           </span>
                         </label>
                       )
@@ -1574,9 +1929,14 @@ export default function AutomationsPage() {
 
                 {segmentMode === 'manual' && (
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
-                    <p className="font-bold text-slate-800 dark:text-white">Modo Base Completa / Seleção Individual</p>
+                    <p className="font-bold text-slate-800 dark:text-white">
+                      {tr('Modo Seleção Individual', 'Modo Selección Individual')}
+                    </p>
                     <p className="text-[11px]">
-                      Use a tabela central ao lado para pesquisar e marcar livremente 1, 2, 3 ou mais trabalhadores de qualquer cliente ou empresa.
+                      {tr(
+                        'Use a tabela central ao lado para pesquisar por nome, cliente ou alojamento e marcar individualmente os trabalhadores desejados.',
+                        'Use la tabla central al lado para buscar por nombre, cliente o alojamiento y marcar individualmente los trabajadores deseados.'
+                      )}
                     </p>
                   </div>
                 )}
@@ -1590,13 +1950,13 @@ export default function AutomationsPage() {
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-emerald-600" />
                     <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                      2. Público Destinatário
+                      {tr('2. Público Destinatário', '2. Público Destinatario')}
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-extrabold">
-                      {selectedRecipients.length} selecionados
+                      {selectedRecipients.length} {tr('selecionados', 'seleccionados')}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      (de {candidateWorkers.length} no filtro)
+                      ({tr('de', 'de')} {candidateWorkers.length} {tr('no filtro', 'en el filtro')})
                     </span>
                   </div>
 
@@ -1607,7 +1967,7 @@ export default function AutomationsPage() {
                       className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <CheckSquare className="w-3 h-3" />
-                      <span>Marcar Todos</span>
+                      <span>{tr('Marcar Todos', 'Marcar Todos')}</span>
                     </button>
                     <button
                       type="button"
@@ -1615,10 +1975,82 @@ export default function AutomationsPage() {
                       className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <Square className="w-3 h-3" />
-                      <span>Limpar</span>
+                      <span>{tr('Limpar', 'Limpiar')}</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Resumo e Sub-filtro Rápido de Alojamento para o Cliente / Pedido selecionado */}
+                {candidateWorkers.length > 0 && candidateAlojamentosBreakdown.items.length > 0 && (
+                  <div className="p-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10.5px] font-extrabold text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                        🏠{' '}
+                        {tr(
+                          `Alojamento(s) destes trabalhadores (${candidateAlojamentosBreakdown.items.length}):`,
+                          `Alojamiento(s) de estos trabajadores (${candidateAlojamentosBreakdown.items.length}):`
+                        )}
+                      </span>
+                      {subFilterAlojamentoId !== 'ALL' && (
+                        <button
+                          type="button"
+                          onClick={() => setSubFilterAlojamentoId('ALL')}
+                          className="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer"
+                        >
+                          {tr('Mostrar todos', 'Mostrar todos')}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setSubFilterAlojamentoId('ALL')}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border cursor-pointer transition-colors ${
+                          subFilterAlojamentoId === 'ALL'
+                            ? 'bg-amber-600 text-white border-amber-700'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 border-amber-200 hover:bg-amber-100/60'
+                        }`}
+                      >
+                        {tr('Todos', 'Todos')} ({candidateWorkers.length})
+                      </button>
+                      {candidateAlojamentosBreakdown.items.map((alItem) => {
+                        const isActiveSub = subFilterAlojamentoId === alItem.id
+                        return (
+                          <button
+                            key={alItem.id}
+                            type="button"
+                            onClick={() =>
+                              setSubFilterAlojamentoId((prev) => (prev === alItem.id ? 'ALL' : alItem.id))
+                            }
+                            title={alItem.endereco}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-colors max-w-[260px] truncate ${
+                              isActiveSub
+                                ? 'bg-amber-600 text-white border-amber-700'
+                                : 'bg-white dark:bg-slate-900 text-amber-900 dark:text-amber-200 border-amber-300 hover:bg-amber-100/70'
+                            }`}
+                          >
+                            🏠 {alItem.nome} ({alItem.count})
+                          </button>
+                        )
+                      })}
+                      {candidateAlojamentosBreakdown.withoutAlojCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSubFilterAlojamentoId((prev) => (prev === 'NONE' ? 'ALL' : 'NONE'))
+                          }
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border cursor-pointer transition-colors ${
+                            subFilterAlojamentoId === 'NONE'
+                              ? 'bg-slate-700 text-white border-slate-800'
+                              : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tr('Sem alojamento', 'Sin alojamiento')} ({candidateAlojamentosBreakdown.withoutAlojCount})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Busca dentro da tabela + Busca para adicionar trabalhador avulso */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1628,7 +2060,10 @@ export default function AutomationsPage() {
                       type="text"
                       value={workerTableSearch}
                       onChange={(e) => setWorkerTableSearch(e.target.value)}
-                      placeholder="Filtrar nesta lista por nome, função, tel..."
+                      placeholder={tr(
+                        'Filtrar por nome, alojamento, função, tel...',
+                        'Filtrar por nombre, alojamiento, función, tel...'
+                      )}
                       className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -1639,7 +2074,10 @@ export default function AutomationsPage() {
                       type="text"
                       value={manualAddSearch}
                       onChange={(e) => setManualAddSearch(e.target.value)}
-                      placeholder="+ Adicionar trabalhador avulso (nome/cód)..."
+                      placeholder={tr(
+                        '+ Adicionar trabalhador avulso (nome/cód)...',
+                        '+ Añadir trabajador individual (nombre/cód)...'
+                      )}
                       className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-lg focus:outline-none focus:border-indigo-500"
                     />
                     {manualSearchResults.length > 0 && (
@@ -1662,7 +2100,7 @@ export default function AutomationsPage() {
                                   {mw.nome} {mw.cod_colab ? `(${mw.cod_colab})` : ''}
                                 </p>
                                 <p className="text-[10px] text-slate-500 truncate">
-                                  {mw.contratante || 'MCS'} • {mw.cliente || 'Sem obra'}
+                                  {mw.contratante || 'MCS'} • {mw.cliente || tr('Sem obra', 'Sin obra')}
                                 </p>
                               </div>
                               <span
@@ -1670,7 +2108,7 @@ export default function AutomationsPage() {
                                   inactive ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
                                 }`}
                               >
-                                + Incluir ({mw.status_trabajador || 'Ativo'})
+                                + {tr('Incluir', 'Incluir')} ({mw.status_trabajador || 'Ativo'})
                               </span>
                             </button>
                           )
@@ -1686,15 +2124,26 @@ export default function AutomationsPage() {
                 {loadingInitial ? (
                   <div className="p-10 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
-                    <span>Carregando base de trabalhadores e pedidos online...</span>
+                    <span>
+                      {tr(
+                        'Carregando base de trabalhadores, pedidos e alojamentos online...',
+                        'Cargando base de trabajadores, pedidos y alojamientos online...'
+                      )}
+                    </span>
                   </div>
                 ) : displayedCandidateWorkers.length === 0 ? (
                   <div className="p-10 text-center text-xs text-slate-400 space-y-1">
                     <p className="font-bold text-slate-600 dark:text-slate-300">
-                      Nenhum trabalhador encontrado para este filtro
+                      {tr(
+                        'Nenhum trabalhador encontrado para este filtro',
+                        'Ningún trabajador encontrado para este filtro'
+                      )}
                     </p>
                     <p className="text-[11px]">
-                      Selecione um Pedido, Cliente ou Empresa na coluna à esquerda, ou adicione trabalhadores avulsos acima.
+                      {tr(
+                        'Selecione um Pedido, Cliente, Alojamento ou Empresa na coluna à esquerda.',
+                        'Seleccione un Pedido, Cliente, Alojamiento o Empresa en la columna izquierda.'
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -1726,7 +2175,7 @@ export default function AutomationsPage() {
                             onChange={() => {}}
                             className="accent-emerald-600 w-3.5 h-3.5 shrink-0 pointer-events-none"
                           />
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-extrabold text-slate-800 dark:text-slate-100 truncate">
                                 {w.nome}
@@ -1738,7 +2187,8 @@ export default function AutomationsPage() {
                                 className={`px-1.5 py-0.2 rounded text-[9.5px] font-extrabold uppercase ${
                                   isInactive
                                     ? 'bg-rose-100 text-rose-700 border border-rose-300'
-                                    : (w.status_trabajador || '').toUpperCase().includes('PENDENTE')
+                                    : (w.status_trabajador || '').toUpperCase().includes('PENDENTE') ||
+                                        (w.status_trabajador || '').toUpperCase().includes('PENDIENTE')
                                       ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                       : 'bg-emerald-100 text-emerald-800'
                                 }`}
@@ -1760,7 +2210,7 @@ export default function AutomationsPage() {
                               )}
                             </div>
 
-                            <div className="flex items-center gap-2 text-[10.5px] text-slate-500 truncate mt-0.5">
+                            <div className="flex items-center gap-2 text-[10.5px] text-slate-500 flex-wrap">
                               {w.contratante && (
                                 <span className="font-bold text-teal-700 dark:text-teal-400">
                                   🏢 {w.contratante}
@@ -1770,6 +2220,22 @@ export default function AutomationsPage() {
                               {w.pedido_code && (
                                 <span className="px-1.5 py-0.1 rounded bg-indigo-50 text-indigo-700 font-bold text-[9.5px]">
                                   📋 {w.pedido_code}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Linha dedicada ao Alojamento do Trabalhador */}
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              {w.alojamento_nome ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-200/80 dark:border-amber-800 text-[10px] font-bold max-w-full truncate"
+                                  title={`${w.alojamento_nome}${w.alojamento_endereco ? ` — ${w.alojamento_endereco}` : ''}`}
+                                >
+                                  🏠 {w.alojamento_nome}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 text-[9.5px]">
+                                  🏠 {tr('Sem alojamento vinculado', 'Sin alojamiento vinculado')}
                                 </span>
                               )}
                             </div>
@@ -1783,7 +2249,7 @@ export default function AutomationsPage() {
                             </span>
                           ) : (
                             <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9.5px] font-bold">
-                              ⚠️ Sem Telefone
+                              ⚠️ {tr('Sem Telefone', 'Sin Teléfono')}
                             </span>
                           )}
                           {matchedCh && (
@@ -1804,14 +2270,14 @@ export default function AutomationsPage() {
               <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 flex items-center justify-between gap-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-emerald-600" />
-                  3. Mensagem, Mídia & Disparo Seguro
+                  {tr('3. Mensagem, Mídia & Disparo Seguro', '3. Mensaje, Multimedia y Envío Seguro')}
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveView('templates')}
                   className="text-[10.5px] font-extrabold text-emerald-700 hover:underline cursor-pointer"
                 >
-                  ⚙️ Gerenciar Templates
+                  ⚙️ {tr('Gerenciar Templates', 'Gestionar Plantillas')}
                 </button>
               </div>
 
@@ -1819,7 +2285,7 @@ export default function AutomationsPage() {
                 {/* Atalho Rápido de Templates Salvos */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                    Carregar Template de Comunicado:
+                    {tr('Carregar Template de Comunicado:', 'Cargar Plantilla de Comunicado:')}
                   </label>
                   <select
                     value=""
@@ -1829,7 +2295,12 @@ export default function AutomationsPage() {
                     }}
                     className="w-full px-2.5 py-1.5 text-xs font-semibold bg-emerald-50/60 dark:bg-slate-800 border border-emerald-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="">✨ Escolher um modelo pronto (Alojamento, Início Obra, Horas...)</option>
+                    <option value="">
+                      {tr(
+                        '✨ Escolher um modelo pronto (Alojamento, Início Obra, Horas...)',
+                        '✨ Elegir una plantilla lista (Alojamiento, Inicio Obra, Horas...)'
+                      )}
+                    </option>
                     {templates.map((tpl) => (
                       <option key={tpl.id} value={tpl.id}>
                         {tpl.title}
@@ -1841,13 +2312,16 @@ export default function AutomationsPage() {
                 {/* Nome / Identificação da Campanha */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                    Título Interno da Campanha:
+                    {tr('Título Interno da Campanha:', 'Título Interno de la Campaña:')}
                   </label>
                   <input
                     type="text"
                     value={campaignName}
                     onChange={(e) => setCampaignName(e.target.value)}
-                    placeholder="Ex: Aviso Novo Alojamento - Obra Caldesol"
+                    placeholder={tr(
+                      'Ex: Aviso Novo Alojamento - Obra Caldesol',
+                      'Ej: Aviso Nuevo Alojamiento - Obra Caldesol'
+                    )}
                     className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -1855,7 +2329,9 @@ export default function AutomationsPage() {
                 {/* Variáveis Dinâmicas + Botão Traduzir PT -> ES */}
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1 flex-wrap">
-                    <span className="text-[10.5px] font-bold text-slate-500">Inserir Variável:</span>
+                    <span className="text-[10.5px] font-bold text-slate-500">
+                      {tr('Inserir Variável:', 'Insertar Variable:')}
+                    </span>
                     <button
                       type="button"
                       disabled={translatingContent || !content.trim()}
@@ -1863,18 +2339,20 @@ export default function AutomationsPage() {
                       className="px-2 py-0.5 rounded-md bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
                       {translatingContent ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
-                      <span>🇪🇸 Traduzir p/ Espanhol</span>
+                      <span>🇪🇸 {tr('Traduzir p/ Espanhol', 'Traducir al Español')}</span>
                     </button>
                   </div>
                   <div className="flex items-center gap-1 flex-wrap mb-1.5">
                     {[
-                      { tag: '{primeiro_nome}', label: '1º Nome' },
-                      { tag: '{nome}', label: 'Nome Completo' },
-                      { tag: '{passaporte}', label: 'Passaporte (Login Portal)', highlight: true },
+                      { tag: '{primeiro_nome}', label: tr('1º Nome', '1er Nombre') },
+                      { tag: '{nome}', label: tr('Nome Completo', 'Nombre Completo') },
+                      { tag: '{passaporte}', label: tr('Passaporte (Login Portal)', 'Pasaporte (Login Portal)'), highlight: true },
+                      { tag: '{alojamento}', label: tr('Nome do Alojamento', 'Nombre del Alojamiento'), highlight: true },
+                      { tag: '{endereco_alojamento}', label: tr('Endereço do Alojamento', 'Dirección del Alojamiento') },
                       { tag: '{cod_colab}', label: 'Cód. Colab' },
                       { tag: '{empresa}', label: 'Empresa' },
                       { tag: '{cliente}', label: 'Cliente' },
-                      { tag: '{funcao}', label: 'Função' },
+                      { tag: '{funcao}', label: tr('Função', 'Función') },
                       { tag: '{cod_pedido}', label: 'Cód. Pedido' },
                       { tag: '{obra}', label: 'Obra' },
                     ].map((v) => (
@@ -1898,7 +2376,10 @@ export default function AutomationsPage() {
                     rows={5}
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    placeholder="Escreva a mensagem ou selecione um template acima..."
+                    placeholder={tr(
+                      'Escreva a mensagem ou selecione um template acima...',
+                      'Escriba el mensaje o seleccione una plantilla arriba...'
+                    )}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-emerald-500 text-slate-800 dark:text-slate-100 leading-relaxed"
                   />
                 </div>
@@ -1907,7 +2388,7 @@ export default function AutomationsPage() {
                 <div className="space-y-2 bg-slate-50/80 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10.5px] font-bold text-slate-600 dark:text-slate-300">
-                      Anexar Mídia ou Link (Opcional):
+                      {tr('Anexar Mídia ou Link (Opcional):', 'Adjuntar Archivo o Enlace (Opcional):')}
                     </span>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -1931,7 +2412,7 @@ export default function AutomationsPage() {
                         className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
                       >
                         <ImageIcon className="w-3 h-3 text-emerald-600" />
-                        <span>+ Imagem</span>
+                        <span>+ {tr('Imagem', 'Imagen')}</span>
                       </button>
                       <button
                         type="button"
@@ -1940,7 +2421,7 @@ export default function AutomationsPage() {
                         className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
                       >
                         <FileText className="w-3 h-3 text-blue-600" />
-                        <span>+ PDF/Arq</span>
+                        <span>+ {tr('PDF/Arq', 'PDF/Arch')}</span>
                       </button>
                     </div>
                   </div>
@@ -1954,7 +2435,7 @@ export default function AutomationsPage() {
                           <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                         )}
                         <span className="font-bold text-emerald-900 truncate text-[11px]">
-                          {mediaFilename || 'Arquivo anexado'}
+                          {mediaFilename || tr('Arquivo anexado', 'Archivo adjunto')}
                         </span>
                       </div>
                       <button
@@ -1977,7 +2458,10 @@ export default function AutomationsPage() {
                       type="url"
                       value={linkUrl}
                       onChange={(e) => setLinkUrl(e.target.value)}
-                      placeholder="Link opcional (Ex: Google Maps do alojamento ou obra)..."
+                      placeholder={tr(
+                        'Link opcional (Ex: Google Maps do alojamento ou obra)...',
+                        'Enlace opcional (Ej: Google Maps del alojamiento u obra)...'
+                      )}
                       className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -1987,7 +2471,7 @@ export default function AutomationsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10.5px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                      Canal WhatsApp de Envio:
+                      {tr('Canal WhatsApp de Envio:', 'Canal WhatsApp de Envío:')}
                     </label>
                     <select
                       value={channelMode === 'auto_company' ? 'auto_company' : selectedChannelId}
@@ -2001,10 +2485,12 @@ export default function AutomationsPage() {
                       }}
                       className="w-full px-2 py-1.5 text-[11px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
                     >
-                      <option value="auto_company">⚡ Automático pela Empresa do Trab.</option>
+                      <option value="auto_company">
+                        {tr('⚡ Automático pela Empresa do Trab.', '⚡ Automático por la Empresa del Trab.')}
+                      </option>
                       {channels.map((ch) => (
                         <option key={ch.id} value={ch.id}>
-                          📱 Fixar: {ch.company_name || ch.name}
+                          📱 {tr('Fixar:', 'Fijar:')} {ch.company_name || ch.name}
                         </option>
                       ))}
                     </select>
@@ -2012,16 +2498,18 @@ export default function AutomationsPage() {
 
                   <div>
                     <label className="text-[10.5px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                      Cadência Anti-Bloqueio:
+                      {tr('Cadência Anti-Bloqueio:', 'Cadencia Anti-Bloqueo:')}
                     </label>
                     <select
                       value={cadenceMode}
                       onChange={(e) => setCadenceMode(e.target.value as any)}
                       className="w-full px-2 py-1.5 text-[11px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
                     >
-                      <option value="safe">🛡️ Seguro (8s a 14s + pausa)</option>
-                      <option value="conservative">🐢 Ultra-Seguro (15s a 25s)</option>
-                      <option value="fast">⚡ Rápido Pedido (4s a 7s)</option>
+                      <option value="safe">{tr('🛡️ Seguro (8s a 14s + pausa)', '🛡️ Seguro (8s a 14s + pausa)')}</option>
+                      <option value="conservative">
+                        {tr('🐢 Ultra-Seguro (15s a 25s)', '🐢 Ultra-Seguro (15s a 25s)')}
+                      </option>
+                      <option value="fast">{tr('⚡ Rápido Pedido (4s a 7s)', '⚡ Rápido Pedido (4s a 7s)')}</option>
                     </select>
                   </div>
                 </div>
@@ -2031,11 +2519,11 @@ export default function AutomationsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                      Modo de Programação do Envio
+                      {tr('Modo de Programação do Envio', 'Modo de Programación del Envío')}
                     </span>
                     {scheduleType === 'recurring' && (
                       <span className="text-[9.5px] font-extrabold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
-                        🔄 Base Viva Automática
+                        🔄 {tr('Base Viva Automática', 'Base Viva Automática')}
                       </span>
                     )}
                   </div>
@@ -2050,7 +2538,7 @@ export default function AutomationsPage() {
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                       }`}
                     >
-                      ⚡ Enviar Agora
+                      ⚡ {tr('Enviar Agora', 'Enviar Ahora')}
                     </button>
                     <button
                       type="button"
@@ -2061,7 +2549,7 @@ export default function AutomationsPage() {
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                       }`}
                     >
-                      📅 Agendar Data
+                      📅 {tr('Agendar Data', 'Programar Fecha')}
                     </button>
                     <button
                       type="button"
@@ -2072,14 +2560,17 @@ export default function AutomationsPage() {
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                       }`}
                     >
-                      🔄 Recorrente
+                      🔄 {tr('Recorrente', 'Recurrente')}
                     </button>
                   </div>
 
                   {scheduleType === 'scheduled' && (
                     <div className="pt-1 space-y-1">
                       <label className="text-[10.5px] font-bold text-amber-800 dark:text-amber-300 block">
-                        Data e Horário para Iniciar os Disparos:
+                        {tr(
+                          'Data e Horário para Iniciar os Disparos:',
+                          'Fecha y Hora para Iniciar los Envíos:'
+                        )}
                       </label>
                       <input
                         type="datetime-local"
@@ -2088,7 +2579,10 @@ export default function AutomationsPage() {
                         className="w-full px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:outline-none focus:border-amber-500"
                       />
                       <p className="text-[10px] text-slate-500">
-                        Os envios ficarão agendados e iniciarão automaticamente na data/hora escolhida respeitando a cadência Anti-Ban.
+                        {tr(
+                          'Os envios ficarão agendados e iniciarão automaticamente na data/hora escolhida respeitando a cadência Anti-Ban.',
+                          'Los envíos quedarán programados e iniciarán automáticamente en la fecha y hora elegida respetando la cadencia Anti-Ban.'
+                        )}
                       </p>
                     </div>
                   )}
@@ -2098,23 +2592,31 @@ export default function AutomationsPage() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block mb-0.5">
-                            Frequência do Ciclo:
+                            {tr('Frequência do Ciclo:', 'Frecuencia del Ciclo:')}
                           </label>
                           <select
                             value={recFrequency}
                             onChange={(e) => setRecFrequency(e.target.value as any)}
                             className="w-full px-2 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg"
                           >
-                            <option value="weekly">📆 Semanal (Ex: Horas Semanais)</option>
-                            <option value="monthly">🗓️ Mensal (Ex: Fechamento Horas)</option>
-                            <option value="biweekly">🔄 Quinzenal (Dias 15 e 30)</option>
-                            <option value="daily">☀️ Diária (Seg a Sex)</option>
+                            <option value="weekly">
+                              {tr('📆 Semanal (Ex: Horas Semanais)', '📆 Semanal (Ej: Horas Semanales)')}
+                            </option>
+                            <option value="monthly">
+                              {tr('🗓️ Mensal (Ex: Fechamento Horas)', '🗓️ Mensual (Ej: Cierre Horas)')}
+                            </option>
+                            <option value="biweekly">
+                              {tr('🔄 Quinzenal (Dias 15 e 30)', '🔄 Quincenal (Días 15 y 30)')}
+                            </option>
+                            <option value="daily">
+                              {tr('☀️ Diária (Seg a Sex)', '☀️ Diaria (Lun a Vie)')}
+                            </option>
                           </select>
                         </div>
 
                         <div>
                           <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block mb-0.5">
-                            Horário do Disparo:
+                            {tr('Horário do Disparo:', 'Hora del Envío:')}
                           </label>
                           <input
                             type="time"
@@ -2128,7 +2630,10 @@ export default function AutomationsPage() {
                       {recFrequency === 'weekly' && (
                         <div>
                           <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                            Dias da Semana do Envio Automático:
+                            {tr(
+                              'Dias da Semana do Envio Automático:',
+                              'Días de la Semana del Envío Automático:'
+                            )}
                           </span>
                           <div className="flex items-center gap-1 flex-wrap">
                             {WEEKDAYS_PT.map((d) => {
@@ -2159,7 +2664,10 @@ export default function AutomationsPage() {
                       {recFrequency === 'monthly' && (
                         <div>
                           <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block mb-0.5">
-                            Dia do Mês para Envio (Ex: Dia 25 ou Último Dia):
+                            {tr(
+                              'Dia do Mês para Envio (Ex: Dia 25 ou Último Dia):',
+                              'Día del Mes para Envío (Ej: Día 25 o Último Día):'
+                            )}
                           </label>
                           <select
                             value={recDayOfMonth}
@@ -2168,10 +2676,12 @@ export default function AutomationsPage() {
                           >
                             {Array.from({ length: 30 }, (_, idx) => idx + 1).map((day) => (
                               <option key={day} value={day}>
-                                Todo dia {day} do mês
+                                {tr(`Todo dia ${day} do mês`, `Cada día ${day} del mes`)}
                               </option>
                             ))}
-                            <option value={31}>Último dia de cada mês (28/30/31)</option>
+                            <option value={31}>
+                              {tr('Último dia de cada mês (28/30/31)', 'Último día de cada mes (28/30/31)')}
+                            </option>
                           </select>
                         </div>
                       )}
@@ -2184,12 +2694,18 @@ export default function AutomationsPage() {
                           className="accent-indigo-600 w-3.5 h-3.5 rounded"
                         />
                         <span className="text-[10.5px] font-bold text-indigo-900 dark:text-indigo-200">
-                          Disparar 1ª remessa imediatamente agora e manter recorrência ativa
+                          {tr(
+                            'Disparar 1ª remessa imediatamente agora e manter recorrência ativa',
+                            'Enviar 1ª remesa inmediatamente ahora y mantener recurrencia activa'
+                          )}
                         </span>
                       </label>
 
                       <p className="text-[9.5px] text-slate-500 leading-tight">
-                        💡 Em cada ciclo futuro, o sistema atualizará automaticamente a lista do filtro selecionado (ex: dispensando quem ficou Inativo/Baixa e incluindo novos ativos).
+                        {tr(
+                          '💡 Em cada ciclo futuro, o sistema atualizará automaticamente a lista do filtro selecionado (ex: dispensando quem ficou Inativo/Baixa e incluindo novos ativos).',
+                          '💡 En cada ciclo futuro, el sistema actualizará automáticamente la lista del filtro seleccionado (ej: excluyendo inactivos/bajas e incluyendo nuevos activos).'
+                        )}
                       </p>
                     </div>
                   )}
@@ -2198,13 +2714,17 @@ export default function AutomationsPage() {
                 {/* Preview Real Estilo WhatsApp */}
                 <div className="rounded-xl bg-[#efeae2] dark:bg-slate-800 p-2.5 border border-slate-200 dark:border-slate-700">
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1">
-                    <span>📱 Preview WhatsApp ({samplePreviewWorker.nome})</span>
+                    <span>
+                      📱 {tr('Preview WhatsApp', 'Vista Previa WhatsApp')} ({samplePreviewWorker.nome})
+                    </span>
                     <span>Canal: {samplePreviewWorker.contratante || 'Oficial'}</span>
                   </div>
                   <div className="bg-[#d9fdd3] dark:bg-emerald-950 text-slate-900 dark:text-slate-100 rounded-xl rounded-tr-xs p-2.5 text-[11.5px] shadow-2xs whitespace-pre-wrap leading-snug">
                     {mediaUrl && (
                       <div className="mb-1.5 px-2 py-1 rounded bg-black/5 text-[10px] font-bold flex items-center gap-1">
-                        {mediaType === 'image' ? '📷 [Imagem anexada]' : `📄 [${mediaFilename || 'Documento'}]`}
+                        {mediaType === 'image'
+                          ? `📷 [${tr('Imagem anexada', 'Imagen adjunta')}]`
+                          : `📄 [${mediaFilename || tr('Documento', 'Documento')}]`}
                       </div>
                     )}
                     {renderedPreviewText}
@@ -2246,29 +2766,41 @@ export default function AutomationsPage() {
                   {dispatching ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Programando Campanha...</span>
+                      <span>{tr('Programando Campanha...', 'Programando Campaña...')}</span>
                     </>
                   ) : scheduleType === 'recurring' ? (
                     <>
                       <Repeat className="w-4 h-4" />
                       <span>
                         {recSendFirstBatchNow
-                          ? `Ativar Recorrência + Disparar 1ª Remessa (${selectedRecipients.length} trab.)`
-                          : `Salvar e Ativar Campanha Recorrente (${selectedRecipients.length} trab.)`}
+                          ? tr(
+                              `Ativar Recorrência + Disparar 1ª Remessa (${selectedRecipients.length} trab.)`,
+                              `Activar Recurrencia + Enviar 1ª Remesa (${selectedRecipients.length} trab.)`
+                            )
+                          : tr(
+                              `Salvar e Ativar Campanha Recorrente (${selectedRecipients.length} trab.)`,
+                              `Guardar y Activar Campaña Recurrente (${selectedRecipients.length} trab.)`
+                            )}
                       </span>
                     </>
                   ) : scheduleType === 'scheduled' ? (
                     <>
                       <Calendar className="w-4 h-4" />
                       <span>
-                        Agendar Disparo para {selectedRecipients.length} Trabalhador(es)
+                        {tr(
+                          `Agendar Disparo para ${selectedRecipients.length} Trabalhador(es)`,
+                          `Programar Envío para ${selectedRecipients.length} Trabajador(es)`
+                        )}
                       </span>
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
                       <span>
-                        Disparar Comunicado para {selectedRecipients.length} Trabalhador(es)
+                        {tr(
+                          `Disparar Comunicado para ${selectedRecipients.length} Trabalhador(es)`,
+                          `Enviar Comunicado a ${selectedRecipients.length} Trabajador(es)`
+                        )}
                       </span>
                     </>
                   )}

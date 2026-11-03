@@ -30,6 +30,8 @@ function interpolateTemplate(
     funcion?: string
     pedido_code?: string
     obra_nome?: string
+    alojamento_nome?: string | null
+    alojamento_endereco?: string | null
   },
   linkUrl?: string | null
 ): string {
@@ -42,6 +44,8 @@ function interpolateTemplate(
   const func = (worker.funcion || 'Profissional').trim()
   const pedido = (worker.pedido_code || '').trim()
   const obra = (worker.obra_nome || client).trim()
+  const alojamento = (worker.alojamento_nome || worker.alojamento_endereco || '').trim()
+  const enderecoAloj = (worker.alojamento_endereco || worker.alojamento_nome || '').trim()
 
   let out = template
     .replace(/\{nome\}/gi, fullName)
@@ -57,6 +61,11 @@ function interpolateTemplate(
     .replace(/\{funcion\}/gi, func)
     .replace(/\{cod_pedido\}/gi, pedido || client)
     .replace(/\{obra\}/gi, obra)
+    .replace(/\{alojamento\}/gi, alojamento)
+    .replace(/\{alojamiento\}/gi, alojamento)
+    .replace(/\{endereco_alojamento\}/gi, enderecoAloj)
+    .replace(/\{direccion_alojamento\}/gi, enderecoAloj)
+    .replace(/\{direccion_alojamiento\}/gi, enderecoAloj)
 
   if (linkUrl && linkUrl.trim() && !out.includes(linkUrl.trim())) {
     out = `${out.trim()}\n\n🔗 ${linkUrl.trim()}`
@@ -198,6 +207,7 @@ async function resolveDynamicRecipients(supabase: any, segmentConfig: any): Prom
   const segmentMode = cfg.segmentMode || 'manual'
   const selectedPedidos: string[] = Array.isArray(cfg.selectedPedidos) ? cfg.selectedPedidos : []
   const selectedClients: string[] = Array.isArray(cfg.selectedClients) ? cfg.selectedClients : []
+  const selectedAlojamentos: string[] = Array.isArray(cfg.selectedAlojamentos) ? cfg.selectedAlojamentos : []
   const selectedCompanies: string[] = Array.isArray(cfg.selectedCompanies) ? cfg.selectedCompanies : []
   const hideInactive = cfg.hideInactiveSafetyLock !== false
   const includePending = cfg.includePendingIngreso !== false
@@ -208,23 +218,51 @@ async function resolveDynamicRecipients(supabase: any, segmentConfig: any): Prom
   const pedidoWorkerCodes = new Set<string>()
   const workerPedidoMap = new Map<string, { cod_pedido: string; obra_nome: string }>()
 
-  if (segmentMode === 'pedido' && selectedPedidos.length > 0) {
-    const { data: pedList } = await supabase.rpc('get_campaign_pedidos_overview')
-    if (Array.isArray(pedList)) {
-      pedList
-        .filter((p: any) => selectedPedidos.includes(p.cod_pedido))
-        .forEach((p: any) => {
-          ;(p.worker_ids || []).forEach((id: string) => {
-            pedidoWorkerIds.add(id)
-            workerPedidoMap.set(id, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
-          })
-          ;(p.worker_codes || []).forEach((code: string) => {
-            const normCode = String(code).trim().toUpperCase()
-            pedidoWorkerCodes.add(normCode)
-            workerPedidoMap.set(normCode, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
-          })
+  const alojWorkerIds = new Set<string>()
+  const alojWorkerCodes = new Set<string>()
+  const workerAlojMap = new Map<string, { alojamento_id: string; alojamento_nome: string; alojamento_endereco: string }>()
+
+  const [{ data: pedList }, { data: alojList }] = await Promise.all([
+    segmentMode === 'pedido' && selectedPedidos.length > 0
+      ? supabase.rpc('get_campaign_pedidos_overview')
+      : Promise.resolve({ data: null }),
+    supabase.rpc('get_campaign_alojamentos_overview'),
+  ])
+
+  if (Array.isArray(pedList)) {
+    pedList
+      .filter((p: any) => selectedPedidos.includes(p.cod_pedido))
+      .forEach((p: any) => {
+        ;(p.worker_ids || []).forEach((id: string) => {
+          pedidoWorkerIds.add(id)
+          workerPedidoMap.set(id, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
         })
-    }
+        ;(p.worker_codes || []).forEach((code: string) => {
+          const normCode = String(code).trim().toUpperCase()
+          pedidoWorkerCodes.add(normCode)
+          workerPedidoMap.set(normCode, { cod_pedido: p.cod_pedido, obra_nome: p.obra_nome || p.cliente_nome })
+        })
+      })
+  }
+
+  if (Array.isArray(alojList)) {
+    alojList.forEach((al: any) => {
+      const meta = {
+        alojamento_id: al.alojamento_id,
+        alojamento_nome: al.alojamento_nome || '',
+        alojamento_endereco: al.endereco || al.alojamento_nome || '',
+      }
+      const isSelectedAloj = selectedAlojamentos.includes(al.alojamento_id)
+      ;(al.worker_ids || []).forEach((id: string) => {
+        workerAlojMap.set(id, meta)
+        if (isSelectedAloj) alojWorkerIds.add(id)
+      })
+      ;(al.worker_codes || []).forEach((code: string) => {
+        const normCode = String(code).trim().toUpperCase()
+        workerAlojMap.set(normCode, meta)
+        if (isSelectedAloj) alojWorkerCodes.add(normCode)
+      })
+    })
   }
 
   return allWorkers
@@ -245,6 +283,12 @@ async function resolveDynamicRecipients(supabase: any, segmentConfig: any): Prom
         if (selectedPedidos.length === 0) return manualIds.has(w.id)
         const codeKey = (w.cod_colab || '').trim().toUpperCase()
         return pedidoWorkerIds.has(w.id) || (codeKey !== '' && pedidoWorkerCodes.has(codeKey))
+      }
+
+      if (segmentMode === 'alojamentos') {
+        if (selectedAlojamentos.length === 0) return manualIds.has(w.id)
+        const codeKey = (w.cod_colab || '').trim().toUpperCase()
+        return alojWorkerIds.has(w.id) || (codeKey !== '' && alojWorkerCodes.has(codeKey))
       }
 
       if (segmentMode === 'clients') {
@@ -273,10 +317,14 @@ async function resolveDynamicRecipients(supabase: any, segmentConfig: any): Prom
     .map((w: any) => {
       const codeKey = (w.cod_colab || '').trim().toUpperCase()
       const pedMeta = workerPedidoMap.get(w.id) || (codeKey ? workerPedidoMap.get(codeKey) : undefined)
+      const alojMeta = workerAlojMap.get(w.id) || (codeKey ? workerAlojMap.get(codeKey) : undefined)
       return {
         ...w,
         pedido_code: pedMeta?.cod_pedido || null,
         obra_nome: pedMeta?.obra_nome || w.cliente || null,
+        alojamento_id: alojMeta?.alojamento_id || null,
+        alojamento_nome: alojMeta?.alojamento_nome || null,
+        alojamento_endereco: alojMeta?.alojamento_endereco || null,
       }
     })
 }
@@ -348,6 +396,8 @@ function buildQueueItemsForCampaign(params: {
         funcion: w.funcion,
         pedido_code: w.pedido_code,
         obra_nome: w.obra_nome,
+        alojamento_nome: w.alojamento_nome,
+        alojamento_endereco: w.alojamento_endereco,
       },
       linkUrl
     )

@@ -897,6 +897,17 @@ export async function processDueScheduledMessages(maxItems = 3) {
   return { processed, sent, failed }
 }
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}
+
 export async function GET(req: Request) {
   try {
     const supabase = createAdminClient()

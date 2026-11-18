@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
-import { MessageCircle, Megaphone, Bot, Settings, ChevronLeft, ChevronRight, Globe, LogOut, User as UserIcon, Palette, Check } from 'lucide-react'
+import { MessageCircle, Megaphone, Bot, Settings, ChevronLeft, ChevronRight, Globe, LogOut, User as UserIcon, Palette, Check, BrainCircuit } from 'lucide-react'
 import { useI18n } from '@/contexts/i18n-context'
 import { supabase } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
@@ -95,10 +95,11 @@ export function GlobalSidebar() {
   }, [])
 
   const links = [
-    { href: '/inbox', labelKey: 'inbox', icon: MessageCircle, exact: true },
-    { href: '/inbox/automations', labelKey: 'campaigns', icon: Megaphone, exact: false },
-    { href: '/inbox/captain', labelKey: 'captain', icon: Bot, exact: false },
-    { href: '/inbox/admin', labelKey: 'admin', icon: Settings, exact: false },
+    { href: '/inbox', labelKey: 'inbox', fallbackLabel: 'Atendimento', icon: MessageCircle, exact: true },
+    { href: '/inbox/automations', labelKey: 'campaigns', fallbackLabel: 'Campanhas', icon: Megaphone, exact: false },
+    { href: '/inbox/captain', labelKey: 'captain', fallbackLabel: 'Capitão IA', icon: Bot, exact: false },
+    { href: '/inbox/admin/audit', labelKey: 'audit_ai', fallbackLabel: 'Auditoria de I.A.', icon: BrainCircuit, exact: true },
+    { href: '/inbox/admin', labelKey: 'admin', fallbackLabel: 'Painel Admin', icon: Settings, exact: false },
   ] as const
 
   const toggleLanguage = () => {
@@ -158,9 +159,16 @@ export function GlobalSidebar() {
         </a>
 
         {links.map((link) => {
-          const isActive = link.exact ? pathname === link.href : pathname?.startsWith(link.href)
+          const isActive =
+            link.href === '/inbox/admin'
+              ? pathname?.startsWith('/inbox/admin') && pathname !== '/inbox/admin/audit'
+              : link.exact
+                ? pathname === link.href
+                : pathname?.startsWith(link.href)
           const Icon = link.icon
-          const translatedLabel = t('sidebar', link.labelKey)
+          const rawTranslation = t('sidebar', link.labelKey as any)
+          const translatedLabel =
+            !rawTranslation || rawTranslation === link.labelKey ? link.fallbackLabel : rawTranslation
           return (
             <Link key={link.href} href={link.href} title={collapsed ? translatedLabel : undefined}>
               <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl cursor-pointer transition-colors group relative ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-700 dark:hover:text-slate-300'}`}>

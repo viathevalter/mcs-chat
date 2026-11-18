@@ -577,7 +577,7 @@ ${effectiveInstructions ? `\nINSTRUÇÕES ESPECÍFICAS DA DIRETORIA:\n${effectiv
       ? overrideRecipients
       : activeConfig?.recipient_user_ids && activeConfig.recipient_user_ids.length > 0
       ? activeConfig.recipient_user_ids
-      : ['86ca2db1-07fd-42d9-a62c-739f091da519'] // Kawan Kotrik padrão
+      : ['86ca2db1-07fd-42d9-a62c-739f091da519', 'b9d213e3-c28c-4e97-b3ab-7fb7af9f48cb'] // Kawan Kotrik + Walter padrão
 
   const targetDeptCode =
     overrideDepartmentCode ||
@@ -635,6 +635,7 @@ ${effectiveInstructions ? `\nINSTRUÇÕES ESPECÍFICAS DA DIRETORIA:\n${effectiv
           .schema('core_operacoes')
           .rpc('criar_tarefa_direta', {
             payload: {
+              empresa_id: channelObj?.company_id || undefined,
               department_code: targetDeptCode,
               title: taskTitle,
               description: taskDescription,

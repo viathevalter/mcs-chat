@@ -688,19 +688,42 @@ export async function processDueScheduledMessages(maxItems = 3) {
       }
 
       let apiRes: any = null
-      if (item.media_url) {
-        const mType = item.media_type === 'document' ? 'document' : 'image'
-        apiRes = await evolutionApi.sendMedia({
-          number: phoneToUse,
-          mediaUrl: item.media_url,
-          mediaType: mType,
-          fileName: item.media_filename || (mType === 'document' ? 'comunicado.pdf' : 'comunicado.jpg'),
-          caption: finalContent,
-          instanceName,
-          apiUrl,
-          apiToken,
-          provider,
-        })
+      const mediaUrls = item.media_url
+        ? String(item.media_url)
+            .split('|||')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : []
+      const mediaTypes = String(item.media_type || '')
+        .split('|||')
+        .map((s: string) => s.trim())
+      const mediaNames = String(item.media_filename || '')
+        .split('|||')
+        .map((s: string) => s.trim())
+
+      if (mediaUrls.length > 0) {
+        for (let mIdx = 0; mIdx < mediaUrls.length; mIdx++) {
+          if (mIdx > 0) {
+            await new Promise((r) => setTimeout(r, 1200))
+          }
+          const mUrl = mediaUrls[mIdx]
+          const rawType = mediaTypes[mIdx] || (/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i.test(mUrl) ? 'document' : 'image')
+          const mType = rawType === 'document' ? 'document' : 'image'
+          const mName =
+            mediaNames[mIdx] || (mType === 'document' ? `comunicado_${mIdx + 1}.pdf` : `comunicado_${mIdx + 1}.jpg`)
+          const resMedia = await evolutionApi.sendMedia({
+            number: phoneToUse,
+            mediaUrl: mUrl,
+            mediaType: mType,
+            fileName: mName,
+            caption: mIdx === 0 ? finalContent : '',
+            instanceName,
+            apiUrl,
+            apiToken,
+            provider,
+          })
+          if (mIdx === 0) apiRes = resMedia
+        }
       } else {
         apiRes = await evolutionApi.sendText({
           number: phoneToUse,
@@ -818,17 +841,35 @@ export async function processDueScheduledMessages(maxItems = 3) {
       }
 
       if (conversationId) {
-        await supabase.from('chat_messages').insert({
-          conversation_id: conversationId,
-          direction: 'outbound',
-          content: finalContent,
-          media_url: item.media_url || null,
-          message_type: item.media_url ? (item.media_type === 'document' ? 'document' : 'image') : 'text',
-          external_id: externalId,
-          sender_name: '📢 Comunicado / Campanha',
-          sender_department: 'Comunicação Operacional',
-          status: 'sent',
-        })
+        if (mediaUrls.length > 0) {
+          for (let mIdx = 0; mIdx < mediaUrls.length; mIdx++) {
+            const mUrl = mediaUrls[mIdx]
+            const rawType = mediaTypes[mIdx] || (/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i.test(mUrl) ? 'document' : 'image')
+            await supabase.from('chat_messages').insert({
+              conversation_id: conversationId,
+              direction: 'outbound',
+              content: mIdx === 0 ? finalContent : mediaNames[mIdx] || `Anexo ${mIdx + 1}`,
+              media_url: mUrl,
+              message_type: rawType === 'document' ? 'document' : 'image',
+              external_id: mIdx === 0 ? externalId : null,
+              sender_name: '📢 Comunicado / Campanha',
+              sender_department: 'Comunicação Operacional',
+              status: 'sent',
+            })
+          }
+        } else {
+          await supabase.from('chat_messages').insert({
+            conversation_id: conversationId,
+            direction: 'outbound',
+            content: finalContent,
+            media_url: null,
+            message_type: 'text',
+            external_id: externalId,
+            sender_name: '📢 Comunicado / Campanha',
+            sender_department: 'Comunicação Operacional',
+            status: 'sent',
+          })
+        }
       }
 
       await supabase

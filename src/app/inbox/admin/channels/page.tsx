@@ -613,6 +613,7 @@ export default function ChannelsAdminPage() {
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"
                         >
                           <option value="workers">👷 Trabalhadores / Colaboradores</option>
+                          <option value="hiring">🤝 Contratação / Entrada de Trabalhadores</option>
                           <option value="clients">🏢 Clientes / Obras / Comercial</option>
                           <option value="general">🚗 Geral / Frota / Segurança (EPI)</option>
                         </select>
@@ -938,6 +939,7 @@ export default function ChannelsAdminPage() {
                   className="w-full px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   <option value="workers">👷 Trabalhadores</option>
+                  <option value="hiring">🤝 Contratação / Entrada</option>
                   <option value="clients">🏢 Clientes / Obras</option>
                   <option value="general">🚗 Geral / Frota / EPI</option>
                 </select>

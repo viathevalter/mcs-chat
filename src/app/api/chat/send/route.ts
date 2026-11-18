@@ -13,7 +13,8 @@ function formatOutboundPreview(messageType: string, textContent: string): string
 
 function normalizeWorkerPhone(rawPhone?: string | null): string {
   if (!rawPhone) return ''
-  const trimmed = rawPhone.trim()
+  const firstSegment = String(rawPhone).split(/[\/;,]| - |\*\*\*/)[0] || ''
+  const trimmed = firstSegment.trim()
   const hasExplicitCountryCode = trimmed.startsWith('+') || trimmed.startsWith('00')
   let clean = trimmed.replace(/\D/g, '')
   if (!clean) return ''

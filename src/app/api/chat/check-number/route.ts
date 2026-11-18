@@ -4,7 +4,8 @@ import { evolutionApi, classifyWhatsAppSendError } from '@/lib/whatsapp/evolutio
 
 function normalizePhoneForCheck(rawPhone?: string | null): string {
   if (!rawPhone) return ''
-  const trimmed = String(rawPhone).trim()
+  const firstSegment = String(rawPhone).split(/[\/;,]| - |\*\*\*/)[0] || ''
+  const trimmed = firstSegment.trim()
   const hasExplicitCountryCode = trimmed.startsWith('+') || trimmed.startsWith('00')
   let clean = trimmed.replace(/\D/g, '')
   if (!clean) return ''
@@ -18,7 +19,7 @@ function normalizePhoneForCheck(rawPhone?: string | null): string {
 
 export async function POST(request: Request) {
   try {
-    const { phone, channelId, fastCheck = false, alternatePhones = [] } = await request.json()
+    const { phone, channelId, conversationId, fastCheck = false, alternatePhones = [] } = await request.json()
 
     const normalizedPhone = normalizePhoneForCheck(phone)
     if (!normalizedPhone) {
@@ -124,10 +125,64 @@ export async function POST(request: Request) {
       ? classifyWhatsAppSendError(result.rawError || 'is not on WhatsApp', normalizedPhone)
       : null
 
+    // Se o número tem WhatsApp ativo e uma conversa foi informada, limpar qualquer erro antigo travado nela
+    let clearedStaleErrors = false
+    if (result.exists && conversationId) {
+      try {
+        const { data: failedRows } = await supabase
+          .from('chat_messages')
+          .select('id, status, translations')
+          .eq('conversation_id', conversationId)
+          .or('status.eq.failed,status.eq.error')
+
+        if (failedRows && failedRows.length > 0) {
+          for (const row of failedRows) {
+            const nextTrans = { ...(row.translations || {}) }
+            delete nextTrans._error_code
+            delete nextTrans._error_pt
+            delete nextTrans._error_es
+            delete nextTrans._error_badge_pt
+            delete nextTrans._error_badge_es
+            delete nextTrans._error_phone
+            delete nextTrans._error_alt_phones
+            await supabase
+              .from('chat_messages')
+              .update({ status: 'sent', translations: nextTrans })
+              .eq('id', row.id)
+          }
+          clearedStaleErrors = true
+        }
+
+        const { data: convRow } = await supabase
+          .from('chat_conversations')
+          .select('id, last_message_text, last_message_preview')
+          .eq('id', conversationId)
+          .maybeSingle()
+
+        if (
+          convRow &&
+          (/^(🚫|⚠️|❌)/.test(convRow.last_message_text || '') ||
+            /^(🚫|⚠️|❌)/.test(convRow.last_message_preview || ''))
+        ) {
+          const cleanText = String(convRow.last_message_text || '').replace(/^(🚫|⚠️|❌)[^:]+:\s*/, '')
+          const cleanPrev = String(convRow.last_message_preview || '').replace(/^(🚫|⚠️|❌)[^:]+:\s*/, '')
+          await supabase
+            .from('chat_conversations')
+            .update({
+              last_message_text: cleanText,
+              last_message_preview: cleanPrev
+            })
+            .eq('id', conversationId)
+          clearedStaleErrors = true
+        }
+      } catch {}
+    }
+
     return NextResponse.json({
       ...result,
       checkedPhone: normalizedPhone,
       validAlternates,
+      clearedStaleErrors,
       ...(classification ? { classification } : {})
     })
   } catch (error: any) {

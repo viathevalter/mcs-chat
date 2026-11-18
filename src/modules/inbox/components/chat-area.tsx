@@ -1251,6 +1251,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
         body: JSON.stringify({
           phone: rawPhone,
           channelId: conversation?.channel_id || undefined,
+          conversationId,
           fastCheck: true,
           alternatePhones
         })
@@ -1266,6 +1267,12 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
           friendlyPt: data.classification?.friendlyPt,
           friendlyEs: data.classification?.friendlyEs
         })
+        if (data.clearedStaleErrors) {
+          refetchMessages()
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mcs-chat-updated', { detail: { conversationId } }))
+          }
+        }
       } else {
         setWaPhoneCheck(prev => ({ ...prev, checking: false }))
       }
@@ -1341,16 +1348,37 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     }
   }
 
-  // Detectar se alguma mensagem recente enviada nesta conversa falhou por número sem WhatsApp
-  const latestFailedNoWaMsg = [...(messages || [])]
-    .reverse()
-    .find(
-      (m: any) =>
-        m.direction === 'outbound' &&
-        (m.status === 'failed' || m.status === 'error') &&
-        (m.translations?._error_code === 'NO_WHATSAPP' || m.translations?._error_code === 'INVALID_NUMBER')
-    )
-  const hasNoWhatsAppAlert = Boolean(waPhoneCheck.confirmedNotOnWhatsapp || latestFailedNoWaMsg)
+  // Detectar se alguma mensagem recente enviada PARA O NÚMERO ATUAL desta conversa falhou por número sem WhatsApp
+  const currentConvDigits = (conversation?.contact_phone || '').replace(/\D/g, '')
+  const reversedMessages = [...(messages || [])].reverse()
+  const latestFailedNoWaMsg = reversedMessages.find((m: any) => {
+    if (m.direction !== 'outbound') return false
+    if (m.status !== 'failed' && m.status !== 'error') return false
+    const errCode = m.translations?._error_code
+    if (errCode !== 'NO_WHATSAPP' && errCode !== 'INVALID_NUMBER') return false
+    const errPhone = String(m.translations?._error_phone || '').replace(/\D/g, '')
+    // Se o telefone da conversa já foi alterado no cadastro, ignora o erro do número antigo
+    if (errPhone && currentConvDigits && errPhone.slice(-8) !== currentConvDigits.slice(-8)) {
+      return false
+    }
+    return true
+  })
+
+  // Se existe mensagem posterior entregue/enviada ou recebida do trabalhador após a falha, o número já está ativo
+  const hasNewerSuccessfulActivity = latestFailedNoWaMsg
+    ? (messages || []).some(
+        (m: any) =>
+          m.created_at > latestFailedNoWaMsg.created_at &&
+          (m.direction === 'inbound' ||
+            (m.direction === 'outbound' && ['sent', 'delivered', 'read'].includes(m.status)))
+      )
+    : false
+
+  // Se a verificação ao vivo da UazAPI confirmou que o número atual existe no WhatsApp (exists === true), NUNCA exibe alerta de sem WhatsApp
+  const hasNoWhatsAppAlert =
+    waPhoneCheck.exists === true
+      ? false
+      : Boolean(waPhoneCheck.confirmedNotOnWhatsapp || (latestFailedNoWaMsg && !hasNewerSuccessfulActivity))
   const alternatePhonesFromMsg: string[] = latestFailedNoWaMsg?.translations?._error_alt_phones
     ? String(latestFailedNoWaMsg.translations._error_alt_phones)
         .split(',')
@@ -2439,7 +2467,10 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap px-0.5">{msg.content}</p>
                       ))}
 
-                    {isOutbound && !isNote && (msg.status === 'failed' || msg.status === 'error') && (
+                    {isOutbound &&
+                      !isNote &&
+                      (msg.status === 'failed' || msg.status === 'error') &&
+                      hasNoWhatsAppAlert && (
                       <div className="mt-2 p-2.5 rounded-xl bg-red-600 text-white text-xs leading-snug shadow-xs space-y-1.5">
                         <div className="font-extrabold flex items-center gap-1.5">
                           <span>🚫</span>

@@ -8,22 +8,30 @@ import { useI18n } from '@/contexts/i18n-context'
 import { supabase } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 
-const PRODUCTION_HUB_URL = 'https://mcs-personal.vercel.app/hub'
+const PRODUCTION_HUB_URL = 'https://mcs.gestaologinpro.com/hub'
 
 function resolveHubReturnUrl(): string {
-  const envHub = (process.env.NEXT_PUBLIC_HUB_URL || '').trim()
   if (typeof window !== 'undefined') {
     const isLocalHost =
       window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     if (!isLocalHost) {
-      if (envHub && !envHub.includes('localhost') && !envHub.includes('127.0.0.1')) {
+      try {
+        const savedOrigin = localStorage.getItem('mcs_hub_origin')
+        if (savedOrigin && savedOrigin.startsWith('http') && !savedOrigin.includes('localhost')) {
+          return `${savedOrigin.replace(/\/$/, '')}/hub`
+        }
+      } catch {}
+      const envHub = (process.env.NEXT_PUBLIC_HUB_URL || '').trim()
+      if (
+        envHub &&
+        !envHub.includes('localhost') &&
+        !envHub.includes('127.0.0.1') &&
+        !envHub.includes('mcs-personal.vercel.app')
+      ) {
         return envHub.endsWith('/hub') ? envHub : `${envHub.replace(/\/$/, '')}/hub`
       }
       return PRODUCTION_HUB_URL
     }
-  }
-  if (envHub && !envHub.includes('localhost')) {
-    return envHub.endsWith('/hub') ? envHub : `${envHub.replace(/\/$/, '')}/hub`
   }
   return PRODUCTION_HUB_URL
 }
@@ -40,6 +48,18 @@ export function GlobalSidebar() {
 
   useEffect(() => {
     setMounted(true)
+
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href)
+        const ro = url.searchParams.get('return_origin')
+        if (ro && ro.startsWith('http')) {
+          localStorage.setItem('mcs_hub_origin', ro)
+          url.searchParams.delete('return_origin')
+          window.history.replaceState({}, '', url.pathname + url.search)
+        }
+      } catch {}
+    }
 
     const loadUser = async (authUser: User | null) => {
       setUser(authUser)
@@ -117,9 +137,18 @@ export function GlobalSidebar() {
         {/* Hub Return Button */}
         <a
           href={PRODUCTION_HUB_URL}
-          onClick={(e) => {
+          onClick={async (e) => {
             e.preventDefault()
-            window.location.href = resolveHubReturnUrl()
+            const targetHub = resolveHubReturnUrl()
+            try {
+              const { data: { session } } = await supabase.auth.getSession()
+              if (session?.access_token && session?.refresh_token) {
+                const sep = targetHub.includes('?') ? '&' : '?'
+                window.location.href = `${targetHub}${sep}access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}`
+                return
+              }
+            } catch {}
+            window.location.href = targetHub
           }}
           title={collapsed ? t('sidebar', 'back_to_hub') || "Voltar para o Hub" : undefined}
           className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'px-3'} py-3 mb-4 rounded-xl cursor-pointer transition-colors group relative bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700`}

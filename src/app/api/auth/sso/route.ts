@@ -13,7 +13,11 @@ export async function GET(request: Request) {
   }
 
   const cookieStore = await cookies()
+  const returnOrigin = requestUrl.searchParams.get('return_origin')
   const redirectTarget = new URL('/inbox', request.url)
+  if (returnOrigin) {
+    redirectTarget.searchParams.set('return_origin', returnOrigin)
+  }
   const response = NextResponse.redirect(redirectTarget)
 
   try {

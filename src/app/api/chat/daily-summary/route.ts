@@ -512,6 +512,7 @@ ${effectiveInstructions ? `\nINSTRUÇÕES ESPECÍFICAS DA DIRETORIA:\n${effectiv
 
       const { object: gptObj } = await generateObject({
         model: openai('gpt-4o-mini'),
+        abortSignal: AbortSignal.timeout(18000),
         system: systemPrompt,
         prompt: `Analise as transcrições abaixo e gere o relatório estruturado:\n\n${transcriptBlock}`,
         schema: z.object({

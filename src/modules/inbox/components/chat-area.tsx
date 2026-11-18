@@ -480,14 +480,29 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
     })
 
     fetchQuickReplies()
-    supabase
-      .from('chat_channels')
-      .select('id, name, company_name, channel_type, display_label, phone_number')
-      .eq('is_active', true)
-      .order('company_name', { ascending: true })
-      .then(({ data }) => {
-        if (data) setAvailableChannels(data)
-      })
+    Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from('chat_channels')
+        .select('id, name, company_name, channel_type, display_label, phone_number, is_isolated')
+        .eq('is_active', true)
+        .order('company_name', { ascending: true }),
+      supabase.from('chat_channel_members').select('user_id, channel_id')
+    ]).then(([authRes, chRes, memRes]) => {
+      const uid = authRes.data?.user?.id
+      const allChs = chRes.data || []
+      const allMems = memRes.data || []
+      if (!uid) {
+        setAvailableChannels(allChs.filter((c: any) => !c.is_isolated))
+        return
+      }
+      const myChIds = allMems.filter((m: any) => m.user_id === uid).map((m: any) => m.channel_id)
+      if (myChIds.length > 0) {
+        setAvailableChannels(allChs.filter((c: any) => myChIds.includes(c.id)))
+      } else {
+        setAvailableChannels(allChs.filter((c: any) => !c.is_isolated))
+      }
+    })
   }, [])
 
   const updateTranslator = (updates: { active?: boolean; myLang?: string; targetLang?: string }) => {
@@ -669,7 +684,26 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
       const allUsers = context?.users || []
       const allDepts = context?.departments || []
       const selectedUser = allUsers.find((u: any) => u.id === headerTransferUserId)
+      if (selectedUser && selectedUser.can_access_current_channel === false) {
+        alert(
+          `Não é possível transferir para ${selectedUser.display_name || selectedUser.name}: este atendente não possui permissão de acesso a este canal de WhatsApp.`
+        )
+        setIsSubmittingHeaderTransfer(false)
+        return
+      }
       const effectiveDeptId = headerTransferDeptId || selectedUser?.department_id || ''
+      if (effectiveDeptId && !selectedUser) {
+        const eligibleInDept = allUsers.filter(
+          (u: any) => u.department_id === effectiveDeptId && u.can_access_current_channel !== false
+        )
+        if (eligibleInDept.length === 0) {
+          alert(
+            'Não é possível transferir para este setor: nenhum atendente deste departamento possui acesso configurado para visualizar este canal de WhatsApp.'
+          )
+          setIsSubmittingHeaderTransfer(false)
+          return
+        }
+      }
       const selectedDept = allDepts.find((d: any) => d.id === effectiveDeptId)
       const assignedName = selectedUser
         ? selectedUser.display_name || selectedUser.name || selectedUser.email
@@ -1720,11 +1754,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                         <option value="">📂 Todos os Setores / Fila Geral</option>
                         {(context?.departments || []).map((dept: any) => {
                           const cnt = (context?.users || []).filter(
-                            (u: any) => u.department_id === dept.id
+                            (u: any) => u.department_id === dept.id && u.can_access_current_channel !== false
                           ).length
                           return (
                             <option key={dept.id} value={dept.id}>
-                              📂 {dept.name} ({cnt} atendentes)
+                              📂 {dept.name} ({cnt} c/ acesso ao canal)
                             </option>
                           )
                         })}
@@ -1734,7 +1768,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                     {/* 3. Escolher o Atendente / Colega */}
                     <div>
                       <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">
-                        3. Para qual Atendente vai a conversa? (Receberá Alerta 🔔)
+                        3. Para qual Atendente vai a conversa? (Apenas quem vê este canal 🔒)
                       </label>
                       <div className="max-h-36 overflow-y-auto space-y-1 p-1.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                         <button
@@ -1746,7 +1780,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                               : 'hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}
                         >
-                          <span>👥 Qualquer colega do setor (Fila Aberta)</span>
+                          <span>👥 Qualquer colega do setor c/ acesso (Fila Aberta)</span>
                           {!headerTransferUserId && <Check className="w-3.5 h-3.5" />}
                         </button>
                         {(headerTransferDeptId
@@ -1755,22 +1789,32 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                             )
                           : context?.users || []
                         ).map((u: any) => {
-                          const isSelected = headerTransferUserId === u.id
+                          const canAccess = u.can_access_current_channel !== false
+                          const isSelected = headerTransferUserId === u.id && canAccess
                           const uName = u.display_name || u.name || u.email
                           return (
                             <button
                               key={u.id}
                               type="button"
+                              disabled={!canAccess}
                               onClick={() => {
+                                if (!canAccess) return
                                 setHeaderTransferUserId(u.id)
                                 if (!headerTransferDeptId && u.department_id) {
                                   setHeaderTransferDeptId(u.department_id)
                                 }
                               }}
-                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                                isSelected
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                              title={
+                                canAccess
+                                  ? `Transferir para ${uName}`
+                                  : `${uName} não tem permissão para visualizar este canal de WhatsApp`
+                              }
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${
+                                !canAccess
+                                  ? 'opacity-45 cursor-not-allowed bg-slate-100 dark:bg-slate-900 text-slate-400'
+                                  : isSelected
+                                  ? 'bg-indigo-600 text-white shadow-xs cursor-pointer'
+                                  : 'hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer'
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
@@ -1778,16 +1822,23 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                                   {String(uName).substring(0, 2).toUpperCase()}
                                 </span>
                                 <span className="truncate">{uName}</span>
-                                {!headerTransferDeptId && u.department_name && (
-                                  <span
-                                    className={`text-[10px] px-1.5 py-0.2 rounded ${
-                                      isSelected
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                    }`}
-                                  >
-                                    {u.department_name}
+                                {!canAccess ? (
+                                  <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 font-extrabold shrink-0">
+                                    🔒 Sem acesso ao canal
                                   </span>
+                                ) : (
+                                  !headerTransferDeptId &&
+                                  u.department_name && (
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.2 rounded ${
+                                        isSelected
+                                          ? 'bg-white/20 text-white'
+                                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                      }`}
+                                    >
+                                      {u.department_name}
+                                    </span>
+                                  )
                                 )}
                               </div>
                               {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}

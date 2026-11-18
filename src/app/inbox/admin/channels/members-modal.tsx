@@ -13,6 +13,7 @@ interface MembersModalProps {
 export function MembersModal({ isOpen, onClose, channelId, channelName }: MembersModalProps) {
   const [users, setUsers] = useState<any[]>([])
   const [members, setMembers] = useState<string[]>([])
+  const [isIsolated, setIsIsolated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
@@ -27,22 +28,27 @@ export function MembersModal({ isOpen, onClose, channelId, channelName }: Member
     setLoading(true)
     
     // Fetch all active users
-    const { data: usersData } = await supabase
-      .from('mcs_users')
-      .select('id, email, display_name')
-      .eq('active', true)
+    const [{ data: usersData }, { data: membersData }, { data: chData }] = await Promise.all([
+      supabase
+        .from('mcs_users')
+        .select('id, email, display_name')
+        .eq('active', true),
+      supabase
+        .from('chat_channel_members')
+        .select('user_id')
+        .eq('channel_id', channelId),
+      supabase
+        .from('chat_channels')
+        .select('is_isolated')
+        .eq('id', channelId)
+        .maybeSingle()
+    ])
       
     if (usersData) setUsers(usersData)
-      
-    // Fetch current members for this channel
-    const { data: membersData } = await supabase
-      .from('chat_channel_members')
-      .select('user_id')
-      .eq('channel_id', channelId)
-      
     if (membersData) {
       setMembers(membersData.map(m => m.user_id))
     }
+    setIsIsolated(Boolean(chData?.is_isolated))
     
     setLoading(false)
   }
@@ -59,6 +65,11 @@ export function MembersModal({ isOpen, onClose, channelId, channelName }: Member
     setSaving(true)
     
     try {
+      await supabase
+        .from('chat_channels')
+        .update({ is_isolated: isIsolated })
+        .eq('id', channelId)
+
       // Delete old members
       await supabase
         .from('chat_channel_members')
@@ -111,8 +122,29 @@ export function MembersModal({ isOpen, onClose, channelId, channelName }: Member
           </button>
         </div>
         
-        {/* Search */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+        {/* Search & Isolation Toggle */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0 space-y-3">
+           <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
+             isIsolated
+               ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800'
+               : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+           }`}>
+             <input
+               type="checkbox"
+               checked={isIsolated}
+               onChange={(e) => setIsIsolated(e.target.checked)}
+               className="mt-0.5 rounded text-rose-600"
+             />
+             <div className="text-xs leading-snug">
+               <span className="font-extrabold text-slate-900 dark:text-white block">
+                 🔒 Isolar este Canal (Privado / Restrito)
+               </span>
+               <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                 Quando ativado, <strong>somente</strong> os usuários marcados abaixo poderão ver, atender ou receber transferências deste número (oculto para todos os outros, inclusive Admins).
+               </span>
+             </div>
+           </label>
+
            <div className="relative">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
              <input 

@@ -5,7 +5,7 @@ import { evolutionApi } from "@/lib/whatsapp/evolution-api"
 
 export async function POST(req: NextRequest) {
   try {
-    const { instanceName, phoneNumber, companyId, companyName, channelType, displayLabel, departmentId, aiAgentId, apiUrl, apiToken } = await req.json()
+    const { instanceName, phoneNumber, companyId, companyName, channelType, displayLabel, departmentId, aiAgentId, apiUrl, apiToken, isIsolated } = await req.json()
 
     if (!instanceName) {
       return NextResponse.json({ error: "Nome da instância é obrigatório." }, { status: 400 })
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
         qrcode_base64: qrcodeBase64,
         status: instanceStatus,
         is_active: true,
+        is_isolated: Boolean(isIsolated),
         provider: 'uazapi',
         api_url: UAZ_API_URL,
         api_token: instanceToken || UAZ_GLOBAL_KEY || null

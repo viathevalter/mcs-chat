@@ -207,7 +207,26 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
         'Atendente MCS'
 
       const selectedUser = users.find((u: any) => u.id === transferUserId)
+      if (selectedUser && selectedUser.can_access_current_channel === false) {
+        setFeedbackMsg(
+          `❌ Não é possível transferir para ${selectedUser.display_name || selectedUser.name}: este usuário não tem acesso a este canal de WhatsApp.`
+        )
+        setSubmittingTransfer(false)
+        return
+      }
       const effectiveDeptId = transferDeptId || selectedUser?.department_id || ''
+      if (effectiveDeptId && !selectedUser) {
+        const eligibleInDept = users.filter(
+          (u: any) => u.department_id === effectiveDeptId && u.can_access_current_channel !== false
+        )
+        if (eligibleInDept.length === 0) {
+          setFeedbackMsg(
+            '❌ Nenhum atendente deste setor possui acesso configurado para visualizar este canal de WhatsApp.'
+          )
+          setSubmittingTransfer(false)
+          return
+        }
+      }
       const selectedDept = departments.find((d) => d.id === effectiveDeptId)
       const assignedName = selectedUser ? selectedUser.display_name || selectedUser.name || selectedUser.email : null
 
@@ -678,10 +697,12 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
               >
                 <option value="">Fila Geral (Sem setor específico)</option>
                 {departments.map((dept) => {
-                  const deptUsersCount = users.filter((u: any) => u.department_id === dept.id).length
+                  const deptUsersCount = users.filter(
+                    (u: any) => u.department_id === dept.id && u.can_access_current_channel !== false
+                  ).length
                   return (
                     <option key={dept.id} value={dept.id}>
-                      📂 {dept.name} ({deptUsersCount})
+                      📂 {dept.name} ({deptUsersCount} c/ acesso)
                     </option>
                   )
                 })}
@@ -691,8 +712,8 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
             <div>
               <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
                 {transferDeptId
-                  ? `Funcionários do Setor (${users.filter((u: any) => u.department_id === transferDeptId).length})`
-                  : 'Funcionário Responsável (Mesmo Número)'}
+                  ? `Funcionários do Setor c/ Acesso (${users.filter((u: any) => u.department_id === transferDeptId && u.can_access_current_channel !== false).length})`
+                  : 'Funcionário Responsável (Com Acesso a este Canal)'}
               </label>
               <select
                 value={transferUserId}
@@ -708,16 +729,23 @@ export default function ChatContextPanel({ conversationId }: { conversationId: s
                 }}
                 className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-slate-100"
               >
-                <option value="">Qualquer funcionário do setor</option>
+                <option value="">Qualquer funcionário do setor c/ acesso</option>
                 {(transferDeptId
                   ? users.filter((u: any) => u.department_id === transferDeptId)
                   : users
-                ).map((u: any) => (
-                  <option key={u.id} value={u.id}>
-                    👤 {u.display_name || u.name || u.email}
-                    {!transferDeptId && u.department_name ? ` — ${u.department_name}` : ''}
-                  </option>
-                ))}
+                ).map((u: any) => {
+                  const canAccess = u.can_access_current_channel !== false
+                  return (
+                    <option key={u.id} value={u.id} disabled={!canAccess}>
+                      {canAccess ? '👤' : '🔒'} {u.display_name || u.name || u.email}
+                      {!canAccess
+                        ? ' (Sem acesso a este canal)'
+                        : !transferDeptId && u.department_name
+                        ? ` — ${u.department_name}`
+                        : ''}
+                    </option>
+                  )
+                })}
               </select>
             </div>
 

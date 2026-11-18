@@ -421,7 +421,7 @@ export default function AdminUsersPage() {
                       📱 Canais de WhatsApp Atendidos ({formAllowedChannels.length} selecionados)
                     </label>
                     <p className="text-[11px] text-slate-500">
-                      Selecione quais números de WhatsApp (Trabalhadores ou Clientes) este membro atende.
+                      🔒 <strong>Isolamento rigoroso:</strong> Se você marcar 1 ou mais canais abaixo, este usuário verá <strong>APENAS</strong> os canais marcados (mesmo que tenha perfil Admin ou Super Admin).
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -612,16 +612,25 @@ export default function AdminUsersPage() {
                     </td>
 
                     <td className="px-5 py-3.5">
-                      {isFullAdmin && userChannelIds.length === 0 ? (
-                        <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
-                          Todos os Canais (Admin)
-                        </span>
-                      ) : userChannelIds.length > 0 ? (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                          📱 {userChannelIds.length} {userChannelIds.length === 1 ? "canal" : "canais"}
-                        </span>
+                      {userChannelIds.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="w-fit text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            🔒 Restrito a {userChannelIds.length} {userChannelIds.length === 1 ? "canal" : "canais"}
+                          </span>
+                          <span className="text-[10px] text-slate-500 truncate max-w-[220px]">
+                            {userChannelIds
+                              .map(cid => {
+                                const cObj = channels.find(c => c.id === cid)
+                                return cObj?.company_name || cObj?.display_label || cObj?.name || ""
+                              })
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </div>
                       ) : (
-                        <span className="text-[11px] text-slate-400">Geral / Departamento</span>
+                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                          🌐 Canais Gerais (Exceto Isolados)
+                        </span>
                       )}
                     </td>
 

@@ -32,6 +32,7 @@ export default function ChannelsAdminPage() {
   const [aiAgentId, setAiAgentId] = useState('')
   const [apiUrl, setApiUrl] = useState('')
   const [apiToken, setApiToken] = useState('')
+  const [isIsolated, setIsIsolated] = useState(false)
   
   const fetchAllData = async () => {
     setLoading(true)
@@ -87,7 +88,8 @@ export default function ChannelsAdminPage() {
           departmentId: departmentId || null,
           aiAgentId: aiAgentId || null,
           apiUrl: apiUrl || undefined,
-          apiToken: apiToken || undefined
+          apiToken: apiToken || undefined,
+          isIsolated
         })
       })
 
@@ -107,6 +109,7 @@ export default function ChannelsAdminPage() {
         setAiAgentId('')
         setApiUrl('')
         setApiToken('')
+        setIsIsolated(false)
         fetchAllData()
       }
     } catch (e: any) {
@@ -145,6 +148,7 @@ export default function ChannelsAdminPage() {
           instance_token: cleanToken,
           status: editingChannel.status || 'connected',
           auto_reject_calls: editingChannel.auto_reject_calls ?? false,
+          is_isolated: Boolean(editingChannel.is_isolated),
           updated_at: new Date().toISOString()
         })
         .eq('id', editingChannel.id)
@@ -701,7 +705,24 @@ export default function ChannelsAdminPage() {
                      </div>
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2.5">
+                     <label className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50/70 dark:bg-rose-950/30 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingChannel.is_isolated || false}
+                          onChange={e => setEditingChannel({ ...editingChannel, is_isolated: e.target.checked })}
+                          className="mt-0.5 rounded text-rose-600"
+                        />
+                        <div className="text-xs leading-snug">
+                          <span className="text-rose-900 dark:text-rose-200 font-extrabold block">
+                            🔒 Isolar este Canal (Privado / Administrativo / Comercial)
+                          </span>
+                          <span className="text-[11px] text-rose-700 dark:text-rose-300">
+                            Quando marcado, ninguém (nem mesmo Admins) verá este número a menos que esteja vinculado nos <strong>Membros</strong> do canal.
+                          </span>
+                        </div>
+                     </label>
+
                      <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -783,6 +804,11 @@ export default function ChannelsAdminPage() {
                               {channel.company_name && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200/60">
                                   🏢 {channel.company_name}
+                                </span>
+                              )}
+                              {channel.is_isolated && (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-600 text-white border border-rose-700 shadow-2xs">
+                                  🔒 ISOLADO / PRIVADO
                                 </span>
                               )}
                               {chType === 'clients' ? (
@@ -946,7 +972,17 @@ export default function ChannelsAdminPage() {
              </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+             <label className="flex items-center gap-2 text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800 cursor-pointer">
+               <input
+                 type="checkbox"
+                 checked={isIsolated}
+                 onChange={(e) => setIsIsolated(e.target.checked)}
+                 className="rounded text-rose-600"
+               />
+               <span>🔒 Isolar este Canal (Privado / Visível apenas para Membros Autorizados)</span>
+             </label>
+
              <button
                onClick={handleCreateChannel}
                disabled={isCreating}

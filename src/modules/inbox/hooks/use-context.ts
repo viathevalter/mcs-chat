@@ -220,8 +220,8 @@ export function useConversationContext(conversationId: string) {
 
       const resolvedEmpresaId = companyData?.id || workerData?.empresa_id || conv.company_id || null
 
-      // 5. Fetch available active departments, users, department members, coreDepartments, and workerTasks
-      const [deptsRes, usersRes, membersRes, coreDeptsRes, tasksRes] = await Promise.all([
+      // 5. Fetch available active departments, users, department members, channel members, coreDepartments, and workerTasks
+      const [deptsRes, usersRes, membersRes, chMembersRes, coreDeptsRes, tasksRes] = await Promise.all([
         supabase
           .from('mcs_departments')
           .select('*')
@@ -235,6 +235,9 @@ export function useConversationContext(conversationId: string) {
           .from('mcs_department_members')
           .select('id, user_id, nombrecompleto, correoempresarial, department_id, active')
           .eq('active', true),
+        supabase
+          .from('chat_channel_members')
+          .select('user_id, channel_id'),
         resolvedEmpresaId
           ? supabase
               .schema('core_common')
@@ -261,6 +264,16 @@ export function useConversationContext(conversationId: string) {
         deptMap.set(d.id, d.name)
       }
 
+      const channelMembersByUser = new Map<string, string[]>()
+      for (const cm of chMembersRes.data || []) {
+        const list = channelMembersByUser.get(cm.user_id) || []
+        list.push(cm.channel_id)
+        channelMembersByUser.set(cm.user_id, list)
+      }
+
+      const currentChannelId = conv.channel_id
+      const currentChannelIsIsolated = Boolean(conv.channel?.is_isolated)
+
       const membersList = membersRes.data || []
       const unifiedUsers = (usersRes.data || [])
         .filter((u: any) => u.active !== false && u.email !== 'demo@mastercorp.local')
@@ -278,12 +291,23 @@ export function useConversationContext(conversationId: string) {
             (u.name ? u.name.trim() : '') ||
             u.email
           const resolvedDeptId = u.department_id || linkedMember?.department_id || null
+          const userExplicitChannels = channelMembersByUser.get(u.id) || []
+          // Regra de Acesso ao Canal para Transferência:
+          // - Se o atendente possui canais específicos vinculados (userExplicitChannels.length > 0), ele só pode receber conversas daqueles canais (mesmo se for Admin).
+          // - Se o atendente não possui restrição (0 canais marcados), ele pode receber conversas de canais gerais (is_isolated = false), mas NUNCA de um canal isolado (is_isolated = true).
+          const canAccessCurrentChannel =
+            userExplicitChannels.length > 0
+              ? userExplicitChannels.includes(currentChannelId)
+              : !currentChannelIsIsolated
+
           return {
             ...u,
             name: resolvedName,
             display_name: resolvedName,
             department_id: resolvedDeptId,
-            department_name: resolvedDeptId ? deptMap.get(resolvedDeptId) || null : null
+            department_name: resolvedDeptId ? deptMap.get(resolvedDeptId) || null : null,
+            allowed_channel_ids: userExplicitChannels,
+            can_access_current_channel: canAccessCurrentChannel
           }
         })
         .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))

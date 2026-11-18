@@ -48,6 +48,7 @@ export interface ChatChannelInfo {
   phone_number?: string | null
   status?: string | null
   is_active?: boolean
+  is_isolated?: boolean
 }
 
 function resolveReadablePreview(conv: any): { lastMessage: string; lastMessageDirection: 'inbound' | 'outbound' } {
@@ -108,23 +109,30 @@ export function useInbox() {
     isAdmin: boolean
     visibilityMode: string
     allowedDepartments: string[]
-    allowedChannels: string[]
+    allowedChannels: string[] | null // null = ainda carregando; array = lista estrita de channel_ids permitidos para este usuário
   }>({
     isAdmin: true,
     visibilityMode: 'all',
     allowedDepartments: [],
-    allowedChannels: []
+    allowedChannels: null
   })
 
   const fetchConversationsList = useCallback(async () => {
     try {
       const { isAdmin, visibilityMode, allowedDepartments, allowedChannels } = userAccess.current
 
+      // Se as permissões já carregaram e o usuário não tem acesso a nenhum canal, retorna lista vazia
+      if (Array.isArray(allowedChannels) && allowedChannels.length === 0) {
+        setConversations([])
+        setLoading(false)
+        return
+      }
+
       let query = supabase
         .from('chat_conversations')
         .select(`
           *,
-          channel:chat_channels(id, name, provider, company_name, channel_type, display_label, phone_number),
+          channel:chat_channels(id, name, provider, company_name, channel_type, display_label, phone_number, is_isolated),
           department:mcs_departments(id, name),
           chat_messages(content, created_at, direction, message_type, sender_name)
         `)
@@ -133,10 +141,12 @@ export function useInbox() {
         .limit(1, { foreignTable: 'chat_messages' })
         .limit(250)
 
+      // Sempre aplicar o filtro estrito de canais permitidos (mesmo para Admin / Super Admin se tiver canais definidos ou se houver canais isolados)
+      if (Array.isArray(allowedChannels) && allowedChannels.length > 0) {
+        query = query.in('channel_id', allowedChannels)
+      }
+
       if (!isAdmin && visibilityMode === 'strict_department') {
-        if (allowedChannels.length > 0) {
-          query = query.in('channel_id', allowedChannels)
-        }
         if (allowedDepartments.length > 0) {
           query = query.or(`department_id.in.(${allowedDepartments.join(',')}),assigned_to.eq.${currentUserId}`)
         }
@@ -145,7 +155,10 @@ export function useInbox() {
       const { data, error } = await query
 
       if (data && !error) {
-        const enriched = data.map((conv: any) => {
+        const permittedData = Array.isArray(allowedChannels)
+          ? data.filter((conv: any) => allowedChannels.includes(conv.channel_id))
+          : data
+        const enriched = permittedData.map((conv: any) => {
           const { lastMessage, lastMessageDirection } = resolveReadablePreview(conv)
           return {
             ...conv,
@@ -197,7 +210,7 @@ export function useInbox() {
 
   const loadUserPermissions = useCallback(async () => {
     try {
-      const [{ data: depts }, { data: chs }] = await Promise.all([
+      const [{ data: depts }, { data: chs }, { data: allChMembers }] = await Promise.all([
         supabase
           .from('mcs_departments')
           .select('id, name')
@@ -205,13 +218,16 @@ export function useInbox() {
           .order('name', { ascending: true }),
         supabase
           .from('chat_channels')
-          .select('id, name, company_name, channel_type, display_label, phone_number, status, is_active')
+          .select('id, name, company_name, channel_type, display_label, phone_number, status, is_active, is_isolated')
           .eq('is_active', true)
-          .order('company_name', { ascending: true })
+          .order('company_name', { ascending: true }),
+        supabase
+          .from('chat_channel_members')
+          .select('user_id, channel_id')
       ])
 
       if (depts) setDepartments(depts)
-      if (chs) setChannels(chs)
+      const allActiveChannels = chs || []
 
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData?.user?.id
@@ -232,23 +248,41 @@ export function useInbox() {
         const visibilityMode = mcsUser?.visibility_mode || 'department'
 
         let allowedDepartments: string[] = []
-        let allowedChannels: string[] = []
-
         if (mcsUser?.department_id) allowedDepartments.push(mcsUser.department_id)
         if (Array.isArray(mcsUser?.managed_departments)) {
           allowedDepartments.push(...mcsUser.managed_departments)
         }
         allowedDepartments = Array.from(new Set(allowedDepartments))
 
-        if (!isAdmin) {
-          const { data: memberData } = await supabase
-            .from('chat_channel_members')
-            .select('channel_id')
-            .eq('user_id', userId)
-          allowedChannels = memberData?.map(m => m.channel_id) || []
+        // Regra de Isolamento de Canais (aplica-se inclusive a Admin e Super Admin!):
+        // 1. Se o usuário tem canais específicos vinculados em chat_channel_members, ele vê APENAS esses canais.
+        // 2. Se o usuário NÃO tem canais específicos vinculados (0 vínculos), ele vê os canais gerais (is_isolated = false),
+        //    mas NUNCA vê canais marcados como isolados (is_isolated = true).
+        const myExplicitChannelIds = (allChMembers || [])
+          .filter((m: any) => m.user_id === userId)
+          .map((m: any) => m.channel_id)
+
+        let effectiveAllowedChannelIds: string[] = []
+        if (myExplicitChannelIds.length > 0) {
+          effectiveAllowedChannelIds = allActiveChannels
+            .filter(ch => myExplicitChannelIds.includes(ch.id))
+            .map(ch => ch.id)
+        } else {
+          effectiveAllowedChannelIds = allActiveChannels
+            .filter(ch => !ch.is_isolated)
+            .map(ch => ch.id)
         }
 
-        userAccess.current = { isAdmin, visibilityMode, allowedDepartments, allowedChannels }
+        setChannels(allActiveChannels.filter(ch => effectiveAllowedChannelIds.includes(ch.id)))
+        userAccess.current = {
+          isAdmin,
+          visibilityMode,
+          allowedDepartments,
+          allowedChannels: effectiveAllowedChannelIds
+        }
+      } else {
+        const publicChannels = allActiveChannels.filter(ch => !ch.is_isolated)
+        setChannels(publicChannels)
       }
     } catch (e) {
       console.error('Error loading permissions:', e)
@@ -256,7 +290,6 @@ export function useInbox() {
   }, [])
 
   useEffect(() => {
-    fetchConversationsList()
     loadUserPermissions().then(() => {
       fetchConversationsList()
     })

@@ -39,7 +39,8 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Minimize2
 } from 'lucide-react'
 import { useChat } from '../hooks/use-chat'
 import { useConversationContext } from '../hooks/use-context'
@@ -280,7 +281,19 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
   const { messages, loading, sendMessage, editMessage, refetchMessages } = useChat(conversationId)
   const { context, setContext } = useConversationContext(conversationId)
   const [text, setText] = useState('')
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false)
   const [isSending, setIsSending] = useState(false)
+
+  // Preencher texto automaticamente se vier ?text=... na URL (ex: vindo do MCS Almacén)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const prefill = params.get('text')
+    if (prefill) {
+      setText(prefill)
+      setTimeout(() => textareaRef.current?.focus(), 150)
+    }
+  }, [conversationId])
   const [isAssigning, setIsAssigning] = useState(false)
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply')
   const [showAiMenu, setShowAiMenu] = useState(false)
@@ -3086,7 +3099,11 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 }
               }}
               onPaste={handlePaste}
-              className={`w-full bg-transparent px-3 py-1.5 max-h-28 min-h-[40px] resize-none focus:outline-none text-[14px] font-medium ${
+              className={`w-full bg-transparent px-3 py-2 resize-y focus:outline-none text-[14px] font-medium transition-[min-height] ${
+                isComposerExpanded
+                  ? 'min-h-[220px] max-h-[55vh]'
+                  : 'min-h-[48px] max-h-[40vh]'
+              } ${
                 isPrivateNote
                   ? 'placeholder:text-amber-700/60 text-amber-950'
                   : 'text-slate-800 dark:text-slate-100 placeholder-slate-400'
@@ -3098,7 +3115,7 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                   ? `Digite "/" para Mensagens Rápidas ou escreva em seu idioma e clique em "Traduzir p/ ${getTargetLangDisplay(targetLang)}" (Ctrl+Enter)...`
                   : `${t('chatArea', 'typeMessage')} (Digite "/" para Mensagens Rápidas)`
               }
-              rows={1}
+              rows={isComposerExpanded ? 9 : Math.min(8, Math.max(2, text.split('\n').length))}
             />
 
             {/* Bottom Toolbar */}
@@ -3142,6 +3159,16 @@ export default function ChatArea({ conversationId, togglePanel, isPanelOpen }: C
                 <div className="flex items-center justify-center -ml-0.5">
                   <AudioRecorder onSend={handleSendAudio} disabled={isSending || isUploading} />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsComposerExpanded((v) => !v)}
+                  className={`p-1.5 hover:bg-black/5 rounded-lg transition-colors shrink-0 cursor-pointer ${
+                    isComposerExpanded ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:text-emerald-600'
+                  }`}
+                  title={isComposerExpanded ? 'Reduzir caixa de texto' : 'Ampliar caixa de texto'}
+                >
+                  {isComposerExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
                 <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 ml-2">
                   <span>
                     Respondendo como <strong className="text-slate-600 dark:text-slate-300">{currentUserName}</strong> ({resolvedSenderDept})
